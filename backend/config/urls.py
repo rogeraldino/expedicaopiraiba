@@ -29,5 +29,5 @@ urlpatterns = [
     path("api/me/", include("apps.reservations.customer_urls")),
     path("api/payments/", include("apps.payments.urls")),
     path("api/operations/", include("apps.operations.urls")),
-    path('admin/', admin.site.urls),
+    path('admin-django/', admin.site.urls),
 ]
