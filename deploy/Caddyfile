@@ -1,0 +1,31 @@
+# ==============================================================================
+# CADDY CONFIGURATION — EXPEDIÇÃO PIRAÍBA (HTTPS / SSL AUTOMÁTICO)
+# ==============================================================================
+
+# OPÇÃO 1: Subdomínio dedicado (Permite rodar junto com o ALVOR na mesma VPS)
+piraiba.alvor.lat {
+	encode zstd gzip
+
+	# Encaminha chamadas de API e arquivos estáticos para o Django (porta 8001)
+	@backend path /api/* /admin-django/* /static/*
+	reverse_proxy @backend 127.0.0.1:8001 {
+		header_up X-Forwarded-Proto https
+		header_up Host {host}
+	}
+
+	# Encaminha páginas e assets da aplicação para o Next.js (porta 3001)
+	reverse_proxy 127.0.0.1:3001
+}
+
+# OPÇÃO 2: Domínio principal (Caso queira usar alvor.lat enquanto ALVOR estiver pausado)
+# alvor.lat, www.alvor.lat {
+# 	encode zstd gzip
+#
+# 	@backend path /api/* /admin-django/* /static/*
+# 	reverse_proxy @backend 127.0.0.1:8001 {
+# 		header_up X-Forwarded-Proto https
+# 		header_up Host {host}
+# 	}
+#
+# 	reverse_proxy 127.0.0.1:3001
+# }

@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-expedicao_piraiba}
+      POSTGRES_USER: ${POSTGRES_USER:-expedicao_piraiba}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - piraiba_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-expedicao_piraiba}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - piraiba_net
+
+  backend:
+    build:
+      context: ./backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DEBUG: "false"
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    command: sh -c "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8001:8000"
+    networks:
+      - piraiba_net
+
+  jobs:
+    build:
+      context: ./backend
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DEBUG: "false"
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    command: sh -c "while true; do python manage.py expire_holds; sleep 60; done"
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - piraiba_net
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_ENABLE_DEV_TOOLS: "false"
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://piraiba.alvor.lat/api}
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:3001:3000"
+    networks:
+      - piraiba_net
+
+volumes:
+  piraiba_postgres_data:
+    name: piraiba_postgres_data
+
+networks:
+  piraiba_net:
+    name: piraiba_net
