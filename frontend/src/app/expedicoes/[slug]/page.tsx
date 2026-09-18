@@ -66,10 +66,18 @@ async function getExpedition(slug: string): Promise<ExpeditionData> {
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 });
 const shortDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 
+const expeditionHeroImages: Record<string, string> = {
+  "bandeirantes-casais-22-out": "/ims-pesca/img-20260723-wa0173.jpg",
+  "bandeirantes-15-out": "/ims-pesca/wender-piraiba-186-3.jpg",
+  "sao-felix-01-out": "/ims-pesca/rogerio-e-uli-piraiba-206-1.jpg",
+  "sao-felix-28-out": "/ims-pesca/trible-de-pirararas-3.jpg",
+};
+
 export default async function ExpeditionDetails({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const expedition = await getExpedition(slug);
   const isCasais = expedition.slug.includes("casais");
+  const heroImage = expeditionHeroImages[expedition.slug] ?? "/ims-pesca/duble-de-piraiba-e-pirarara-top-1.jpg";
 
   return (
     <main className="min-h-screen bg-background text-ink-900">
@@ -142,8 +150,8 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
 
         <div className="relative min-h-[420px] overflow-hidden rounded-2xl shadow-md">
           <Image
-            src="/expeditions/rio-araguaia/pescaria.jpg"
-            alt="Pescadores durante uma expedição no Rio Araguaia"
+            src={heroImage}
+            alt={`Pescadores na ${expedition.name} - Expedição Piraíba`}
             fill
             sizes="(min-width: 1024px) 60vw, 100vw"
             className="object-cover"

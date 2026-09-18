@@ -6,18 +6,28 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 
 const photos = [
-  { src: "ponte-sao-felix.jpg", title: "Vista da Ponte de São Félix do Araguaia", desc: "Paisagem de tirar o fôlego no coração do Rio Araguaia." },
-  { src: "foto-7.jpg", title: "Piraíba de 1,86m em Bandeirantes", desc: "Batalha inesquecível no poço das gigantes." },
-  { src: "foto-5.jpg", title: "Triplê de Pirararas Lendárias", desc: "Três pirararas de grande porte capturadas no mesmo dia." },
-  { src: "barco-araguaia.jpg", title: "Navegando no Rio Araguaia", desc: "Embarcações modernas para uma pescaria segura e confortável." },
-  { src: "foto-9.jpg", title: "Troféu Pescaria de Casais", desc: "Experiências e memórias compartilhadas a dois no Rio Araguaia." },
-  { src: "foto-6.jpg", title: "Gigante embarcada com segurança", desc: "Manejo responsável e soltura para preservação da espécie." },
-  { src: "foto-1.jpg", title: "Barco de apoio navegando ao amanhecer", desc: "Estrutura rápida e confortável para navegação segura." },
-  { src: "foto-2.jpg", title: "Amanhecer no Rio Araguaia", desc: "A magia da natureza intocada antes do primeiro arremesso." },
-  { src: "foto-3.jpg", title: "Praia de areia branca & Resenha", desc: "Parada para sashimi fresco e churrasco de chão." },
-  { src: "foto-10.jpg", title: "Pescadores em ação de pesca esportiva", desc: "Piloteiros experientes posicionando nos melhores poços." },
-  { src: "foto-11.jpg", title: "Pôr do sol cinematográfico no Araguaia", desc: "O encerramento perfeito de um dia de muitas fisgadas." },
-  { src: "foto-12.jpg", title: "Confraternização noturna na pousada", desc: "Resenha, boa comida e premiação entre as duplas." },
+  { src: "img-20260723-wa0173.jpg", title: "Pescaria de Casais — Troféu Araguaia", desc: "Casal celebrando a captura de uma gigante no Araguaia. Experiência inesquecível a dois." },
+  { src: "rogerio-e-uli-piraiba-206-1.jpg", title: "Piraíba de 2,06m — Rogério e Uli", desc: "Gigante lendária de mais de 2 metros fisgada e manejada com respeito no poço das piraíbas." },
+  { src: "tetel-e-a-piraiba-top.jpg", title: "Piraíba Gigante — Tetel", desc: "Batalha emocionante no Araguaia com um dos maiores troféus da temporada." },
+  { src: "wender-piraiba-186-3.jpg", title: "Piraíba de 1,86m — Wender", desc: "Troféu embarcado em Bandeirantes após mais de uma hora de pura adrenalina." },
+  { src: "trible-de-pirararas-3.jpg", title: "Triplê Histórico de Pirararas", desc: "Três pescadores com três pirararas gigantes capturadas simultaneamente na mesma ação." },
+  { src: "duble-de-piraiba-e-pirarara-top-1.jpg", title: "Dublê Épico de Piraíba e Pirarara", desc: "A magia do Rio Araguaia: dois gigantes de espécies nobres no mesmo momento." },
+  { src: "img-20260723-wa0169.jpg", title: "Pirarara Lendária na Praia de Areia", desc: "Registro clássico do pescador com grande pirarara nas praias de água cristalina do Araguaia." },
+  { src: "img-20260723-wa0170.jpg", title: "Pirarara Vermelha no Barco", desc: "Cores vivas e força descomunal: o charme e a bravura da pirarara do Araguaia." },
+  { src: "img-20260723-wa0198.jpg", title: "Piraíba Prateada do Araguaia", desc: "O 'Filhote' gigante no colo do pescador demonstrando toda a imponência do peixe de couro." },
+  { src: "img-20260723-wa0199.jpg", title: "Soltura e Preservação da Gigante", desc: "Compromisso com o pesque e solte: peixe oxigenado e devolvido com vida ao rio." },
+  { src: "img-20250412-wa0033.jpg", title: "Fisgada Brutal no Meio do Rio", desc: "Pescador erguendo exemplar de respeito durante a temporada de águas limpas." },
+  { src: "img-20250412-wa0041.jpg", title: "Pirarara de Mais de 35kg", desc: "Peixe de couro espetacular capturado com isca viva e guia especializado." },
+  { src: "img-20250412-wa0051.jpg", title: "Troféu no Pôr do Sol", desc: "Final de tarde abençoado com peixe na linha e muita celebração a bordo." },
+  { src: "img-20250413-wa0074.jpg", title: "Gigante Araguaiana", desc: "Orgulho de quem enfrentou a correnteza e venceu a disputa contra o monstro." },
+  { src: "img-20250413-wa0123.jpg", title: "Piraíba no Bico da Voadeira", desc: "Registro memorável com a tripulação reunida em comemoração ao grande troféu." },
+  { src: "img-20250417-wa0027.jpg", title: "Pirarara Monstro no Barranco", desc: "Briga pesada nos troncos e pedrais: vitória do pescador e do guia nativo." },
+  { src: "whatsapp-image-2024-05-22-at-133904.jpeg", title: "Emoção à Flor da Pele", desc: "Sorriso no rosto e troféu nos braços: é isso que a Expedição Piraíba proporciona." },
+  { src: "whatsapp-image-2024-05-24-at-145907.jpeg", title: "Dupla Vitoriosa no Araguaia", desc: "Pesca esportiva entre amigos que se torna história para contar a vida inteira." },
+  { src: "whatsapp-image-2025-01-08-at-202540-1.jpeg", title: "Pirarara Lendária Noturna", desc: "A emoção de fisgar e embarcar um peixe desse porte nas noites do Araguaia." },
+  { src: "whatsapp-image-2025-01-09-at-154004-14.jpeg", title: "Rei do Rio em São Félix", desc: "Mais um gigante catalogado no acervo oficial de mais de duas décadas de expedições." },
+  { src: "20250414-065052.jpg", title: "Manhã de Troféus no Araguaia", desc: "Primeiras horas do dia e o alarme da carretilha cantando sem parar." },
+  { src: "20250409-143952.jpg", title: "Pescadores em Sintonia com o Rio", desc: "Equipe completa celebrando a pescaria perfeita com guia nativo experiente." },
 ];
 
 export default function GalleryPage() {
@@ -56,7 +66,7 @@ export default function GalleryPage() {
             <article key={photo.src} className="group overflow-hidden rounded-2xl border border-ink-900/10 bg-white shadow-sm transition hover:shadow-md">
               <div className="relative aspect-[4/3] overflow-hidden bg-black/10">
                 <Image
-                  src={`/gallery/${photo.src}`}
+                  src={`/ims-pesca/${photo.src}`}
                   alt={photo.title}
                   fill
                   sizes="(min-width:1024px) 33vw, (min-width:640px) 50vw, 100vw"

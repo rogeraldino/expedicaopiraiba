@@ -24,8 +24,12 @@ def start_verification(*, cpf, full_name, email, phone):
         cpf=normalized_cpf,
         defaults={"full_name": full_name.strip(), "email": email.lower().strip(), "phone": normalized_phone},
     )
-    if VerificationChallenge.objects.filter(customer=customer, created_at__gte=timezone.now() - timedelta(seconds=60)).exists():
-        raise ValidationError("Aguarde um minuto antes de solicitar outro código.")
+    if not created and (customer.full_name != full_name.strip() or customer.email != email.lower().strip() or customer.phone != normalized_phone):
+        customer.full_name = full_name.strip()
+        customer.email = email.lower().strip()
+        customer.phone = normalized_phone
+        customer.save(update_fields=("full_name", "email", "phone", "updated_at"))
+    VerificationChallenge.objects.filter(customer=customer, verified_at__isnull=True).delete()
     code = f"{secrets.randbelow(1_000_000):06d}"
     challenge = VerificationChallenge.objects.create(
         customer=customer,

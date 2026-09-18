@@ -31,7 +31,7 @@ export function SiteFooter() {
             </p>
             <p className="flex items-center gap-2">
               <MapPin className="size-4 text-sand-300" />
-              <strong>Bandeirantes — GO</strong> (Pousada Canaã)
+              <strong>Bandeirantes — GO</strong> (Pousada Canoa)
             </p>
             <p className="pt-2 text-xs text-white/60">Pesca Esportiva & Pescaria de Casais</p>
           </div>

@@ -54,20 +54,20 @@ const preview: Expedition[] = [
     id: "bandeirantes-15-out",
     name: "Bandeirantes — 15 a 18 Out",
     slug: "bandeirantes-15-out",
-    destination: "Bandeirantes/GO (Pousada Canaã)",
+    destination: "Bandeirantes/GO (Pousada Canoa)",
     departure_location: "Bandeirantes/GO",
     starts_at: "2026-10-15",
     ends_at: "2026-10-18",
     duration_days: 4,
     available_slots: 12,
     price_per_person_cents: 510000,
-    summary: "4 dias de pescaria de gigantes All Inclusive no Rio Araguaia na Pousada Canaã.",
+    summary: "4 dias de pescaria de gigantes All Inclusive no Rio Araguaia na Pousada Canoa.",
   },
   {
     id: "bandeirantes-casais-22-out",
     name: "Pescaria de Casais — 22 a 24 Out",
     slug: "bandeirantes-casais-22-out",
-    destination: "Bandeirantes/GO (Pousada Canaã)",
+    destination: "Bandeirantes/GO (Pousada Canoa)",
     departure_location: "Bandeirantes/GO",
     starts_at: "2026-10-22",
     ends_at: "2026-10-24",
@@ -92,11 +92,11 @@ const preview: Expedition[] = [
 ];
 
 const expeditionImages: Record<string, string> = {
-  "sao-felix-01-out": "/expeditions/ponte-sao-felix.jpg",
-  "bandeirantes-15-out": "/expeditions/bandeirantes-piraiba.jpg",
-  "bandeirantes-casais-22-out": "/expeditions/casais-pesca.jpg",
-  "sao-felix-28-out": "/expeditions/por-do-sol-araguaia.jpg",
-  "rio-araguaia": "/expeditions/barco-araguaia.jpg",
+  "sao-felix-01-out": "/ims-pesca/rogerio-e-uli-piraiba-206-1.jpg",
+  "bandeirantes-15-out": "/ims-pesca/wender-piraiba-186-3.jpg",
+  "bandeirantes-casais-22-out": "/ims-pesca/img-20260723-wa0173.jpg",
+  "sao-felix-28-out": "/ims-pesca/trible-de-pirararas-3.jpg",
+  "rio-araguaia": "/ims-pesca/duble-de-piraiba-e-pirarara-top-1.jpg",
 };
 
 async function getExpeditions(): Promise<Expedition[]> {
@@ -115,18 +115,18 @@ const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL
 const shortDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short" });
 
 const gallery = [
-  ["foto-4.jpg", "Piraíba de 2,06m capturada em São Félix"],
-  ["foto-7.jpg", "Piraíba de 1,86m em Bandeirantes"],
-  ["foto-5.jpg", "Triplê de Pirararas Lendárias"],
-  ["foto-8.jpg", "Dublê de Piraíba e Pirarara"],
-  ["foto-9.jpg", "Troféu Pescaria de Casais"],
-  ["foto-6.jpg", "Gigante embarcada com segurança"],
-  ["foto-1.jpg", "Barco de apoio navegando"],
-  ["foto-2.jpg", "Amanhecer no Rio Araguaia"],
-  ["foto-3.jpg", "Praia de areia branca no Araguaia"],
-  ["foto-10.jpg", "Pescadores em ação"],
-  ["foto-11.jpg", "Pôr do sol cinematográfico"],
-  ["foto-12.jpg", "Confraternização e resenha noturna"],
+  ["rogerio-e-uli-piraiba-206-1.jpg", "Piraíba de 2,06m — Rogério e Uli"],
+  ["wender-piraiba-186-3.jpg", "Piraíba de 1,86m — Wender"],
+  ["trible-de-pirararas-3.jpg", "Triplê Histórico de Pirararas"],
+  ["duble-de-piraiba-e-pirarara-top-1.jpg", "Dublê de Piraíba e Pirarara"],
+  ["img-20260723-wa0173.jpg", "Troféu Pescaria de Casais"],
+  ["tetel-e-a-piraiba-top.jpg", "Piraíba Gigante do Tetel"],
+  ["img-20260723-wa0169.jpg", "Pirarara Gigante na Praia"],
+  ["img-20260723-wa0170.jpg", "Pirarara Vermelha no Barco"],
+  ["img-20260723-wa0198.jpg", "Piraíba Prateada do Araguaia"],
+  ["img-20250412-wa0033.jpg", "Pescador com Peixe de Couro"],
+  ["img-20250412-wa0041.jpg", "Pirarara de Mais de 35kg"],
+  ["img-20250413-wa0123.jpg", "Piraíba no Bico da Voadeira"],
 ];
 
 const season2027Dates = [
@@ -165,7 +165,7 @@ export default async function Home() {
             <div className="inline-flex items-center gap-2 rounded-full border border-sand-300/30 bg-black/40 px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.2em] text-sand-300 backdrop-blur-md">
               <Sparkles className="size-3.5" /> Temporada Oficial 2026 • 2027
             </div>
-            <h1 className="mt-4 max-w-3xl text-5xl font-black leading-[.95] tracking-tight sm:text-6xl lg:text-7xl drop-shadow-md">
+            <h1 className="mt-4 max-w-3xl text-5xl font-black leading-[.95] tracking-tight sm:text-6xl lg:text-7xl hero-headline">
               O Rio Araguaia está chamando.
             </h1>
             <p className="mt-5 max-w-xl text-lg leading-7 text-white/90 drop-shadow">
@@ -327,7 +327,7 @@ export default async function Home() {
 
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[
-              [PackageCheck, "Hospedagem Completa", "Pousadas Solar das Águas e Canaã com café, almoço no rio ou kit para o rio, petiscos e jantar."],
+              [PackageCheck, "Hospedagem Completa", "Pousadas Solar das Águas e Canoa com café, almoço no rio ou kit para o rio, petiscos e jantar."],
               [Fuel, "Combustível & Óleo 100% Inclusos", "Gasolina durante os 4 dias e Óleo para os motores."],
               [Beer, "Open Bar de Cervejas Premium", "Heineken, Original e Stella geladas em abundância nos barcos e na pousada."],
               [Utensils, "Kit Sashimi & Ceviche", "Kit para preparo de ceviche, sashimi e outros petiscos, dentro do barco."],
@@ -416,7 +416,7 @@ export default async function Home() {
             {gallery.map(([src, alt]) => (
               <div key={src} className="group relative aspect-[4/3] overflow-hidden rounded-xl bg-black/40">
                 <Image
-                  src={`/gallery/${src}`}
+                  src={`/ims-pesca/${src}`}
                   alt={alt}
                   fill
                   sizes="(min-width:1024px) 16vw, (min-width:640px) 33vw, 50vw"

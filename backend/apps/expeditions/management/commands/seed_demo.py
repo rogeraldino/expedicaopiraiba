@@ -26,7 +26,7 @@ class Command(BaseCommand):
             {
                 "slug": "bandeirantes-15-out",
                 "name": "Bandeirantes — 15 a 18 Out",
-                "destination": "Bandeirantes/GO (Pousada Canaã)",
+                "destination": "Bandeirantes/GO (Pousada Canoa)",
                 "departure_location": "Bandeirantes/GO",
                 "starts_at": date(2026, 10, 15),
                 "ends_at": date(2026, 10, 18),
@@ -34,12 +34,12 @@ class Command(BaseCommand):
                 "price_per_person_cents": 510000,
                 "deposit_cents": 250000,
                 "status": Expedition.Status.PUBLISHED,
-                "summary": "4 dias de pescaria de gigantes All Inclusive no Rio Araguaia na Pousada Canaã. Barcos equipados, combustível incluso, torneio entre duplas e open bar.",
+                "summary": "4 dias de pescaria de gigantes All Inclusive no Rio Araguaia na Pousada Canoa. Barcos equipados, combustível incluso, torneio entre duplas e open bar.",
             },
             {
                 "slug": "bandeirantes-casais-22-out",
                 "name": "Pescaria de Casais — 22 a 24 Out",
-                "destination": "Bandeirantes/GO (Pousada Canaã)",
+                "destination": "Bandeirantes/GO (Pousada Canoa)",
                 "departure_location": "Bandeirantes/GO",
                 "starts_at": date(2026, 10, 22),
                 "ends_at": date(2026, 10, 24),

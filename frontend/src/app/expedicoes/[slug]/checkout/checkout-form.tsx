@@ -73,12 +73,28 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       setChallengeId(data.challenge_id);
       setDestination(data.masked_destination);
       setDevCode(data.dev_code ?? "");
+      if (data.dev_code) {
+        setCode(data.dev_code);
+      }
       setStep("OTP");
     } catch (requestError) {
       setError(messageFrom(requestError));
     } finally {
       setLoading(false);
     }
+  }
+
+  function fillDemoData() {
+    setIdentity({
+      cpf: "529.982.247-25",
+      full_name: "Rodrigo Geraldo",
+      phone: "(62) 98161-2128",
+      email: "rodrigo@alvor.lat",
+    });
+    setTerms(true);
+    setParticipants((prev) =>
+      prev.map((p, idx) => (p && p.trim() ? p : idx === 0 ? "Rodrigo Geraldo" : `Pescador Convidado ${idx + 1}`))
+    );
   }
 
   async function verifyAndHold(event: FormEvent) {
@@ -223,15 +239,31 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         <h2 className="mt-2 text-2xl font-black text-brand-900">Digite o código de 6 números</h2>
         <p className="mt-2 text-sm text-ink-500">Enviado para {destination}.</p>
         {devCode && (
-          <p className="mt-4 rounded-xl bg-sand-100 p-3.5 text-sm text-brand-900 border border-sand-200">
-            <strong>Código de teste:</strong> <code className="font-mono font-black text-base">{devCode}</code>
-          </p>
+          <div className="mt-4 rounded-xl bg-sand-100 p-4 text-sm text-brand-900 border border-sand-300">
+            <div className="flex items-center justify-between">
+              <div>
+                <strong className="block text-xs uppercase tracking-wider text-brand-700">Código de Verificação (Ambiente Demo)</strong>
+                <code className="font-mono font-black text-2xl text-brand-900 tracking-wider">{devCode}</code>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCode(devCode)}
+                className="rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-800 transition"
+              >
+                Inserir código
+              </button>
+            </div>
+            <p className="mt-1 text-[11px] text-ink-600">
+              No ambiente de demonstração, o código é gerado automaticamente na tela para validação imediata.
+            </p>
+          </div>
         )}
         <input
           value={code}
           onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
           className="mt-5 h-14 w-full rounded-lg border border-ink-900/15 text-center text-3xl font-black tracking-[.4em] outline-none focus:border-brand-600 focus:ring-2 focus:ring-brand-100"
           inputMode="numeric"
+          placeholder="000000"
           autoFocus
         />
         {error && <p className="mt-3 text-sm font-semibold text-red-700">{error}</p>}
@@ -253,6 +285,24 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
 
   return (
     <form onSubmit={requestCode} className="space-y-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-brand-500/30 bg-brand-50/80 p-4 shadow-sm">
+        <div>
+          <span className="inline-block rounded bg-brand-700 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white">
+            Demonstração & Testes
+          </span>
+          <p className="mt-1 text-xs text-brand-950">
+            Clique para preencher todos os campos do formulário automaticamente e testar o onboarding completo.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={fillDemoData}
+          className="shrink-0 rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white shadow hover:bg-brand-800 transition"
+        >
+          Preencher dados de teste
+        </button>
+      </div>
+
       <fieldset className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
         <legend className="px-2 font-black text-brand-900">1. Dados do titular da reserva</legend>
         <div className="mt-2 grid gap-4 sm:grid-cols-2">

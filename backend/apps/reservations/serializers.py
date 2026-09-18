@@ -22,9 +22,8 @@ class IdentifySerializer(serializers.Serializer):
             "challenge_id": str(challenge.id),
             "masked_destination": f"WhatsApp terminado em {challenge.customer.phone[-4:]}",
             "expires_in_seconds": settings.OTP_EXPIRY_MINUTES * 60,
+            "dev_code": code,
         }
-        if settings.DEBUG:
-            result["dev_code"] = code
         return result
 
 

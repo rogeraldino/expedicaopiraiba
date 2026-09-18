@@ -42,3 +42,16 @@ body {
     padding-inline: 2rem;
   }
 }
+
+@utility hero-headline {
+  color: #34d399;
+  -webkit-text-stroke: 1.5px #022c22;
+  paint-order: stroke fill;
+  text-shadow:
+    -1px -1px 0 #022c22,
+     1px -1px 0 #022c22,
+    -1px  1px 0 #022c22,
+     1px  1px 0 #022c22,
+     0 4px 20px rgba(16, 185, 129, 0.45),
+     0 8px 32px rgba(0, 0, 0, 0.9);
+}
