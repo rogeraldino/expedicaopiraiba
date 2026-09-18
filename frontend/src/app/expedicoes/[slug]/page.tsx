@@ -8,7 +8,6 @@ import {
   Headphones,
   House,
   LockKeyhole,
-  Radio,
   ShieldCheck,
   Snowflake,
   Trophy,
@@ -162,12 +161,12 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
             {[
               [House, "Hospedagem Completa na Pousada"],
               [Fuel, "Combustível e Óleo 100% Inclusos"],
-              [Beer, "Open Bar (Heineken, Original, Amstel)"],
-              [Utensils, "Kit Sashimi, Ceviche e Churrasco"],
-              [Fish, "Iscas Nativas (Tuviras inclusas)"],
-              [Users, "Guias de Pesca e Piloteiros Nativos"],
+              [Beer, "Open Bar (Heineken, Original, Stella)"],
+              [Utensils, "Kit Sashimi, Ceviche e outros petiscos"],
+              [Fish, "Iscas Nativas"],
+              [Users, "Guias Nativos"],
               [Trophy, "Torneio com Troféus e Banner da Equipe"],
-              [Radio, "Rádio VHF em cada embarcação"],
+              [ShieldCheck, "Seguro Viagem"],
               [Snowflake, "Água, Refrigerante e Gelo abundante"],
               [Wifi, "Internet Wi-Fi na Pousada"],
             ].map(([Icon, label]) => {
@@ -186,7 +185,7 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
           <h2 className="text-lg font-black uppercase text-brand-800">Peixes Gigantes do Rio Araguaia</h2>
           <p className="mt-1 text-xs text-ink-500">Os maiores peixes de água doce do Brasil no seu anzol.</p>
           <div className="mt-5 flex flex-wrap gap-2.5">
-            {["Piraíba (+2m)", "Pirarara Lendária", "Filhote", "Jaú Gigante", "Bargada", "Tucunaré Azul", "Aruanã"].map(
+            {["Piraíba (+2m)", "Pirarara Lendária", "Bargada", "Tucunaré Azul", "Aruanã", "Dourada", "Mandubé", "Corvina", "Bicuda", "Cachorra", "Barbado", "Tambaqui", "Cachara", "Pintado"].map(
               (name) => (
                 <span
                   key={name}
@@ -201,8 +200,9 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
 
           <h3 className="mt-6 text-sm font-black uppercase text-brand-800">Pousada & Estrutura</h3>
           <p className="mt-2 text-sm text-ink-600 leading-relaxed">
-            Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, piscina, área de convivência e gastronomia regional
-            preparada por cozinheiras nativas.
+            {expedition.slug.includes("bandeirantes")
+              ? "Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, piscina, área de convivência e gastronomia regional preparada por cozinheiras nativas."
+              : "Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, área de convivência e gastronomia regional preparada por cozinheiras nativas."}
           </p>
         </article>
       </section>

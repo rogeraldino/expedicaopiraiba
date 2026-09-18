@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { CheckCircle2, Copy, CreditCard, LockKeyhole, QrCode } from "lucide-react";
+import { CheckCircle2, Copy, CreditCard, LockKeyhole, QrCode, Receipt } from "lucide-react";
 import Link from "next/link";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
@@ -320,7 +320,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
             [
               "DEPOSIT",
               "Sinal da Reserva",
-              `Pague ${money.format(depositTotal)} agora (${money.format(expedition.deposit_cents / 100)}/pessoa). Saldo restante na data da viagem.`,
+              `Sinal a partir de ${money.format(depositTotal)} (${money.format(expedition.deposit_cents / 100)}/pessoa) — 20% à vista no PIX ou no cartão com acréscimo. Saldo restante parcelado no cartão ou via boleto até a data da viagem.`,
             ],
             [
               "FULL",
@@ -367,7 +367,15 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
             <CreditCard className="size-6 text-ink-500" />
             <div>
               <strong>Cartão de Crédito</strong>
-              <small className="block text-xs text-ink-500">Em até 10x (em breve)</small>
+              <small className="block text-xs text-ink-500">Em até 10x com acréscimo (sob consulta / em breve)</small>
+            </div>
+          </label>
+          <label className="flex items-center gap-3 rounded-xl border border-ink-900/15 p-4 opacity-50">
+            <input type="radio" disabled />
+            <Receipt className="size-6 text-ink-500" />
+            <div>
+              <strong>Boleto Bancário</strong>
+              <small className="block text-xs text-ink-500">Parcelamento programado sem juros até a data da viagem</small>
             </div>
           </label>
         </div>

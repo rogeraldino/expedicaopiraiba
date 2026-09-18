@@ -6,10 +6,10 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 
 const photos = [
-  { src: "foto-4.jpg", title: "Piraíba de 2,06m capturada em São Félix", desc: "Registro histórico de um dos maiores gigantes do Rio Araguaia." },
+  { src: "ponte-sao-felix.jpg", title: "Vista da Ponte de São Félix do Araguaia", desc: "Paisagem de tirar o fôlego no coração do Rio Araguaia." },
   { src: "foto-7.jpg", title: "Piraíba de 1,86m em Bandeirantes", desc: "Batalha inesquecível no poço das gigantes." },
   { src: "foto-5.jpg", title: "Triplê de Pirararas Lendárias", desc: "Três pirararas de grande porte capturadas no mesmo dia." },
-  { src: "foto-8.jpg", title: "Dublê de Piraíba e Pirarara", desc: "Emoção em dose dupla para a mesma equipe." },
+  { src: "barco-araguaia.jpg", title: "Navegando no Rio Araguaia", desc: "Embarcações modernas para uma pescaria segura e confortável." },
   { src: "foto-9.jpg", title: "Troféu Pescaria de Casais", desc: "Experiências e memórias compartilhadas a dois no Rio Araguaia." },
   { src: "foto-6.jpg", title: "Gigante embarcada com segurança", desc: "Manejo responsável e soltura para preservação da espécie." },
   { src: "foto-1.jpg", title: "Barco de apoio navegando ao amanhecer", desc: "Estrutura rápida e confortável para navegação segura." },

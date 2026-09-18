@@ -92,11 +92,11 @@ const preview: Expedition[] = [
 ];
 
 const expeditionImages: Record<string, string> = {
-  "sao-felix-01-out": "/expeditions/sao-felix-piraiba.jpg",
+  "sao-felix-01-out": "/expeditions/ponte-sao-felix.jpg",
   "bandeirantes-15-out": "/expeditions/bandeirantes-piraiba.jpg",
   "bandeirantes-casais-22-out": "/expeditions/casais-pesca.jpg",
-  "sao-felix-28-out": "/expeditions/fechamento-piraiba.jpg",
-  "rio-araguaia": "/expeditions/duble-peixes.jpg",
+  "sao-felix-28-out": "/expeditions/por-do-sol-araguaia.jpg",
+  "rio-araguaia": "/expeditions/barco-araguaia.jpg",
 };
 
 async function getExpeditions(): Promise<Expedition[]> {
@@ -327,14 +327,14 @@ export default async function Home() {
 
           <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[
-              [PackageCheck, "Hospedagem Completa", "Pousadas Solar das Águas e Canaã com café, almoço no rio ou kit pesca, petiscos e jantar."],
-              [Fuel, "Combustível & Óleo 100% Inclusos", "Gasolina livre durante os 4 dias de pescaria sem surpresas no check-out."],
-              [Beer, "Open Bar de Cervejas Premium", "Heineken, Original e Amstel geladas em abundância nos barcos e na pousada."],
-              [Utensils, "Kit Sashimi & Ceviche", "Preparo exclusivo de petiscos frescos e churrasco nas praias de areia branca."],
-              [Fish, "Iscas Nativas Inclusas", "Tuviras e iscas vivas da região selecionadas para os grandes peixes de couro."],
-              [Users, "Guias Nativos Experientes", "Piloteiros que conhecem os poços mais profundos e as melhores corredeiras."],
+              [PackageCheck, "Hospedagem Completa", "Pousadas Solar das Águas e Canaã com café, almoço no rio ou kit para o rio, petiscos e jantar."],
+              [Fuel, "Combustível & Óleo 100% Inclusos", "Gasolina durante os 4 dias e Óleo para os motores."],
+              [Beer, "Open Bar de Cervejas Premium", "Heineken, Original e Stella geladas em abundância nos barcos e na pousada."],
+              [Utensils, "Kit Sashimi & Ceviche", "Kit para preparo de ceviche, sashimi e outros petiscos, dentro do barco."],
+              [Fish, "Iscas Nativas Inclusas", "Iscas vivas da região, selecionadas para os grandes peixes, de couro e outros."],
+              [Users, "Guias Nativos Experientes", "Guias nativos, que conhecem os pontos de pesca da região do nosso Rio Araguaia e outros."],
               [Trophy, "Torneio entre as Duplas", "Competição sadia com troféus para os maiores peixes e banner personalizado."],
-              [ShieldCheck, "Rádio VHF & Segurança", "Comunicação contínua entre todas as embarcações por segurança."],
+              [ShieldCheck, "Seguro Viagem", "Um seguro completo para o cliente, na hora que o cliente sai de casa até a volta."],
             ].map(([Icon, title, desc]) => {
               const ItemIcon = Icon as typeof PackageCheck;
               return (
