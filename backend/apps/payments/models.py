@@ -4,6 +4,10 @@ from django.db import models
 
 
 class Payment(models.Model):
+    class Purpose(models.TextChoices):
+        INITIAL = "INITIAL", "Pagamento inicial"
+        BALANCE = "BALANCE", "Saldo"
+        MANUAL = "MANUAL", "Manual"
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pendente"
         PROCESSING = "PROCESSING", "Processando"
@@ -16,6 +20,7 @@ class Payment(models.Model):
     reservation = models.ForeignKey("reservations.Reservation", on_delete=models.PROTECT, related_name="payments")
     provider = models.CharField(max_length=30, default="FAKE")
     method = models.CharField(max_length=20, default="PIX")
+    purpose = models.CharField(max_length=20, choices=Purpose.choices, default=Purpose.INITIAL)
     external_id = models.CharField(max_length=100, unique=True)
     amount_cents = models.PositiveIntegerField()
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)

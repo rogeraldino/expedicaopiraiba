@@ -1,11 +1,12 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
+from django.utils import timezone
 
 from apps.customers.models import Customer
-from apps.expeditions.models import Expedition
-from apps.reservations.models import Reservation
+from apps.expeditions.models import Expedition, ExpeditionProduct, Product
+from apps.reservations.models import ParticipantProductChoice, Reservation, ReservationParticipant
 
 
 @override_settings(DEBUG=True, ADMIN_EMAIL="admin@example.com", ADMIN_PASSWORD="safe-test-password")
@@ -41,3 +42,37 @@ class OperationsApiTests(TestCase):
         self.assertEqual(Customer.objects.count(), 0)
         self.assertEqual(Reservation.objects.count(), 0)
         self.assertEqual(Expedition.objects.count(), 1)
+
+    def test_consolidation_counts_only_eligible_reservations_and_exports(self):
+        auth = self.login()
+        product = Product.objects.create(name="Água operacional", unit="garrafa", package_size=6)
+        offer = ExpeditionProduct.objects.create(expedition=self.expedition, product=product, standard_quantity_per_participant=2)
+        customer = Customer.objects.create(cpf="52998224725", full_name="João", email="ops@example.com", phone="62999999999")
+        valid = Reservation.objects.create(customer=customer, expedition=self.expedition, participant_count=1, status=Reservation.Status.CONFIRMED, unit_price_cents=1, total_price_cents=1, deposit_cents=1)
+        excluded = Reservation.objects.create(customer=customer, expedition=self.expedition, participant_count=1, status=Reservation.Status.HELD, unit_price_cents=1, total_price_cents=1, deposit_cents=1)
+        for reservation in (valid, excluded):
+            participant = ReservationParticipant.objects.create(reservation=reservation, full_name="Pessoa")
+            ParticipantProductChoice.objects.create(participant=participant, expedition_product=offer, selected=True)
+        base = f"/api/operations/expeditions/{self.expedition.id}/consolidation"
+        response = self.client.get(base + "/", **auth)
+        self.assertEqual(response.data["items"][0]["people"], 1)
+        self.assertEqual(response.data["items"][0]["total"], 2)
+        self.assertEqual(response.data["items"][0]["details"][0]["customer_name"], "João")
+        self.assertEqual(self.client.get(base + ".csv", **auth).status_code, 200)
+
+    def test_configuration_invalid_command_is_atomic_and_manual_payment_is_audited(self):
+        auth = self.login()
+        original = self.expedition.departure_location
+        invalid = self.client.put(f"/api/operations/expeditions/{self.expedition.id}/configuration/", {"departure_location": "Mudaria", "offers": [{"product_id": "00000000-0000-0000-0000-000000000000", "standard_quantity_per_participant": 0}]}, format="json", **auth)
+        self.assertEqual(invalid.status_code, 400)
+        self.expedition.refresh_from_db()
+        self.assertEqual(self.expedition.departure_location, original)
+        customer = Customer.objects.create(cpf="52998224725", full_name="João", email="manual@example.com", phone="62999999999")
+        reservation = Reservation.objects.create(customer=customer, expedition=self.expedition, participant_count=1, status=Reservation.Status.HELD, held_until=timezone.now()+timedelta(minutes=5), unit_price_cents=1000, total_price_cents=1000, deposit_cents=300)
+        paid = self.client.post(f"/api/operations/reservations/{reservation.id}/manual-payment/", {"amount_cents": 300, "reason": "Comprovante conferido"}, format="json", **auth)
+        self.assertEqual(paid.status_code, 201)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.status, Reservation.Status.CONFIRMED)
+        event = reservation.events.get(event_type="MANUAL_PAYMENT_RECORDED")
+        self.assertEqual(event.actor_type, "ADMIN")
+        self.assertEqual(event.reason, "Comprovante conferido")

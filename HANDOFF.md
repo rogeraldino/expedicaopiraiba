@@ -1,7 +1,7 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
-> **Estado do Sistema:** Pronto para Demonstração ao Stakeholder com Dados Reais Oficiais  
-> **Última Atualização:** 03/09/2026 (Integração dos Encartes Comerciais 2026/2027 + Tela 05 de Bebidas & Preferências)
+> **Estado do Sistema:** MVP Operacional P0 Concluído e Validado (`VALIDATED` — Ponytail Delta PASS)<br/>
+> **Última Atualização:** 18/09/2026 (Fechamento da Épica E01 — Escolhas Individuais, Minha Expedição, Saldo, Dashboard e Consolidação)
 
 ---
 
@@ -26,40 +26,67 @@
    - Identificação com CPF, Nome, E-mail e WhatsApp com máscara automática.
    - Hold transacional de 15 minutos e simulação instantânea de PIX.
 
-4. **Tela de Confirmação & Onboarding Completo (`/expedicoes/[slug]/confirmacao/[id]`):**
-   - Step 1: Voucher `#EXP-...` gerado.
-   - Step 2: Dados dos participantes com validação telefônica flexível e contato de emergência.
-   - Step 3: Modal de Bebidas e Preferências com os rótulos oficiais (Heineken, Original, Amstel, Spaten, Corona, destilados e restrições alimentares).
-   - Step 4: Checklist operacional da viagem.
+4. **Confirmação e Minha Expedição (`/expedicoes/[slug]/minha-expedicao/[id]`):**
+   - Autenticação e autorização por objeto (sessão dona com 404 estrito para reservas de terceiros).
+   - **Contagem Regressiva e Estado Temporal:** Dias restantes até o embarque, aviso de viagem em andamento ou encerrada.
+   - **Orientações de Encontro:** Local e instruções operacionais da expedição.
+   - **Preparação Individual por Participante:**
+     - **Bebidas:** Escolha booleana por produto oferecido ativo da expedição (sem inserção manual de unidades).
+     - **Restrições Alimentares:** Seleção estruturada com suporte a "Sem restrições" (mutuamente exclusivo) e campo de detalhes.
+     - **Checklist Individual:** Controle por item (obrigatórios e recomendados).
+   - **Pagamento de Saldo Restante:** Cobrança PIX simulada pelo valor exato restante, reutilizável e idempotente sob concorrência.
+   - **Histórico e Avisos Operacionais:** Linha do tempo de eventos auditáveis e avisos automáticos de saldo pendente, vencimento e proximidade da viagem.
+   - **Atendimento Oficial:** CTA conectado ao WhatsApp da operação configurado no domínio.
 
 5. **Painel Administrativo do Organizador (`/admin`):**
-   - Gestão de ocupação, participantes e **Lista de Compras de Bebidas/Preferências** consolidada para a equipe de bordo.
+   - **Visão Geral:** Indicadores consolidados de receita, reservas, pendências, alertas operacionais (saldo vencido, restrições) e métricas por expedição (vagas confirmadas, holds, saldo a receber).
+   - **Gestão de Expedições e Configuração Operacional:** Criação e edição de expedições, instruções de encontro, catálogo de produtos, quantidades padrão por participante (`standard_quantity_per_participant`) e itens de checklist.
+   - **Gestão de Reservas:** Filtro por expedição, status e busca textual (nome, CPF, telefone), detalhamento nominal com status de cadastro, preferências, restrições e checklist de cada participante.
+   - **Operações Financeiras Auditadas:** Registro de pagamento manual simulado com justificativa obrigatória e cancelamento auditado.
+   - **Lista de Compras Consolidada:** Cálculo atômico baseado em snapshot transacional (`participantes_que_escolheram × quantidade_padrão`), conversão em caixas/fardos (`package_size`) com sobra, breakdown nominal por produto e exportação em CSV (com neutralização contra injeção de fórmulas) e texto puro.
 
 ---
 
-## 🚀 2. Roteiro Recomendado para a Apresentação (2 Minutos)
+### 2. Validação Integrada e Confiabilidade
 
-1. Abra a **Home** (`http://localhost:3000`) e mostre a vitrine com o calendário oficial de 2026 e a prévia de 2027.
-2. Clique em **"Ver detalhes e reservar"** na expedição de São Félix ou Bandeirantes.
-3. No checkout, selecione os participantes, preencha os dados e valide com o código em tela.
-4. Clique em **"Pagar com PIX"** ➔ Acesse a tela de **Confirmação e Onboarding**.
-5. Abra o modal **"Bebidas e Preferências"** (Step 3), selecione os rótulos (Heineken, Antarctica Original, Amstel), informe restrições alimentares e salve.
-6. Abra o **Painel do Organizador** (`http://localhost:3000/admin`), vá em Reservas e mostre a **Lista de Compras** gerada em tempo real para o barco-hotel.
+Toda a suíte e os gates da Constituição estão 100% validados:
+
+```bash
+# 1. Testes do Backend com PostgreSQL real (inclui testes de concorrência e migração)
+cd backend && POSTGRES_HOST=172.19.0.2 .venv/bin/python manage.py test
+# Resultado: 29 testes OK (0 falhas, 0 erros, 0 skips)
+
+# 2. Verificação de integridade de migrações
+cd backend && TEST_SQLITE=true .venv/bin/python manage.py makemigrations --check --dry-run
+# Resultado: No changes detected
+
+# 3. Qualidade e tipos do frontend
+cd frontend && npm run lint
+cd frontend && npx tsc --noEmit
+
+# 4. Build de produção do frontend (Next.js Turbopack)
+cd frontend && npm run build
+
+# 5. Integridade documental e owners normativos
+make check-docs
+# Resultado: 4 owners normativos válidos
+```
 
 ---
 
-## ⚙️ 3. Comandos de Execução Local & Produção
+### 3. Comandos de Execução Local & Produção
 
-### Local (Desenvolvimento / Testes)
+#### Local (Docker Compose)
 ```bash
 # Subir toda a stack com Docker Compose
 docker compose up -d --build
 
-# Popular/atualizar as 4 expedições oficiais de 2026
+# Executar migrações e popular expedições oficiais de 2026
+docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py seed_demo
 ```
 
-### Produção na VPS (com Caddy & Domínio alvor.lat)
+#### Produção na VPS (com Caddy & Domínio alvor.lat)
 ```bash
 # 1. Configurar o .env de produção
 cp .env.production.example .env && chmod 600 .env
@@ -73,4 +100,3 @@ docker compose -f compose.production.yaml exec backend python manage.py seed_dem
 
 # Runbook completo: deploy/PRODUCTION_RUNBOOK.md
 ```
-

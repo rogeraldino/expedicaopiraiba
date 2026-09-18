@@ -1,6 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
-import { CalendarDays, Clock, MapPin, ShieldCheck, Users } from "lucide-react";
+import { CalendarDays, Clock, MapPin, Users } from "lucide-react";
 
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";

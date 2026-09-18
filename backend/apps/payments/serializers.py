@@ -16,6 +16,7 @@ def payment_payload(payment):
         "pix_copy_paste": payment.pix_copy_paste,
         "expires_at": payment.expires_at,
         "reservation_status": payment.reservation.status,
+        "purpose": payment.purpose,
     }
 
 

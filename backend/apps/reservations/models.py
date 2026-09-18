@@ -31,6 +31,7 @@ class Reservation(models.Model):
     payment_plan = models.CharField(max_length=12, choices=PaymentPlan.choices, default=PaymentPlan.DEPOSIT)
     balance_due_at = models.DateField(null=True, blank=True)
     beverage_preferences = models.JSONField(default=dict, blank=True)
+    legacy_preferences_review_required = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -71,9 +72,49 @@ class ReservationParticipant(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    product_choices_confirmed_at = models.DateTimeField(null=True, blank=True)
+    dietary_confirmed_at = models.DateTimeField(null=True, blank=True)
+    dietary_details = models.TextField(blank=True)
 
     def __str__(self):
         return self.full_name
+
+
+class DietaryRestriction(models.Model):
+    code = models.SlugField(max_length=50, unique=True)
+    name = models.CharField(max_length=100)
+    requires_details = models.BooleanField(default=False)
+    is_none = models.BooleanField(default=False)
+    active = models.BooleanField(default=True)
+
+
+class ParticipantProductChoice(models.Model):
+    participant = models.ForeignKey(ReservationParticipant, on_delete=models.CASCADE, related_name="product_choices")
+    expedition_product = models.ForeignKey("expeditions.ExpeditionProduct", on_delete=models.PROTECT, related_name="participant_choices")
+    selected = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("participant", "expedition_product"), name="unique_participant_product_choice")]
+
+
+class ParticipantDietaryRestriction(models.Model):
+    participant = models.ForeignKey(ReservationParticipant, on_delete=models.CASCADE, related_name="dietary_restrictions")
+    restriction = models.ForeignKey(DietaryRestriction, on_delete=models.PROTECT, related_name="participant_links")
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("participant", "restriction"), name="unique_participant_dietary_restriction")]
+
+
+class ParticipantChecklistCompletion(models.Model):
+    participant = models.ForeignKey(ReservationParticipant, on_delete=models.CASCADE, related_name="checklist_completions")
+    item = models.ForeignKey("expeditions.ChecklistItem", on_delete=models.PROTECT, related_name="participant_completions")
+    completed = models.BooleanField(default=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=("participant", "item"), name="unique_participant_checklist_completion")]
 
 
 class ReservationEvent(models.Model):

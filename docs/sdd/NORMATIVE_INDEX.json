@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "updated_at": "2026-09-18",
+  "entries": [
+    {
+      "id": "GOV-DEVELOPMENT",
+      "concept": "Governança, risco, gates, evidência e autoridade de desenvolvimento",
+      "owner": "docs/sdd/CONSTITUTION.md",
+      "status": "normative",
+      "version": "0.2-pilot",
+      "scope": "todo o repositório",
+      "supersedes": [],
+      "superseded_by": []
+    },
+    {
+      "id": "PRODUCT-MVP",
+      "concept": "Visão, personas, fluxo e escopo funcional do MVP",
+      "owner": "documentos/sdd/base_conhecimento_mvp_expedicao_piraiba.md",
+      "status": "normative",
+      "version": "1",
+      "scope": "MVP Expedição Piraíba, exceto trechos explicitamente supersedidos",
+      "supersedes": [],
+      "superseded_by": ["E01-P0-CLOSURE"]
+    },
+    {
+      "id": "DELIVERY-PLAN",
+      "concept": "Plano incremental de conclusão do MVP",
+      "owner": "documentos/sdd/SDD_parte_2.md",
+      "status": "normative",
+      "version": "1",
+      "scope": "fases e requisitos não supersedidos",
+      "supersedes": [],
+      "superseded_by": ["E01-P0-CLOSURE"]
+    },
+    {
+      "id": "E01-P0-CLOSURE",
+      "concept": "Fechamento do P0 e seleção de bebidas com alocação operacional padrão",
+      "owner": "specs/active/E01_P0-Closure/spec.md",
+      "status": "normative",
+      "version": "0.2",
+      "scope": "preferências, Minha Expedição, saldo, checklist, dashboard e consolidação",
+      "supersedes": ["PRODUCT-MVP:quantidades de bebida informadas pelo participante", "DELIVERY-PLAN:Fase 3 e fases P0 relacionadas"],
+      "superseded_by": [],
+      "lifecycle": "READY",
+      "ready_at": "2026-09-18",
+      "ready_by": "Rodrigo",
+      "ready_evidence": "specs/active/E01_P0-Closure/grill.md; specs/active/E01_P0-Closure/counsel.md",
+      "acceptance_status": "PENDING"
+    }
+  ]
+}

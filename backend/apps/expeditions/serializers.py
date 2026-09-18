@@ -19,6 +19,7 @@ class ExpeditionSerializer(serializers.ModelSerializer):
             "slug",
             "destination",
             "departure_location",
+            "meeting_instructions",
             "starts_at",
             "ends_at",
             "duration_days",

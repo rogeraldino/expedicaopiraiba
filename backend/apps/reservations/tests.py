@@ -1,12 +1,14 @@
 from datetime import date, timedelta
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
+from django.db import connection
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework.test import APIClient
 from apps.customers.models import VerificationChallenge
 from apps.customers.services import create_customer_session_token
-from apps.expeditions.models import Expedition
-from .models import Reservation, ReservationEvent
+from apps.expeditions.models import ChecklistItem, Expedition, ExpeditionProduct, Product
+from apps.customers.models import Customer
+from .models import DietaryRestriction, ParticipantProductChoice, Reservation, ReservationEvent, ReservationParticipant
 from .services import expire_holds, transition_reservation
 
 @override_settings(DEBUG=True)
@@ -85,10 +87,17 @@ class CheckoutApiTests(TestCase):
         detail = self.client.get(f"/api/me/reservations/{reservation.id}/", **auth)
         self.assertEqual(detail.status_code, 200)
         self.assertEqual(detail.data["onboarding"]["completed"], 0)
+        self.assertIn("notices", detail.data)
+        self.assertIn("whatsapp_url", detail.data)
         updated = self.client.patch(f"/api/me/reservations/{reservation.id}/participants/{participant.id}/", {"phone": "(62) 99999-9999", "emergency_contact_name": "Maria", "emergency_contact_phone": "(62) 98888-7777"}, format="json", **auth)
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.data["participants"][0]["onboarding_status"], "COMPLETED")
         self.assertTrue(reservation.events.filter(event_type="PARTICIPANT_UPDATED").exists())
+        from apps.customers.models import Customer
+        other = Customer.objects.create(cpf="11144477735", full_name="Outro", email="other@example.com", phone="62988887777")
+        other_auth = {"HTTP_AUTHORIZATION": f"Bearer {create_customer_session_token(other)}"}
+        self.assertEqual(self.client.get(f"/api/me/reservations/{reservation.id}/", **other_auth).status_code, 404)
+        self.assertEqual(self.client.patch(f"/api/me/reservations/{reservation.id}/participants/{participant.id}/", {"phone": "62999999999"}, format="json", **other_auth).status_code, 404)
 
     def test_customer_cannot_access_reservation_without_valid_session(self):
         verification_token = self.identify_and_verify()
@@ -109,9 +118,61 @@ class CheckoutApiTests(TestCase):
             "notes": "Prefiro gelo filtrado no barco",
         }
         res = self.client.patch(f"/api/me/reservations/{reservation.id}/preferences/", pref_payload, format="json", **auth)
-        self.assertEqual(res.status_code, 200)
-        self.assertTrue(res.data["onboarding"]["steps"]["preferences"])
-        self.assertTrue(res.data["onboarding"]["steps"]["dietary_restrictions"])
-        self.assertEqual(res.data["preferences"]["beverages"]["heineken"], 24)
-        self.assertTrue(reservation.events.filter(event_type="PREFERENCES_UPDATED").exists())
+        self.assertEqual(res.status_code, 410)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.beverage_preferences, {})
+        self.assertFalse(reservation.events.filter(event_type="PREFERENCES_UPDATED").exists())
 
+
+class P0ParticipantPreferencesTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.expedition = Expedition.objects.create(name="P0", destination="GO", starts_at=date(2027, 5, 1), ends_at=date(2027, 5, 4), capacity=8, price_per_person_cents=100000, deposit_cents=30000, status=Expedition.Status.PUBLISHED)
+        product = Product.objects.create(name="Água teste", unit=Product.Unit.BOTTLE, package_size=6)
+        self.offer = ExpeditionProduct.objects.create(expedition=self.expedition, product=product, standard_quantity_per_participant=2)
+        self.required = ChecklistItem.objects.create(expedition=self.expedition, title="Documento", required=True)
+        self.none = DietaryRestriction.objects.get(code="none")
+        self.customer = Customer.objects.create(cpf="52998224725", full_name="João", email="p0@example.com", phone="62999999999")
+        self.reservation = Reservation.objects.create(customer=self.customer, expedition=self.expedition, participant_count=2, status=Reservation.Status.CONFIRMED, unit_price_cents=100000, total_price_cents=200000, deposit_cents=30000)
+        self.first = ReservationParticipant.objects.create(reservation=self.reservation, full_name="Um")
+        self.second = ReservationParticipant.objects.create(reservation=self.reservation, full_name="Dois")
+        token = create_customer_session_token(self.customer)
+        self.auth = {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+    def test_choices_are_isolated_replaceable_and_checklist_individual(self):
+        url = f"/api/me/reservations/{self.reservation.id}/participants/{self.first.id}/preferences/"
+        result = self.client.put(url, {"selected_offer_ids": [str(self.offer.id)], "no_beverages": False, "dietary_restriction_codes": ["none"], "dietary_details": ""}, format="json", **self.auth)
+        self.assertEqual(result.status_code, 200)
+        self.assertTrue(ParticipantProductChoice.objects.filter(participant=self.first, selected=True).exists())
+        self.assertFalse(ParticipantProductChoice.objects.filter(participant=self.second).exists())
+        checklist = self.client.put(f"/api/me/reservations/{self.reservation.id}/participants/{self.first.id}/checklist/", {"completed_item_ids": [str(self.required.id)]}, format="json", **self.auth)
+        self.assertTrue(checklist.data["checklist_complete"])
+        detail = self.client.get(f"/api/me/reservations/{self.reservation.id}/", **self.auth)
+        self.assertFalse(detail.data["onboarding"]["steps"]["checklist"])
+
+    def test_rejects_offer_from_another_expedition_without_partial_write(self):
+        other = Expedition.objects.create(name="Outra", destination="GO", starts_at=date(2027, 6, 1), ends_at=date(2027, 6, 2), capacity=2, price_per_person_cents=1, deposit_cents=1)
+        foreign = ExpeditionProduct.objects.create(expedition=other, product=self.offer.product, standard_quantity_per_participant=1)
+        result = self.client.put(f"/api/me/reservations/{self.reservation.id}/participants/{self.first.id}/preferences/", {"selected_offer_ids": [str(foreign.id)], "dietary_restriction_codes": ["none"]}, format="json", **self.auth)
+        self.assertEqual(result.status_code, 400)
+        self.assertFalse(ParticipantProductChoice.objects.filter(participant=self.first).exists())
+
+    def test_identical_retries_do_not_change_timestamp_or_create_event(self):
+        url = f"/api/me/reservations/{self.reservation.id}/participants/{self.first.id}/preferences/"
+        payload = {"selected_offer_ids": [str(self.offer.id)], "no_beverages": False, "dietary_restriction_codes": ["none"], "dietary_details": ""}
+        self.client.put(url, payload, format="json", **self.auth)
+        self.first.refresh_from_db(); timestamp = self.first.product_choices_confirmed_at
+        self.client.put(url, payload, format="json", **self.auth)
+        self.first.refresh_from_db()
+        self.assertEqual(self.first.product_choices_confirmed_at, timestamp)
+        self.assertEqual(self.reservation.events.filter(event_type="PREFERENCES_UPDATED").count(), 1)
+
+    def test_partial_below_deposit_expires_and_does_not_hold_capacity(self):
+        self.reservation.status = Reservation.Status.PARTIALLY_PAID
+        self.reservation.held_until = timezone.now() - timedelta(seconds=1)
+        self.reservation.save(update_fields=("status", "held_until"))
+        from apps.payments.models import Payment
+        Payment.objects.create(reservation=self.reservation, external_id="partial-test", amount_cents=100, status=Payment.Status.PAID)
+        self.assertEqual(expire_holds(), 1)
+        self.reservation.refresh_from_db()
+        self.assertEqual(self.reservation.status, Reservation.Status.EXPIRED)

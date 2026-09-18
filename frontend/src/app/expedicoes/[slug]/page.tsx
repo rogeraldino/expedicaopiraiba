@@ -8,7 +8,6 @@ import {
   Headphones,
   House,
   LockKeyhole,
-  MapPin,
   Radio,
   ShieldCheck,
   Snowflake,

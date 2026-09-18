@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q, Sum
+from django.db.models import F, Q, Sum
 from django.utils import timezone
 
 from apps.expeditions.models import Expedition
@@ -13,7 +13,7 @@ from .models import Reservation, ReservationEvent, ReservationParticipant
 ALLOWED_TRANSITIONS = {
     Reservation.Status.HELD: {Reservation.Status.AWAITING_PAYMENT, Reservation.Status.EXPIRED, Reservation.Status.CANCELLED},
     Reservation.Status.AWAITING_PAYMENT: {Reservation.Status.PARTIALLY_PAID, Reservation.Status.CONFIRMED, Reservation.Status.PAID, Reservation.Status.EXPIRED, Reservation.Status.CANCELLED},
-    Reservation.Status.PARTIALLY_PAID: {Reservation.Status.CONFIRMED, Reservation.Status.PAID, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
+    Reservation.Status.PARTIALLY_PAID: {Reservation.Status.CONFIRMED, Reservation.Status.PAID, Reservation.Status.EXPIRED, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
     Reservation.Status.CONFIRMED: {Reservation.Status.PAID, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
     Reservation.Status.PAID: {Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
     Reservation.Status.EXPIRED: set(),
@@ -51,9 +51,11 @@ def transition_reservation(*, reservation_id, target_status, event_type="STATUS_
 @transaction.atomic
 def expire_holds(*, now=None):
     cutoff = now or timezone.now()
-    reservations = list(Reservation.objects.select_for_update().filter(status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT), held_until__lte=cutoff))
+    reservations = list(Reservation.objects.select_for_update().filter(status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT, Reservation.Status.PARTIALLY_PAID), held_until__lte=cutoff).prefetch_related("payments"))
     expired = 0
     for reservation in reservations:
+        if reservation.status == Reservation.Status.PARTIALLY_PAID and reservation.paid_amount_cents >= reservation.deposit_cents:
+            continue
         _, changed = transition_locked_reservation(reservation=reservation, target_status=Reservation.Status.EXPIRED, event_type="RESERVATION_EXPIRED", reason="Prazo para pagamento encerrado.", payload={"expired_at": cutoff.isoformat()})
         expired += int(changed)
     return expired
@@ -68,9 +70,9 @@ def create_hold(*, customer, expedition_slug, participant_names, payment_plan):
     names = [name.strip() for name in participant_names if name and name.strip()]
     if not 1 <= len(names) <= 12:
         raise ValidationError("Informe entre 1 e 12 participantes.")
-    active = Q(status__in=(Reservation.Status.PARTIALLY_PAID, Reservation.Status.CONFIRMED, Reservation.Status.PAID))
+    active = Q(status__in=(Reservation.Status.CONFIRMED, Reservation.Status.PAID)) | Q(status=Reservation.Status.PARTIALLY_PAID, payments__status="PAID", payments__amount_cents__gte=F("deposit_cents"))
     held = Q(status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT), held_until__gt=timezone.now())
-    occupied = Reservation.objects.filter(Q(expedition=expedition) & (active | held)).aggregate(total=Sum("participant_count"))["total"] or 0
+    occupied = Reservation.objects.filter(Q(expedition=expedition) & (active | held)).distinct().aggregate(total=Sum("participant_count"))["total"] or 0
     if occupied + len(names) > expedition.capacity:
         raise ValidationError("Não há vagas suficientes para esta reserva.")
     total = expedition.price_per_person_cents * len(names)

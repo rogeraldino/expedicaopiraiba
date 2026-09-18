@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from apps.expeditions.models import Expedition
 from apps.reservations.models import Reservation
+from apps.customers.services import create_customer_session_token
 
 from .models import Payment, PaymentTransaction
 
@@ -60,3 +61,23 @@ class PaymentApiTests(TestCase):
         hold, payment = self.create_hold_and_payment("FULL")
         self.client.post(f"/api/payments/{payment.data['payment_id']}/simulate-confirmation/", {"verification_token": self.token}, format="json")
         self.assertEqual(Reservation.objects.get(id=hold.data["reservation_id"]).status, Reservation.Status.PAID)
+
+    def test_balance_payment_is_exact_reused_and_completes_reservation(self):
+        hold, created = self.create_hold_and_payment()
+        self.client.post(f"/api/payments/{created.data['payment_id']}/simulate-confirmation/", {"verification_token": self.token}, format="json")
+        reservation = Reservation.objects.get(id=hold.data["reservation_id"])
+        auth = {"HTTP_AUTHORIZATION": f"Bearer {create_customer_session_token(reservation.customer)}"}
+        url = f"/api/me/reservations/{reservation.id}/balance-payment/"
+        first = self.client.post(url, format="json", **auth)
+        second = self.client.post(url, format="json", **auth)
+        self.assertEqual(first.data["payment_id"], second.data["payment_id"])
+        self.assertEqual(first.data["amount_cents"], reservation.remaining_balance_cents)
+        confirmed = self.client.post(url + "confirm/", format="json", **auth)
+        self.assertEqual(confirmed.data["reservation_status"], Reservation.Status.PAID)
+
+    def test_balance_payment_of_another_customer_is_hidden_as_404(self):
+        hold, _ = self.create_hold_and_payment()
+        from apps.customers.models import Customer
+        other = Customer.objects.create(cpf="11144477735", full_name="Outro", email="other@example.com", phone="62988887777")
+        auth = {"HTTP_AUTHORIZATION": f"Bearer {create_customer_session_token(other)}"}
+        self.assertEqual(self.client.post(f"/api/me/reservations/{hold.data['reservation_id']}/balance-payment/", format="json", **auth).status_code, 404)
