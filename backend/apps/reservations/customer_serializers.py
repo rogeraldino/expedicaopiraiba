@@ -12,7 +12,7 @@ from .services import record_reservation_event
 class CustomerParticipantSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReservationParticipant
-        fields = ("id", "full_name", "cpf", "birth_date", "phone", "emergency_contact_name", "emergency_contact_phone", "operational_notes", "onboarding_status", "completed_at")
+        fields = ("id", "full_name", "cpf", "birth_date", "phone", "emergency_contact_name", "emergency_contact_phone", "vest_size", "health_notes", "operational_notes", "onboarding_status", "completed_at")
         read_only_fields = ("id", "onboarding_status", "completed_at")
 
     def validate_cpf(self, value):

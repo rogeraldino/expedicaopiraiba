@@ -176,3 +176,201 @@ class P0ParticipantPreferencesTests(TestCase):
         self.assertEqual(expire_holds(), 1)
         self.reservation.refresh_from_db()
         self.assertEqual(self.reservation.status, Reservation.Status.EXPIRED)
+
+
+@override_settings(DEBUG=True)
+class CustomerPortalAndGuestTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.customer = Customer.objects.create(
+            cpf="52998224725",
+            full_name="Pescador Titular",
+            email="titular@example.com",
+            phone="(62) 99999-8888",
+        )
+        self.expedition = Expedition.objects.create(
+            name="Expedição Gigantes do Araguaia",
+            destination="São Félix do Araguaia",
+            starts_at=date(2026, 10, 1),
+            ends_at=date(2026, 10, 5),
+            capacity=4,
+            price_per_person_cents=560000,
+            deposit_cents=112000,
+            status=Expedition.Status.PUBLISHED,
+        )
+        self.reservation = Reservation.objects.create(
+            customer=self.customer,
+            expedition=self.expedition,
+            participant_count=2,
+            unit_price_cents=560000,
+            total_price_cents=1120000,
+            deposit_cents=224000,
+            status=Reservation.Status.CONFIRMED,
+        )
+        self.pax1 = ReservationParticipant.objects.create(
+            reservation=self.reservation,
+            full_name="Pescador Titular",
+            phone="62999998888",
+        )
+        self.pax2 = ReservationParticipant.objects.create(
+            reservation=self.reservation,
+            full_name="Parceiro Convidado",
+            phone="",
+        )
+        self.product = Product.objects.create(name="Heineken 350ml", unit="Lata")
+        self.offer = ExpeditionProduct.objects.create(
+            expedition=self.expedition,
+            product=self.product,
+            standard_quantity_per_participant=24,
+            active=True,
+        )
+        self.checklist_item = ChecklistItem.objects.create(
+            expedition=self.expedition,
+            title="Licença de Pesca",
+            required=True,
+            active=True,
+        )
+        DietaryRestriction.objects.get_or_create(code="none", defaults={"name": "Sem restrições", "is_none": True, "active": True})
+
+    def test_customer_auth_lookup(self):
+        # Valid CPF and Phone
+        res = self.client.post(
+            "/api/me/auth/lookup/",
+            {"cpf": "529.982.247-25", "phone": "62 99999-8888"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("token", res.data)
+        self.assertEqual(res.data["customer"]["cpf"] if "cpf" in res.data["customer"] else res.data["customer"]["full_name"], "Pescador Titular")
+        self.assertEqual(res.data["reservations_count"], 1)
+
+        # Invalid CPF length
+        res_inv_cpf = self.client.post(
+            "/api/me/auth/lookup/",
+            {"cpf": "12345", "phone": "62999998888"},
+            format="json",
+        )
+        self.assertEqual(res_inv_cpf.status_code, 400)
+
+        # Mismatched phone
+        res_wrong_phone = self.client.post(
+            "/api/me/auth/lookup/",
+            {"cpf": "52998224725", "phone": "11911112222"},
+            format="json",
+        )
+        self.assertEqual(res_wrong_phone.status_code, 400)
+
+        # Non-existent CPF
+        res_non_existent = self.client.post(
+            "/api/me/auth/lookup/",
+            {"cpf": "00000000000", "phone": "62999998888"},
+            format="json",
+        )
+        self.assertEqual(res_non_existent.status_code, 400)
+
+    def test_customer_reservations_list_endpoint(self):
+        token = create_customer_session_token(self.customer)
+        # Authenticated
+        res = self.client.get(
+            "/api/me/reservations/",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 1)
+        item = res.data[0]
+        self.assertEqual(item["id"], str(self.reservation.id))
+        self.assertEqual(item["expedition"]["name"], self.expedition.name)
+        self.assertEqual(item["participant_count"], 2)
+        self.assertIn("/expedicoes/", item["journey_url"])
+
+        # Unauthenticated
+        res_unauth = self.client.get("/api/me/reservations/")
+        self.assertEqual(res_unauth.status_code, 401)
+
+    def test_participant_update_with_vest_and_health_notes(self):
+        token = create_customer_session_token(self.customer)
+        url = f"/api/me/reservations/{self.reservation.id}/participants/{self.pax1.id}/"
+        payload = {
+            "cpf": "52998224725",
+            "birth_date": "1985-05-15",
+            "phone": "62999998888",
+            "emergency_contact_name": "Esposa Titular",
+            "emergency_contact_phone": "62988887777",
+            "vest_size": "GG",
+            "health_notes": "Hipertenso controlado, alergia a frutos do mar",
+        }
+        res = self.client.patch(url, payload, format="json", HTTP_AUTHORIZATION=f"Bearer {token}")
+        self.assertEqual(res.status_code, 200)
+        pax_data = [p for p in res.data["participants"] if p["id"] == str(self.pax1.id)][0]
+        self.assertEqual(pax_data["vest_size"], "GG")
+        self.assertEqual(pax_data["health_notes"], "Hipertenso controlado, alergia a frutos do mar")
+        self.assertEqual(pax_data["onboarding_status"], "COMPLETED")
+        self.assertIn("guest_token", pax_data)
+
+    def test_guest_endpoints_isolation_and_no_financial_leak(self):
+        # Obtain guest token from participant
+        from apps.customers.services import create_guest_participant_token
+        guest_token = create_guest_participant_token(self.pax2)
+
+        # 1. Guest reads expedition and participant details (WITHOUT ANY FINANCIAL DATA)
+        res = self.client.get(f"/api/me/guest/{guest_token}/")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["participant"]["full_name"], "Parceiro Convidado")
+        self.assertEqual(res.data["expedition"]["name"], self.expedition.name)
+        # CRITICAL ASSERTIONS: ZERO FINANCIAL LEAK
+        self.assertNotIn("total_price_cents", res.data)
+        self.assertNotIn("paid_amount_cents", res.data)
+        self.assertNotIn("remaining_balance_cents", res.data)
+        self.assertNotIn("deposit_cents", res.data)
+        self.assertNotIn("payment_plan", res.data)
+
+        # 2. Tampered / invalid guest token rejected
+        res_tampered = self.client.get("/api/me/guest/invalid-or-tampered-token/")
+        self.assertEqual(res_tampered.status_code, 401)
+
+        # 3. Guest fills their personal onboarding details
+        patch_res = self.client.patch(
+            f"/api/me/guest/{guest_token}/",
+            {
+                "full_name": "Parceiro Convidado Silva",
+                "cpf": "52998224725",
+                "birth_date": "1990-11-20",
+                "phone": "62977776666",
+                "emergency_contact_name": "Pai do Convidado",
+                "emergency_contact_phone": "62966665555",
+                "vest_size": "XG",
+                "health_notes": "Sem histórico médico relevante",
+            },
+            format="json",
+        )
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.data["participant"]["full_name"], "Parceiro Convidado Silva")
+        self.assertEqual(patch_res.data["participant"]["vest_size"], "XG")
+        self.assertEqual(patch_res.data["participant"]["onboarding_status"], "COMPLETED")
+
+        # 4. Guest sets beverage preferences
+        pref_res = self.client.put(
+            f"/api/me/guest/{guest_token}/preferences/",
+            {
+                "selected_offer_ids": [str(self.offer.id)],
+                "no_beverages": False,
+                "dietary_restriction_codes": ["none"],
+                "dietary_details": "",
+            },
+            format="json",
+        )
+        self.assertEqual(pref_res.status_code, 200)
+        self.assertTrue(pref_res.data["participant"]["preferences_confirmed"])
+
+        # 5. Guest sets checklist completion
+        chk_res = self.client.put(
+            f"/api/me/guest/{guest_token}/checklist/",
+            {"completed_item_ids": [str(self.checklist_item.id)]},
+            format="json",
+        )
+        self.assertEqual(chk_res.status_code, 200)
+        self.assertTrue(chk_res.data["participant"]["checklist_complete"])
+
+        # 6. Guest token CANNOT be used to access buyer's financial endpoints
+        forbidden_res = self.client.get("/api/me/reservations/", HTTP_AUTHORIZATION=f"Bearer {guest_token}")
+        self.assertEqual(forbidden_res.status_code, 401)

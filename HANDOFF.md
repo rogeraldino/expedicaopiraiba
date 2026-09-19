@@ -4,8 +4,9 @@
 > - Épica E01 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E01_P0-Closure/`);
 > - Épica E02 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E02_Customizacao-Expedicoes/`);
 > - Épica E03 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E03_Venda-Direta-Manifesto/`);
-> - Próximo Trabalho Selecionável no Backlog: Épica E04 (Portal do Cliente, Reacesso e Ficha de Embarque Digital).<br/>
-> **Última Atualização:** 19/09/2026 (Homologação e Arquivamento da Épica E03)
+> - Épica E04 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E04_Portal-Cliente-Ficha/`);
+> - Próximo Trabalho Selecionável no Backlog: Épica E05 (Automação de Saldos, Comunicação Operacional & Relatórios de Margem).<br/>
+> **Última Atualização:** 19/09/2026 (Homologação e Arquivamento da Épica E04)
 
 ---
 
@@ -70,20 +71,26 @@
    - **Operações Financeiras Auditadas:** Registro de pagamento manual simulado com justificativa obrigatória e cancelamento auditado.
    - **Lista de Compras Consolidada:** Cálculo atômico baseado em snapshot transacional (`participantes_que_escolheram × quantidade_padrão`), conversão em caixas/fardos (`package_size`) com sobra, breakdown nominal por produto e exportação em CSV (com neutralização contra injeção de fórmulas) e texto puro.
 
+6. **Portal do Cliente, Reacesso & Link Seguro de Convidado (`/minha-reserva` e `/convidado/[token]`):**
+   - **Login Passwordless por CPF e Telefone (`POST /api/me/auth/lookup/`):** Modal de acesso no cabeçalho e página dedicada para recuperar o acesso às reservas com persistência resiliente em `localStorage` (30 dias).
+   - **Listagem Centralizada de Expedições (`GET /api/me/reservations/`):** Visão consolidada de todas as viagens do cliente com status de onboarding e saldo devedor.
+   - **Formulário Completo de Ficha de Embarque:** Coleta na web de dados civis, contatos de emergência, tamanho de colete salva-vidas / camiseta UV (`P`, `M`, `G`, `GG`, `XG`, `EXG`) e observações médicas. Transição automática de `onboarding_status` para `COMPLETED`.
+   - **Link de Convidado / Parceiro de Barco:** Geração de URL com token assinado (`/convidado/[token]`) permitindo à dupla preencher sua própria ficha, bebidas e checklist sob **isolamento financeiro rigoroso** (sem exposição de valores ou botões de cobrança PIX).
+
 ---
 
-### 2. Validação Integrada e Confiabilidade (Checkpoints E03)
+### 2. Validação Integrada e Confiabilidade (Checkpoints E04)
 
 Toda a suíte e os gates da Constituição estão 100% validados:
 
 ```bash
-# 1. Testes do Backend com PostgreSQL real (34 testes com locks de concorrência)
+# 1. Testes do Backend com PostgreSQL real (38 testes com locks de concorrência e isolamento de convidados)
 docker compose -f compose.production.yaml exec -T backend python manage.py test
-# Resultado: Ran 34 tests in 32.460s — OK (0 falhas, 0 erros)
+# Resultado: Ran 38 tests in 34.835s — OK (0 falhas, 0 erros)
 
 # 2. Verificação de integridade de migrações Django
 docker compose -f compose.production.yaml exec -T backend python manage.py makemigrations --check
-# Resultado: No changes detected
+# Resultado: No changes detected (migração 0009 aplicada)
 
 # 3. Build de produção do frontend (Next.js Turbopack + TypeScript typecheck)
 docker compose -f compose.production.yaml build frontend
@@ -91,7 +98,7 @@ docker compose -f compose.production.yaml build frontend
 
 # 4. Integridade documental e owners normativos
 python3 scripts/check_docs.py
-# Resultado: documentação válida: 6 owners normativos
+# Resultado: documentação válida: 7 owners normativos
 
 # 5. Higiene do Git
 git diff --check

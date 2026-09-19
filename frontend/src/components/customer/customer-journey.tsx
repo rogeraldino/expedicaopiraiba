@@ -8,14 +8,19 @@ import {
   Check,
   ClipboardCheck,
   Clock3,
+  Copy,
   ExternalLink,
   Fish,
   GlassWater,
+  HeartPulse,
+  LifeBuoy,
   MapPin,
   MessageCircle,
   Plus,
+  Share2,
   ShieldCheck,
   Sparkles,
+  UserCheck,
   WalletCards,
 } from "lucide-react";
 
@@ -25,6 +30,7 @@ import {
   GearCategory,
   GearItem,
 } from "./gear-catalog";
+import { getCustomerToken, setCustomerToken, formatCpf, formatPhone } from "@/lib/customer-auth";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 
@@ -51,9 +57,12 @@ type Person = {
   id: string;
   full_name: string;
   cpf?: string;
+  birth_date?: string;
   phone?: string;
   emergency_contact_name?: string;
   emergency_contact_phone?: string;
+  vest_size?: string;
+  health_notes?: string;
   operational_notes?: string;
   onboarding_status?: string;
   selected_offer_ids?: string[];
@@ -64,6 +73,7 @@ type Person = {
   dietary_confirmed?: boolean;
   completed_item_ids?: string[];
   checklist_complete?: boolean;
+  guest_token?: string;
 };
 
 type EventItem = {
@@ -125,7 +135,7 @@ const date = (v: string) =>
   });
 
 const headers = () => ({
-  Authorization: `Bearer ${sessionStorage.getItem("customer-session-token") ?? ""}`,
+  Authorization: `Bearer ${getCustomerToken()}`,
 });
 
 async function result(r: Response) {
@@ -156,14 +166,22 @@ export function CustomerJourney({
   const [busy, setBusy] = useState(true);
   const [failure, setFailure] = useState("");
   const [personId, setPersonId] = useState("");
-  const [activeTab, setActiveTab] = useState<"BEVERAGES" | "GEAR" | "CHECKLIST" | "LOGISTICS">("BEVERAGES");
+  const [activeTab, setActiveTab] = useState<"FICHA" | "BEVERAGES" | "GEAR" | "CHECKLIST" | "LOGISTICS">("FICHA");
 
   const load = useCallback(async () => {
     setBusy(true);
     setFailure("");
     try {
-      if (!sessionStorage.getItem("customer-session-token")) {
-        throw { detail: "Sua sessão de acesso não foi encontrada. Por favor, identifique-se novamente." };
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const authParam = params.get("auth");
+        if (authParam) {
+          setCustomerToken(authParam);
+        }
+      }
+      const token = getCustomerToken();
+      if (!token) {
+        throw { detail: "Sua sessão de acesso não foi encontrada. Clique em 'Minha Reserva' no cabeçalho ou faça login com seu CPF." };
       }
       const d = (await result(
         await fetch(`${API}/me/reservations/${reservationId}/`, {
@@ -336,8 +354,9 @@ export function CustomerJourney({
         {/* SECTION NAVIGATION PILLS */}
         <div className="mt-6 flex gap-2 border-b border-ink-900/10 pb-3 overflow-x-auto">
           {[
+            { id: "FICHA", label: "Ficha de Embarque", icon: UserCheck },
             { id: "BEVERAGES", label: "Bebidas All Inclusive & Alimentação", icon: GlassWater },
-            { id: "GEAR", label: "Tralha de Pesca (Aluguel / Compra)", icon: Fish },
+            { id: "GEAR", label: "Tralha de Pesca (Recomendações)", icon: Fish },
             { id: "CHECKLIST", label: "Checklist & Licença de Pesca", icon: ClipboardCheck },
             { id: "LOGISTICS", label: "Encontro & Embarque", icon: MapPin },
           ].map((tab) => {
@@ -362,6 +381,14 @@ export function CustomerJourney({
 
         {/* TAB CONTENTS */}
         <div className="mt-6">
+          {activeTab === "FICHA" && person && (
+            <ParticipantFichaSection
+              reservationId={data.id}
+              person={person}
+              saved={setData}
+            />
+          )}
+
           {activeTab === "BEVERAGES" && person && (
             <Preferences
               id={data.id}
@@ -427,6 +454,300 @@ export function CustomerJourney({
         </div>
       )}
     </section>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// FICHA DE EMBARQUE & LINK DE CONVIDADO
+// -----------------------------------------------------------------------------
+function ParticipantFichaSection({
+  reservationId,
+  person,
+  saved,
+}: {
+  reservationId: string;
+  person: Person;
+  saved: (d: Data) => void;
+}) {
+  const [fullName, setFullName] = useState(person.full_name || "");
+  const [cpf, setCpf] = useState(person.cpf ? formatCpf(person.cpf) : "");
+  const [birthDate, setBirthDate] = useState(person.birth_date || "");
+  const [phone, setPhone] = useState(person.phone ? formatPhone(person.phone) : "");
+  const [emergencyName, setEmergencyName] = useState(person.emergency_contact_name || "");
+  const [emergencyPhone, setEmergencyPhone] = useState(
+    person.emergency_contact_phone ? formatPhone(person.emergency_contact_phone) : ""
+  );
+  const [vestSize, setVestSize] = useState(person.vest_size || "G");
+  const [healthNotes, setHealthNotes] = useState(person.health_notes || "");
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setFullName(person.full_name || "");
+    setCpf(person.cpf ? formatCpf(person.cpf) : "");
+    setBirthDate(person.birth_date || "");
+    setPhone(person.phone ? formatPhone(person.phone) : "");
+    setEmergencyName(person.emergency_contact_name || "");
+    setEmergencyPhone(person.emergency_contact_phone ? formatPhone(person.emergency_contact_phone) : "");
+    setVestSize(person.vest_size || "G");
+    setHealthNotes(person.health_notes || "");
+    setMsg("");
+    setCopied(false);
+  }, [person]);
+
+  async function handleSave(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await fetch(`${API}/me/reservations/${reservationId}/participants/${person.id}/`, {
+        method: "PATCH",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: fullName,
+          cpf: cpf.replace(/\D/g, ""),
+          birth_date: birthDate || null,
+          phone: phone,
+          emergency_contact_name: emergencyName,
+          emergency_contact_phone: emergencyPhone,
+          vest_size: vestSize,
+          health_notes: healthNotes,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.detail || "Erro ao salvar dados.");
+      saved(d);
+      setMsg("Ficha de embarque salva com sucesso!");
+    } catch (err: unknown) {
+      setMsg(err instanceof Error ? err.message : "Erro ao salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const guestUrl =
+    typeof window !== "undefined" && person.guest_token
+      ? `${window.location.origin}/convidado/${person.guest_token}`
+      : "";
+
+  function copyGuestLink() {
+    if (!guestUrl) return;
+    navigator.clipboard.writeText(guestUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card
+        title="Ficha Oficial de Embarque"
+        subtitle="Exigência da Capitania dos Portos e Pousada Parceira. Preencha todos os dados obrigatórios para validar seu embarque."
+        icon={UserCheck}
+      >
+        <div className="flex items-center justify-between gap-4 mb-6 pb-4 border-b border-ink-100">
+          <div>
+            <span className="text-xs font-bold text-ink-500 uppercase block">Passageiro</span>
+            <strong className="text-base text-ink-900">{person.full_name || "Sem nome cadastrado"}</strong>
+          </div>
+          <span
+            className={`px-3 py-1 text-xs font-bold rounded-full ${
+              person.onboarding_status === "COMPLETED"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : "bg-amber-50 text-amber-700 border border-amber-200"
+            }`}
+          >
+            {person.onboarding_status === "COMPLETED" ? "Cadastro Completo" : "Pendente"}
+          </span>
+        </div>
+
+        {msg && (
+          <div
+            className={`mb-6 p-4 rounded-xl text-xs font-bold ${
+              msg.includes("sucesso")
+                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                : "bg-red-50 text-red-800 border border-red-200"
+            }`}
+          >
+            {msg}
+          </div>
+        )}
+
+        <form onSubmit={handleSave} className="space-y-6">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                Nome Completo *
+              </label>
+              <input
+                type="text"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                CPF *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="000.000.000-00"
+                value={cpf}
+                onChange={(e) => setCpf(formatCpf(e.target.value))}
+                className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                Data de Nascimento
+              </label>
+              <input
+                type="date"
+                value={birthDate}
+                onChange={(e) => setBirthDate(e.target.value)}
+                className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                WhatsApp / Telefone Próprio *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="(00) 00000-0000"
+                value={phone}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
+                className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="border-t border-ink-100 pt-6">
+            <h3 className="text-sm font-bold text-ink-900 mb-4 flex items-center gap-2">
+              <LifeBuoy className="size-4 text-brand-600" />
+              <span>Equipamentos e Contatos de Emergência</span>
+            </h3>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                  Colete Salva-Vidas / Camiseta UV
+                </label>
+                <select
+                  value={vestSize}
+                  onChange={(e) => setVestSize(e.target.value)}
+                  className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none bg-white"
+                >
+                  {["P", "M", "G", "GG", "XG", "EXG"].map((s) => (
+                    <option key={s} value={s}>
+                      Tamanho {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                  Contato de Emergência (Nome) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Nome de parente ou amigo"
+                  value={emergencyName}
+                  onChange={(e) => setEmergencyName(e.target.value)}
+                  className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                  Telefone de Emergência *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="(00) 00000-0000"
+                  value={emergencyPhone}
+                  onChange={(e) => setEmergencyPhone(formatPhone(e.target.value))}
+                  className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                Observações Médicas e de Saúde
+              </label>
+              <textarea
+                rows={2}
+                placeholder="Alergias a medicamentos (dipirona, etc.), pressão alta, diabetes ou qualquer cuidado especial..."
+                value={healthNotes}
+                onChange={(e) => setHealthNotes(e.target.value)}
+                className="w-full rounded-xl border border-ink-200 px-4 py-2.5 text-sm text-ink-900 focus:border-brand-600 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving || !fullName || !phone || !emergencyName || !emergencyPhone}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50 transition-colors shadow-sm"
+          >
+            {saving ? "Salvando Ficha..." : "Salvar Ficha de Embarque"}
+          </button>
+        </form>
+      </Card>
+
+      {/* GUEST LINK CARD */}
+      {person.guest_token && (
+        <Card
+          title="Link de Acesso para o Parceiro de Pesca (Dupla / Convidado)"
+          subtitle="Envie este link direto para o participante preencher seus dados, escolher bebidas e marcar o checklist, sem ter acesso aos dados financeiros da sua reserva."
+          icon={Share2}
+        >
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={guestUrl}
+                className="w-full rounded-xl border border-ink-200 bg-sand-50/70 px-4 py-2.5 text-xs font-mono text-ink-700 select-all"
+              />
+              <button
+                type="button"
+                onClick={copyGuestLink}
+                className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl border border-ink-300 bg-white px-4 py-2.5 text-xs font-bold text-ink-800 hover:bg-sand-50 transition-colors shadow-xs"
+              >
+                {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
+                <span>{copied ? "Link Copiado!" : "Copiar Link"}</span>
+              </button>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(
+                  `Olá ${person.full_name || ""}! Segue o seu link de convidado para a nossa pescaria na Expedição Piraíba. Preencha seus dados de embarque e selecione suas bebidas All Inclusive aqui: ${guestUrl}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 transition-colors shadow-xs"
+              >
+                <Share2 className="size-4" />
+                <span>Enviar no WhatsApp</span>
+              </a>
+            </div>
+            <p className="text-[11px] text-ink-500">
+              * O parceiro convidado não terá acesso a valores totais, comprovantes ou botões de pagamento PIX.
+            </p>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
 
@@ -1386,21 +1707,28 @@ function Payment({
 
 function Card({
   title,
-  icon: Icon,
+  subtitle,
+  icon: Icon = CalendarDays,
   children,
 }: {
   title: string;
-  icon: typeof CalendarDays;
+  subtitle?: string;
+  icon?: typeof CalendarDays;
   children: React.ReactNode;
 }) {
   return (
     <article className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
-      <h2 className="flex items-center gap-2.5 text-base font-black text-brand-900">
-        <span className="grid size-8 place-items-center rounded-lg bg-brand-50 text-brand-700">
-          <Icon className="size-4" />
-        </span>
-        {title}
-      </h2>
+      <div className="flex items-start gap-3">
+        {Icon && (
+          <span className="grid size-8 place-items-center rounded-lg bg-brand-50 text-brand-700 shrink-0">
+            <Icon className="size-4" />
+          </span>
+        )}
+        <div>
+          <h2 className="text-base font-black text-brand-900">{title}</h2>
+          {subtitle && <p className="text-xs text-ink-500 mt-0.5 leading-relaxed">{subtitle}</p>}
+        </div>
+      </div>
       <div className="mt-5">{children}</div>
     </article>
   );

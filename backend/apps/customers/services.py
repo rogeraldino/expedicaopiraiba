@@ -83,3 +83,58 @@ def customer_from_session_token(token):
         return Customer.objects.get(id=payload["customer_id"])
     except (signing.BadSignature, signing.SignatureExpired, KeyError, Customer.DoesNotExist, ValidationError):
         raise ValidationError("Sessão expirada. Confirme seu contato novamente.")
+
+
+GUEST_PARTICIPANT_SALT = "guest-participant-token"
+
+
+def create_guest_participant_token(participant):
+    return signing.dumps(
+        {"participant_id": str(participant.id), "reservation_id": str(participant.reservation_id)},
+        salt=GUEST_PARTICIPANT_SALT,
+        compress=True,
+    )
+
+
+def participant_from_guest_token(token):
+    try:
+        payload = signing.loads(token, salt=GUEST_PARTICIPANT_SALT, max_age=60 * 60 * 24 * 30)
+        from apps.reservations.models import ReservationParticipant
+        return ReservationParticipant.objects.select_related(
+            "reservation__expedition", "reservation__customer"
+        ).get(id=payload["participant_id"], reservation_id=payload["reservation_id"])
+    except (signing.BadSignature, signing.SignatureExpired, KeyError, Exception):
+        raise ValidationError("Link de convidado inválido ou expirado.")
+
+
+def customer_lookup(*, cpf, phone):
+    clean_cpf = "".join(c for c in str(cpf) if c.isdigit())
+    if len(clean_cpf) != 11:
+        raise ValidationError("CPF deve conter 11 dígitos numéricos.")
+    clean_phone = "".join(c for c in str(phone) if c.isdigit())
+    if len(clean_phone) < 8:
+        raise ValidationError("Informe um telefone ou WhatsApp válido com DDD.")
+
+    try:
+        customer = Customer.objects.get(cpf=clean_cpf)
+    except Customer.DoesNotExist:
+        raise ValidationError("Nenhuma reserva encontrada para o CPF informado.")
+
+    customer_phone_digits = "".join(c for c in customer.phone if c.isdigit())
+    # Compare phone matching: exact, or last 8/9 digits match
+    phone_match = (
+        clean_phone == customer_phone_digits
+        or clean_phone[-8:] == customer_phone_digits[-8:]
+        or clean_phone[-9:] == customer_phone_digits[-9:]
+    )
+    if not phone_match:
+        # Also check if any participant in their reservations has this phone
+        from apps.reservations.models import ReservationParticipant
+        has_pax_phone = ReservationParticipant.objects.filter(
+            reservation__customer=customer
+        ).filter(phone__icontains=clean_phone[-8:]).exists()
+        if not has_pax_phone:
+            raise ValidationError("Telefone não confere com o cadastro deste CPF.")
+
+    token = create_customer_session_token(customer)
+    return customer, token

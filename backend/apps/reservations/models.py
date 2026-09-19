@@ -59,6 +59,14 @@ class ReservationParticipant(models.Model):
         IN_PROGRESS = "IN_PROGRESS", "Em preenchimento"
         COMPLETED = "COMPLETED", "Completo"
 
+    class VestSize(models.TextChoices):
+        P = "P", "P"
+        M = "M", "M"
+        G = "G", "G"
+        GG = "GG", "GG"
+        XG = "XG", "XG"
+        EXG = "EXG", "EXG"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, related_name="participants")
     full_name = models.CharField(max_length=160)
@@ -67,6 +75,8 @@ class ReservationParticipant(models.Model):
     phone = models.CharField(max_length=20, blank=True)
     emergency_contact_name = models.CharField(max_length=160, blank=True)
     emergency_contact_phone = models.CharField(max_length=20, blank=True)
+    vest_size = models.CharField(max_length=10, choices=VestSize.choices, default=VestSize.G, blank=True)
+    health_notes = models.TextField(blank=True)
     operational_notes = models.TextField(blank=True)
     onboarding_status = models.CharField(max_length=20, choices=OnboardingStatus.choices, default=OnboardingStatus.PENDING)
     completed_at = models.DateTimeField(null=True, blank=True)

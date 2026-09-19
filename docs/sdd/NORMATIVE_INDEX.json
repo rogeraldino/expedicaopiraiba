@@ -85,6 +85,24 @@
       "accepted_at": "2026-09-19",
       "accepted_by": "Rodrigo",
       "accepted_evidence": "specs/archive/E03_Venda-Direta-Manifesto/ponytail.md"
+    },
+    {
+      "id": "E04-PORTAL-CLIENTE-FICHA",
+      "concept": "Portal do cliente, login simplificado por CPF, ficha cadastral de embarque e link de convidado",
+      "owner": "specs/archive/E04_Portal-Cliente-Ficha/spec.md",
+      "status": "normative",
+      "version": "0.1",
+      "scope": "reacesso, ficha do participante, isolamento de convidado e persistência de sessão",
+      "supersedes": [],
+      "superseded_by": [],
+      "lifecycle": "ARCHIVED",
+      "ready_at": "2026-09-19",
+      "ready_by": "Rodrigo",
+      "ready_evidence": "specs/archive/E04_Portal-Cliente-Ficha/grill.md",
+      "acceptance_status": "ACCEPTED",
+      "accepted_at": "2026-09-19",
+      "accepted_by": "Rodrigo",
+      "accepted_evidence": "specs/archive/E04_Portal-Cliente-Ficha/ponytail.md"
     }
   ]
 }
