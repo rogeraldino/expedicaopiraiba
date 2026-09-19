@@ -133,3 +133,11 @@ docker compose -f compose.production.yaml exec backend python manage.py seed_dem
 
 # Runbook completo: deploy/PRODUCTION_RUNBOOK.md
 ```
+
+---
+
+### Home editorial inspirada no mockup (2026-09-19)
+
+Mudança visual LOW na vitrine: hero com tipografia editorial, cards compactos das expedições com rolagem horizontal no mobile, faixa de estrutura com imagem, seção de histórias com fotografia real, galeria reduzida e calendário 2027. A home foi separada em `src/components/home/*`, `src/lib/api/expeditions.ts` e `src/lib/home-content.ts`. Header e footer acompanham a nova paleta; o header ganhou menu móvel e links que funcionam também fora da home. Fontes Manrope e Cormorant Garamond são servidas pelo `next/font`. As imagens principais e o logo têm variantes WebP otimizadas em `public/home/`. O conteúdo comercial continua vindo de `getExpeditions()` e os links de detalhe continuam apontando para a expedição correspondente. Não houve alteração de API, estoque, preços ou checkout. A seção de histórias não atribui citações fictícias a clientes.
+
+Validação: `npm run build` passou (incluindo TypeScript), ESLint dos arquivos alterados passou, `make check-docs` e `git diff --check` passaram. A home foi inspecionada visualmente em Chrome desktop (1440 px) e largura móvel (500 px), incluindo uma captura da versão de produção. O lint completo ainda acusa quatro erros preexistentes de `react-hooks/set-state-in-effect` fora do redesign.
