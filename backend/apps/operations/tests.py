@@ -76,3 +76,53 @@ class OperationsApiTests(TestCase):
         event = reservation.events.get(event_type="MANUAL_PAYMENT_RECORDED")
         self.assertEqual(event.actor_type, "ADMIN")
         self.assertEqual(event.reason, "Comprovante conferido")
+
+    def test_operations_lodge_species_and_custom_expedition(self):
+        auth = self.login()
+        # 1. Cria Pousada
+        lodge_res = self.client.post("/api/operations/lodges/", {
+            "name": "Pousada Nova Era",
+            "city": "São Félix",
+            "state": "MT",
+            "river_section": "Rio Araguaia",
+            "amenities": ["Wi-Fi", "Piscina"],
+            "meeting_point": "Hotel em Palmas",
+            "directions": "Transfer terrestre",
+            "cover_image_url": "/nova-era.jpg"
+        }, format="json", **auth)
+        self.assertEqual(lodge_res.status_code, 201)
+        lodge_id = lodge_res.data["id"]
+
+        # 2. Lista Espécies
+        species_res = self.client.get("/api/operations/species/", **auth)
+        self.assertEqual(species_res.status_code, 200)
+        self.assertTrue(len(species_res.data) >= 1)
+        target_slug = species_res.data[0]["slug"]
+
+        # 3. Cria Expedição Customizada
+        exp_res = self.client.post("/api/operations/expeditions/", {
+            "name": "Expedição Gigantes do Araguaia 2027",
+            "destination": "São Félix/MT",
+            "starts_at": "2027-09-01",
+            "ends_at": "2027-09-05",
+            "capacity": 10,
+            "price_per_person_cents": 580000,
+            "deposit_cents": 250000,
+            "lodge_id": lodge_id,
+            "species_slugs": [target_slug],
+            "cover_image_url": "/capa-gigantes.jpg",
+            "inclusions": ["Combustível 100% incluso", "Kit Ceviche"],
+            "status": "DRAFT"
+        }, format="json", **auth)
+        self.assertEqual(exp_res.status_code, 201)
+        created_id = exp_res.data["id"]
+        self.assertEqual(exp_res.data["cover_image_url"], "/capa-gigantes.jpg")
+        self.assertEqual(exp_res.data["lodge"]["name"], "Pousada Nova Era")
+        self.assertEqual(exp_res.data["target_species"][0]["slug"], target_slug)
+
+        # 4. Atualiza Expedição
+        patch_res = self.client.patch(f"/api/operations/expeditions/{created_id}/", {
+            "inclusions": ["Combustível 100% incluso", "Kit Ceviche", "Open Bar Heineken"]
+        }, format="json", **auth)
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(len(patch_res.data["inclusions"]), 3)

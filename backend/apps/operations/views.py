@@ -10,7 +10,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.expeditions.models import ChecklistItem, Expedition, ExpeditionConfigurationEvent, ExpeditionProduct, Product
+from apps.expeditions.models import ChecklistItem, Expedition, ExpeditionConfigurationEvent, ExpeditionProduct, Lodge, Product, TargetSpecies
 from apps.payments.models import Payment
 from apps.payments.models import PaymentTransaction
 from apps.customers.models import Customer, VerificationChallenge
@@ -19,14 +19,14 @@ from apps.reservations.services import record_reservation_event, transition_lock
 from apps.payments.services import process_paid_event
 
 from .authentication import OperationsAuthentication, create_admin_token, validate_credentials
-from .serializers import OperationsExpeditionSerializer, OperationsReservationSerializer
+from .serializers import OperationsExpeditionSerializer, OperationsLodgeSerializer, OperationsReservationSerializer
 
 ACTIVE_RESERVATIONS = (Reservation.Status.CONFIRMED, Reservation.Status.PAID)
 
 
 def expeditions_with_occupancy():
     active = Q(reservations__status__in=ACTIVE_RESERVATIONS) | Q(reservations__status=Reservation.Status.PARTIALLY_PAID, reservations__payments__status=Payment.Status.PAID, reservations__payments__amount_cents__gte=F("reservations__deposit_cents")) | Q(reservations__status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT), reservations__held_until__gt=timezone.now())
-    return Expedition.objects.annotate(occupied_slots=Coalesce(Sum("reservations__participant_count", filter=active), Value(0), output_field=IntegerField()))
+    return Expedition.objects.annotate(occupied_slots=Coalesce(Sum("reservations__participant_count", filter=active), Value(0), output_field=IntegerField())).select_related("lodge").prefetch_related("expedition_species__species")
 
 
 class LoginView(APIView):
@@ -127,6 +127,30 @@ class ExpeditionDetailView(generics.RetrieveUpdateAPIView):
         return expeditions_with_occupancy()
 
 
+class LodgeListCreateView(generics.ListCreateAPIView):
+    authentication_classes = [OperationsAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OperationsLodgeSerializer
+
+    def get_queryset(self):
+        return Lodge.objects.all().order_by("name")
+
+
+class LodgeDetailView(generics.RetrieveUpdateAPIView):
+    authentication_classes = [OperationsAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OperationsLodgeSerializer
+    queryset = Lodge.objects.all()
+
+
+class SpeciesListView(OperationsView):
+    def get(self, request):
+        return Response([
+            {"slug": s.slug, "common_name": s.common_name, "scientific_name": s.scientific_name, "category": s.category}
+            for s in TargetSpecies.objects.filter(active=True).order_by("category", "common_name")
+        ])
+
+
 class ReservationDetailView(OperationsView):
     def get(self, request, reservation_id):
         try:
@@ -177,8 +201,8 @@ class CancelReservationView(OperationsView):
 
 def configuration_payload(expedition):
     return {"meeting_instructions": expedition.meeting_instructions, "departure_location": expedition.departure_location,
-        "products": [{"id": p.id, "name": p.name, "unit": p.unit, "package_size": p.package_size, "aliases": p.aliases, "active": p.active} for p in Product.objects.order_by("name")],
-        "offers": [{"id": o.id, "product_id": o.product_id, "name": o.product.name, "standard_quantity_per_participant": o.standard_quantity_per_participant, "display_order": o.display_order, "note": o.note, "active": o.active, "updated_at": o.updated_at} for o in expedition.product_offers.select_related("product")],
+        "products": [{"id": p.id, "name": p.name, "unit": p.unit, "package_size": p.package_size, "aliases": p.aliases, "active": p.active} for p in Product.objects.filter(active=True).order_by("name")],
+        "offers": [{"id": o.id, "product_id": o.product_id, "name": o.product.name, "standard_quantity_per_participant": o.standard_quantity_per_participant, "display_order": o.display_order, "note": o.note, "active": o.active, "updated_at": o.updated_at} for o in expedition.product_offers.filter(product__active=True).select_related("product")],
         "checklist_items": [{"id": i.id, "title": i.title, "description": i.description, "display_order": i.display_order, "required": i.required, "active": i.active} for i in expedition.checklist_items.all()],
         "dietary_restrictions": list(DietaryRestriction.objects.filter(active=True).values("code", "name", "requires_details", "is_none"))}
 

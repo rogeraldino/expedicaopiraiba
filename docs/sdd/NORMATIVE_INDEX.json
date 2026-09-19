@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-18",
+  "updated_at": "2026-09-19",
   "entries": [
     {
       "id": "GOV-DEVELOPMENT",
@@ -35,17 +35,38 @@
     {
       "id": "E01-P0-CLOSURE",
       "concept": "Fechamento do P0 e seleção de bebidas com alocação operacional padrão",
-      "owner": "specs/active/E01_P0-Closure/spec.md",
+      "owner": "specs/archive/E01_P0-Closure/spec.md",
       "status": "normative",
       "version": "0.2",
       "scope": "preferências, Minha Expedição, saldo, checklist, dashboard e consolidação",
       "supersedes": ["PRODUCT-MVP:quantidades de bebida informadas pelo participante", "DELIVERY-PLAN:Fase 3 e fases P0 relacionadas"],
-      "superseded_by": [],
-      "lifecycle": "READY",
+      "superseded_by": ["E02-CUSTOMIZACAO-EXPEDICOES"],
+      "lifecycle": "ARCHIVED",
       "ready_at": "2026-09-18",
       "ready_by": "Rodrigo",
-      "ready_evidence": "specs/active/E01_P0-Closure/grill.md; specs/active/E01_P0-Closure/counsel.md",
-      "acceptance_status": "PENDING"
+      "ready_evidence": "specs/archive/E01_P0-Closure/grill.md; specs/archive/E01_P0-Closure/counsel.md",
+      "acceptance_status": "ACCEPTED",
+      "accepted_at": "2026-09-19",
+      "accepted_by": "Rodrigo",
+      "accepted_evidence": "specs/archive/E01_P0-Closure/ponytail.md"
+    },
+    {
+      "id": "E02-CUSTOMIZACAO-EXPEDICOES",
+      "concept": "Customização de expedições, pousadas parceiras, espécies-alvo, cardápio mestre e mídia",
+      "owner": "specs/archive/E02_Customizacao-Expedicoes/spec.md",
+      "status": "normative",
+      "version": "0.1",
+      "scope": "modelagem de Lodge, TargetSpecies, ExpeditionSpecies, cardápio mestre e mídia dinâmica",
+      "supersedes": ["PRODUCT-MVP:destinos textuais estáticos", "E01-P0-CLOSURE:catálogo aberto de produtos"],
+      "superseded_by": [],
+      "lifecycle": "ARCHIVED",
+      "ready_at": "2026-09-19",
+      "ready_by": "Rodrigo",
+      "ready_evidence": "specs/archive/E02_Customizacao-Expedicoes/grill.md",
+      "acceptance_status": "ACCEPTED",
+      "accepted_at": "2026-09-19",
+      "accepted_by": "Rodrigo",
+      "accepted_evidence": "specs/archive/E02_Customizacao-Expedicoes/ponytail.md"
     }
   ]
 }

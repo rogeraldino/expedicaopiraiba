@@ -19,12 +19,17 @@ from django.http import JsonResponse
 from django.urls import include, path
 
 
+from apps.expeditions.views import LodgeListView, TargetSpeciesListView
+
+
 def health(_request):
     return JsonResponse({"status": "ok"})
 
 urlpatterns = [
     path("api/health/", health),
     path("api/expeditions/", include("apps.expeditions.urls")),
+    path("api/lodges/", LodgeListView.as_view(), name="public-lodge-list"),
+    path("api/species/", TargetSpeciesListView.as_view(), name="public-species-list"),
     path("api/checkout/", include("apps.reservations.urls")),
     path("api/me/", include("apps.reservations.customer_urls")),
     path("api/payments/", include("apps.payments.urls")),

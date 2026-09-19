@@ -1,24 +1,41 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Beer,
   Check,
   Fish,
-  Fuel,
   Headphones,
   House,
   LockKeyhole,
   ShieldCheck,
-  Snowflake,
-  Trophy,
   Users,
-  Utensils,
-  Wifi,
 } from "lucide-react";
 
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { ButtonLink } from "@/components/ui/button-link";
+
+type TargetSpecies = {
+  id: string;
+  common_name: string;
+  slug: string;
+  scientific_name?: string;
+  category: string;
+  is_primary: boolean;
+};
+
+type Lodge = {
+  id: string;
+  name: string;
+  slug: string;
+  city: string;
+  state: string;
+  river_section?: string;
+  description?: string;
+  amenities?: string[];
+  meeting_point?: string;
+  directions?: string;
+  cover_image_url?: string;
+};
 
 type ExpeditionData = {
   id: string;
@@ -34,6 +51,10 @@ type ExpeditionData = {
   price_per_person_cents: number;
   deposit_cents: number;
   summary: string;
+  cover_image_url?: string;
+  lodge?: Lodge | null;
+  target_species?: TargetSpecies[];
+  inclusions?: string[];
 };
 
 const fallback: ExpeditionData = {
@@ -49,7 +70,25 @@ const fallback: ExpeditionData = {
   available_slots: 12,
   price_per_person_cents: 560000,
   deposit_cents: 250000,
-  summary: "Fechamento de temporada 2026 com chave de ouro em São Félix do Araguaia.",
+  summary: "4 dias completos de pescaria All Inclusive no Rio Araguaia na Pousada Solar das Águas.",
+  cover_image_url: "/expeditions/ponte-sao-felix.jpg",
+  lodge: {
+    id: "solar-das-aguas",
+    name: "Pousada Solar das Águas",
+    slug: "solar-das-aguas",
+    city: "São Félix do Araguaia",
+    state: "MT",
+    river_section: "Médio Araguaia",
+    description: "Excelente infraestrutura na beira do Rio Araguaia, quartos suítes climatizados, piscina e cozinha regional de alto padrão.",
+    amenities: ["Suítes Climatizadas", "Piscina", "Wi-Fi", "Refeitório Climatizado", "Deck Flutuante"],
+    meeting_point: "Pousada Solar das Águas — Recepção",
+  },
+  target_species: [
+    { id: "1", common_name: "Piraíba", slug: "piraiba", scientific_name: "Brachyplatystoma filamentosum", category: "COURO", is_primary: true },
+    { id: "2", common_name: "Pirarara", slug: "pirarara", scientific_name: "Phractocephalus hemioliopterus", category: "COURO", is_primary: true },
+    { id: "3", common_name: "Bargada", slug: "bargada", category: "COURO", is_primary: false },
+    { id: "4", common_name: "Tucunaré Azul", slug: "tucunare-azul", category: "ESCAMA", is_primary: false },
+  ],
 };
 
 async function getExpedition(slug: string): Promise<ExpeditionData> {
@@ -150,9 +189,10 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
 
         <div className="relative min-h-[420px] overflow-hidden rounded-2xl shadow-md">
           <Image
-            src={heroImage}
-            alt={`Pescadores na ${expedition.name} - Expedição Piraíba`}
+            src={expedition.cover_image_url || heroImage}
+            alt={expedition.name}
             fill
+            unoptimized={Boolean(expedition.cover_image_url?.startsWith("http"))}
             sizes="(min-width: 1024px) 60vw, 100vw"
             className="object-cover"
             priority
@@ -166,52 +206,103 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
           <h2 className="text-lg font-black uppercase text-brand-800">★ Pacote All Inclusive Completo</h2>
           <p className="mt-1 text-xs text-ink-500">Sem custos adicionais de combustível, iscas ou bebidas durante a pescaria.</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            {[
-              [House, "Hospedagem Completa na Pousada"],
-              [Fuel, "Combustível e Óleo 100% Inclusos"],
-              [Beer, "Open Bar (Heineken, Original, Stella)"],
-              [Utensils, "Kit Sashimi, Ceviche e outros petiscos"],
-              [Fish, "Iscas Nativas"],
-              [Users, "Guias Nativos"],
-              [Trophy, "Torneio com Troféus e Banner da Equipe"],
-              [ShieldCheck, "Seguro Viagem"],
-              [Snowflake, "Água, Refrigerante e Gelo abundante"],
-              [Wifi, "Internet Wi-Fi na Pousada"],
-            ].map(([Icon, label]) => {
-              const ItemIcon = Icon as typeof Check;
-              return (
-                <p key={label as string} className="flex items-center gap-2.5 text-sm font-semibold text-ink-800">
-                  <ItemIcon className="size-4 shrink-0 text-brand-600" />
-                  {label as string}
-                </p>
-              );
-            })}
+            {(expedition.inclusions && expedition.inclusions.length > 0
+              ? expedition.inclusions
+              : [
+                  "Hospedagem Completa na Pousada",
+                  "Combustível e Óleo 100% Inclusos",
+                  "Open Bar (Cervejas e Refrigerantes)",
+                  "Kit Sashimi, Ceviche e petiscos",
+                  "Iscas Nativas Vivas",
+                  "Guias Nativos Especializados",
+                  "Torneio com Troféus e Banner da Equipe",
+                  "Seguro Viagem",
+                  "Água mineral, Refrigerante e Gelo abundante",
+                  "Internet Wi-Fi na Pousada",
+                ]
+            ).map((item) => (
+              <p key={item} className="flex items-center gap-2.5 text-sm font-semibold text-ink-800">
+                <Check className="size-4 shrink-0 text-brand-600" />
+                {item}
+              </p>
+            ))}
           </div>
         </article>
 
         <article className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-black uppercase text-brand-800">Peixes Gigantes do Rio Araguaia</h2>
-          <p className="mt-1 text-xs text-ink-500">Os maiores peixes de água doce do Brasil no seu anzol.</p>
+          <p className="mt-1 text-xs text-ink-500">Espécies-alvo desta expedição e principais capturas da região.</p>
           <div className="mt-5 flex flex-wrap gap-2.5">
-            {["Piraíba (+2m)", "Pirarara Lendária", "Bargada", "Tucunaré Azul", "Aruanã", "Dourada", "Mandubé", "Corvina", "Bicuda", "Cachorra", "Barbado", "Tambaqui", "Cachara", "Pintado"].map(
-              (name) => (
+            {expedition.target_species && expedition.target_species.length > 0 ? (
+              expedition.target_species.map((species) => (
                 <span
-                  key={name}
-                  className="flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50/80 px-3.5 py-1.5 text-xs font-black text-brand-800"
+                  key={species.slug}
+                  className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-black ${
+                    species.is_primary
+                      ? "bg-brand-600 text-white shadow-sm"
+                      : "border border-brand-200 bg-brand-50/80 text-brand-800"
+                  }`}
                 >
-                  <Fish className="size-3.5 text-brand-600" />
-                  {name}
+                  <Fish className="size-3.5 text-current" />
+                  {species.common_name}
+                  {species.scientific_name && (
+                    <span className="text-[10px] font-normal italic opacity-85">({species.scientific_name})</span>
+                  )}
+                  {species.is_primary && (
+                    <span className="rounded bg-brand-800/70 px-1 text-[9px] uppercase tracking-wider text-sand-200">
+                      Alvo Principal
+                    </span>
+                  )}
                 </span>
+              ))
+            ) : (
+              ["Piraíba (+2m)", "Pirarara Lendária", "Bargada", "Tucunaré Azul", "Aruanã", "Dourada", "Mandubé", "Corvina", "Bicuda", "Cachorra", "Barbado", "Tambaqui", "Cachara", "Pintado"].map(
+                (name) => (
+                  <span
+                    key={name}
+                    className="flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50/80 px-3.5 py-1.5 text-xs font-black text-brand-800"
+                  >
+                    <Fish className="size-3.5 text-brand-600" />
+                    {name}
+                  </span>
+                )
               )
             )}
           </div>
 
-          <h3 className="mt-6 text-sm font-black uppercase text-brand-800">Pousada & Estrutura</h3>
-          <p className="mt-2 text-sm text-ink-600 leading-relaxed">
-            {expedition.slug.includes("bandeirantes")
-              ? "Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, piscina, área de convivência e gastronomia regional preparada por cozinheiras nativas."
-              : "Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, área de convivência e gastronomia regional preparada por cozinheiras nativas."}
-          </p>
+          <h3 className="mt-6 text-sm font-black uppercase text-brand-800 flex items-center gap-2">
+            <House className="size-4 text-brand-600" />
+            {expedition.lodge ? expedition.lodge.name : "Pousada & Estrutura"}
+          </h3>
+          {expedition.lodge ? (
+            <div className="mt-2 space-y-2 text-sm text-ink-600 leading-relaxed">
+              <p className="text-xs font-bold text-brand-700">
+                {expedition.lodge.city} — {expedition.lodge.state}
+                {expedition.lodge.river_section ? ` (${expedition.lodge.river_section})` : ""}
+              </p>
+              {expedition.lodge.description && <p>{expedition.lodge.description}</p>}
+              {expedition.lodge.amenities && expedition.lodge.amenities.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {expedition.lodge.amenities.map((amenity) => (
+                    <span key={amenity} className="rounded-md bg-ink-900/5 px-2.5 py-1 text-xs font-semibold text-ink-700">
+                      ✓ {amenity}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {expedition.lodge.meeting_point && (
+                <p className="text-xs text-ink-500 pt-1">
+                  <strong>Ponto de encontro:</strong> {expedition.lodge.meeting_point}
+                </p>
+              )}
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-ink-600 leading-relaxed">
+              {expedition.slug.includes("bandeirantes")
+                ? "Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, piscina, área de convivência e gastronomia regional preparada por cozinheiras nativas."
+                : "Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, área de convivência e gastronomia regional preparada por cozinheiras nativas."}
+            </p>
+          )}
         </article>
       </section>
 

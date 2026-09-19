@@ -6,26 +6,17 @@ import {
   AlertCircle,
   CalendarDays,
   Check,
-  CheckCircle2,
-  ChevronRight,
   ClipboardCheck,
   Clock3,
   ExternalLink,
   Fish,
   GlassWater,
-  Info,
   MapPin,
   MessageCircle,
-  Package,
   Plus,
-  ShieldAlert,
   ShieldCheck,
-  ShoppingBag,
   Sparkles,
-  Trash2,
-  Utensils,
   WalletCards,
-  X,
 } from "lucide-react";
 
 import {
@@ -111,12 +102,6 @@ type Data = {
     offers?: Offer[];
     checklist_items?: Item[];
   };
-};
-
-type SelectedGear = {
-  itemId: string;
-  mode: "RENTAL" | "PURCHASE";
-  quantity: number;
 };
 
 const restrictions = [
@@ -747,30 +732,51 @@ function GearSection({
   durationDays: number;
   saved: (d: Data) => void;
 }) {
-  const [hasCustomGear, setHasCustomGear] = useState<boolean>(true);
-  const [activeCategory, setActiveCategory] = useState<GearCategory>("RODS_REELS");
-  const [selectedGear, setSelectedGear] = useState<Record<string, { mode: "RENTAL" | "PURCHASE"; qty: number }>>({});
-  const [busy, setBusy] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const [notes, setNotes] = useState("");
-
-  // Load saved gear choices from operational_notes or sessionStorage
-  useEffect(() => {
+  const [hasCustomGear, setHasCustomGear] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
     try {
       const storageKey = `piraiba-gear-${id}-${person.id}`;
       const savedLocal = localStorage.getItem(storageKey);
       if (savedLocal) {
         const parsed = JSON.parse(savedLocal);
-        setSelectedGear(parsed.items || {});
-        setHasCustomGear(parsed.hasCustomGear !== false);
-        setNotes(parsed.notes || "");
-      } else if (person.operational_notes) {
-        setNotes(person.operational_notes);
+        return parsed.hasCustomGear !== false;
       }
     } catch {
-      // ignore JSON error
+      // ignore
     }
-  }, [id, person.id, person.operational_notes]);
+    return true;
+  });
+  const [activeCategory, setActiveCategory] = useState<GearCategory>("RODS_REELS");
+  const [selectedGear, setSelectedGear] = useState<Record<string, { mode: "RENTAL" | "PURCHASE"; qty: number }>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const storageKey = `piraiba-gear-${id}-${person.id}`;
+      const savedLocal = localStorage.getItem(storageKey);
+      if (savedLocal) {
+        const parsed = JSON.parse(savedLocal);
+        return parsed.items || {};
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [notes, setNotes] = useState<string>(() => {
+    if (typeof window === "undefined") return person.operational_notes || "";
+    try {
+      const storageKey = `piraiba-gear-${id}-${person.id}`;
+      const savedLocal = localStorage.getItem(storageKey);
+      if (savedLocal) {
+        const parsed = JSON.parse(savedLocal);
+        if (parsed.notes) return parsed.notes;
+      }
+    } catch {
+      // ignore
+    }
+    return person.operational_notes || "";
+  });
 
   function toggleGear(item: GearItem, defaultMode: "RENTAL" | "PURCHASE") {
     setSelectedGear((current) => {

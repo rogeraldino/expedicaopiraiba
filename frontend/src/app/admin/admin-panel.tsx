@@ -3,11 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, CalendarDays, Check, Copy, Download, Fish, ListChecks, LogOut, Menu, Pencil, Plus, RefreshCw, Search, ShieldCheck, ShoppingCart, TicketCheck, X } from "lucide-react";
+import { AlertTriangle, BarChart3, CalendarDays, Check, Copy, Download, Fish, House, ListChecks, LogOut, Menu, Pencil, Plus, RefreshCw, Search, ShieldCheck, ShoppingCart, TicketCheck, X } from "lucide-react";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
-type Section = "overview" | "reservations" | "expeditions" | "configuration" | "shopping";
-type Expedition = { id: string; name: string; slug: string; destination: string; departure_location?: string; starts_at: string; ends_at: string; capacity: number; occupied_slots: number; available_slots: number; price_per_person_cents: number; deposit_cents: number; balance_due_days_before: number; status: string; summary: string };
+type Section = "overview" | "reservations" | "expeditions" | "lodges" | "configuration" | "shopping";
+type Lodge = { id: string; name: string; slug: string; city: string; state: string; river_section?: string; description?: string; amenities?: string[]; meeting_point?: string; directions?: string; cover_image_url?: string; active: boolean };
+type Species = { id: string; common_name: string; slug: string; scientific_name?: string; category: string; active: boolean };
+type Expedition = { id: string; name: string; slug: string; destination: string; departure_location?: string; starts_at: string; ends_at: string; capacity: number; occupied_slots: number; available_slots: number; price_per_person_cents: number; deposit_cents: number; balance_due_days_before: number; status: string; summary: string; lodge?: Lodge | null; lodge_id?: string | null; cover_image_url?: string; target_species?: (Species & { is_primary?: boolean })[]; species_slugs?: string[]; inclusions?: string[] };
 type Participant = { id: string; name: string; phone: string; onboarding_status: string; preferences_confirmed?: boolean; dietary_confirmed?: boolean; checklist_completed?: boolean; selected_offers?: { id: string; name: string }[]; dietary_restrictions?: string[]; dietary_details?: string };
 type OperationalAlert = { id?: string; type?: string; level?: string; title?: string; message: string; reservation_id?: string; expedition_id?: string };
 type ExpeditionIndicator = { expedition_id?: string; id?: string; expedition_name?: string; name?: string; capacity: number; held_slots?: number; confirmed_slots?: number; occupied_slots?: number; available_slots: number; sold_cents?: number; received_cents?: number; outstanding_cents?: number; pending_preferences?: number; pending_checklists?: number; restrictions?: number };
@@ -40,11 +42,11 @@ export function AdminPanel() {
   const logout = useCallback(() => { sessionStorage.removeItem("operations-token"); setToken(null); }, []);
   if (!ready) return <div className="min-h-screen bg-brand-900" />;
   if (!token) return <Login onLogin={value => { sessionStorage.setItem("operations-token", value); setToken(value); }} />;
-  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
+  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
   return <div className="min-h-screen bg-[#f4f6f2] lg:grid lg:grid-cols-[260px_1fr]">
     <aside className={`fixed inset-y-0 left-0 z-40 w-[260px] bg-brand-900 text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${menu ? "translate-x-0" : "-translate-x-full"}`}><div className="flex h-full flex-col p-5"><div className="flex items-center gap-3 border-b border-white/10 pb-5"><Image src="/brand/logo-expedicao-piraiba.png" alt="" width={48} height={48} className="size-12 rounded-full" /><div><strong className="block text-sm">EXPEDIÇÃO PIRAÍBA</strong><span className="text-[10px] tracking-[.2em] text-white/60">PAINEL OPERACIONAL</span></div><button aria-label="Fechar menu" onClick={() => setMenu(false)} className="ml-auto lg:hidden"><X /></button></div><nav className="mt-6 space-y-2">{nav.map(([value,label,Icon]) => <button key={value} onClick={() => { setSection(value); setMenu(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold ${section === value ? "bg-white text-brand-900" : "text-white/75 hover:bg-white/10"}`}><Icon className="size-5" />{label}</button>)}</nav><Link href="/" className="mt-auto flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><Fish className="size-5" />Ver site</Link><button onClick={logout} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><LogOut className="size-5" />Sair</button></div></aside>
     {menu && <button aria-label="Fechar menu" className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMenu(false)} />}
-    <main className="min-w-0"><header className="flex min-h-16 items-center border-b bg-white px-5 lg:px-8"><button aria-label="Abrir menu" onClick={() => setMenu(true)} className="mr-4 lg:hidden"><Menu /></button><div><p className="text-xs font-bold uppercase tracking-widest text-brand-600">Área administrativa</p><h1 className="text-xl font-black">{nav.find(item => item[0] === section)?.[1]}</h1></div><div className="ml-auto flex items-center gap-2 text-sm text-ink-500"><ShieldCheck className="size-5 text-brand-600" /><span className="hidden sm:inline">Sessão protegida</span></div></header><div className="p-5 lg:p-8">{section === "overview" && <OverviewPanel token={token} unauthorized={logout} go={setSection} />}{section === "reservations" && <ReservationsPanel token={token} unauthorized={logout} />}{section === "expeditions" && <ExpeditionsPanel token={token} unauthorized={logout} />}{section === "configuration" && <ConfigurationPanel token={token} unauthorized={logout} />}{section === "shopping" && <ShoppingPanel token={token} unauthorized={logout} />}</div></main>
+    <main className="min-w-0"><header className="flex min-h-16 items-center border-b bg-white px-5 lg:px-8"><button aria-label="Abrir menu" onClick={() => setMenu(true)} className="mr-4 lg:hidden"><Menu /></button><div><p className="text-xs font-bold uppercase tracking-widest text-brand-600">Área administrativa</p><h1 className="text-xl font-black">{nav.find(item => item[0] === section)?.[1]}</h1></div><div className="ml-auto flex items-center gap-2 text-sm text-ink-500"><ShieldCheck className="size-5 text-brand-600" /><span className="hidden sm:inline">Sessão protegida</span></div></header><div className="p-5 lg:p-8">{section === "overview" && <OverviewPanel token={token} unauthorized={logout} go={setSection} />}{section === "reservations" && <ReservationsPanel token={token} unauthorized={logout} />}{section === "expeditions" && <ExpeditionsPanel token={token} unauthorized={logout} />}{section === "lodges" && <LodgesPanel token={token} unauthorized={logout} />}{section === "configuration" && <ConfigurationPanel token={token} unauthorized={logout} />}{section === "shopping" && <ShoppingPanel token={token} unauthorized={logout} />}</div></main>
   </div>;
 }
 
@@ -62,8 +64,483 @@ function ReservationDrawer({ item, token, close, changed }: { item: Reservation;
 function Box({ title,children }: { title: string; children: ReactNode }) { return <section className="mt-4 rounded-xl bg-white p-5 text-sm"><h3 className="mb-2 font-black">{title}</h3>{children}</section>; }
 function Pill({ ok,children }: { ok?: boolean; children: ReactNode }) { return <span className={`rounded-full px-2 py-1 font-bold ${ok ? "bg-brand-100 text-brand-800" : "bg-amber-100 text-amber-800"}`}>{ok && <Check className="mr-1 inline size-3" />}{children}</span>; }
 
-function ExpeditionsPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) { const list = useData<Expedition[]>("expeditions/", token, unauthorized); const [editing,setEditing] = useState<Expedition | "new" | null>(null); return <div><Header title="Expedições" subtitle="Crie e edite datas, capacidade, preço e publicação." action={<button onClick={() => setEditing("new")} className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white"><Plus className="mr-2 inline size-4" />Nova expedição</button>} /><div className="mt-6"><State loading={list.loading} error={list.error} />{list.data && <div className="grid gap-4 xl:grid-cols-2">{list.data.map(item => <article key={item.id} className="rounded-xl bg-white p-5"><div className="flex justify-between"><div><Status value={item.status} /><h3 className="mt-3 text-xl font-black">{item.name}</h3><p>{item.destination}</p></div><button onClick={() => setEditing(item)} className="rounded-lg border p-2"><Pencil className="size-4" /></button></div><div className="mt-5 grid grid-cols-3 border-t pt-4 text-sm"><p>{shortDate(item.starts_at)}</p><strong>{item.occupied_slots}/{item.capacity}</strong><strong>{money(item.price_per_person_cents)}</strong></div></article>)}</div>}</div>{editing && <ExpeditionModal token={token} item={editing === "new" ? undefined : editing} close={() => setEditing(null)} saved={async () => { setEditing(null); await list.load(); }} />}</div>; }
-function ExpeditionModal({ token,item,close,saved }: { token: string; item?: Expedition; close: () => void; saved: () => Promise<void> }) { const [form,setForm] = useState({ name:item?.name??"", destination:item?.destination??"", departure_location:item?.departure_location??"", starts_at:item?.starts_at??"", ends_at:item?.ends_at??"", capacity:String(item?.capacity??12), price:String((item?.price_per_person_cents??249000)/100), deposit:String((item?.deposit_cents??120000)/100), balance_due_days_before:String(item?.balance_due_days_before??30), status:item?.status??"DRAFT", summary:item?.summary??"" }); const [error,setError]=useState(""); async function submit(event:FormEvent){event.preventDefault();try{await request(item?`expeditions/${item.id}/`:"expeditions/",token,{method:item?"PATCH":"POST",body:JSON.stringify({...form,capacity:Number(form.capacity),price_per_person_cents:Math.round(Number(form.price)*100),deposit_cents:Math.round(Number(form.deposit)*100),balance_due_days_before:Number(form.balance_due_days_before)})});await saved();}catch(value){setError(errorMessage(value));}} const input=(name:keyof typeof form,label:string,type="text")=><Field label={label} type={type} value={form[name]} set={value=>setForm({...form,[name]:value})}/>; return <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4"><form onSubmit={submit} className="my-5 w-full max-w-2xl rounded-2xl bg-white p-6"><div className="flex justify-between"><h2 className="text-2xl font-black">{item?"Editar expedição":"Nova expedição"}</h2><button type="button" onClick={close}><X /></button></div><div className="mt-5 grid gap-4 sm:grid-cols-2">{input("name","Nome")}{input("destination","Destino")}{input("departure_location","Local de saída")}{input("capacity","Capacidade","number")}{input("starts_at","Data inicial","date")}{input("ends_at","Data final","date")}{input("price","Valor por pessoa","number")}{input("deposit","Sinal","number")}{input("balance_due_days_before","Vencimento do saldo (dias)","number")}<label className="text-xs font-bold">Status<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})} className="mt-1 h-10 w-full rounded-lg border px-3">{Object.entries(labels).slice(0,7).map(([key,value])=><option key={key} value={key}>{value}</option>)}</select></label><label className="text-xs font-bold sm:col-span-2">Resumo<textarea value={form.summary} onChange={e=>setForm({...form,summary:e.target.value})} className="mt-1 min-h-20 w-full rounded-lg border p-3" /></label></div>{error&&<p className="mt-3 text-red-700">{error}</p>}<button className="mt-5 rounded-lg bg-brand-600 px-5 py-3 font-bold text-white">Salvar</button></form></div>; }
+function ExpeditionsPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
+  const list = useData<Expedition[]>("expeditions/", token, unauthorized);
+  const [editing, setEditing] = useState<Expedition | "new" | null>(null);
+
+  return (
+    <div>
+      <Header
+        title="Expedições"
+        subtitle="Crie e edite datas, capacidade, preço, pousada, espécies-alvo e publicação."
+        action={
+          <button
+            onClick={() => setEditing("new")}
+            className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white"
+          >
+            <Plus className="mr-2 inline size-4" />
+            Nova expedição
+          </button>
+        }
+      />
+      <div className="mt-6">
+        <State loading={list.loading} error={list.error} />
+        {list.data && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {list.data.map((item) => (
+              <article key={item.id} className="rounded-xl bg-white p-5">
+                <div className="flex justify-between">
+                  <div>
+                    <Status value={item.status} />
+                    <h3 className="mt-3 text-xl font-black">{item.name}</h3>
+                    <p className="text-sm text-ink-600">
+                      {item.lodge ? (
+                        <span className="font-bold text-brand-800">
+                          {item.lodge.name} ({item.lodge.city}/{item.lodge.state})
+                        </span>
+                      ) : (
+                        item.destination
+                      )}
+                    </p>
+                  </div>
+                  <button onClick={() => setEditing(item)} className="rounded-lg border p-2">
+                    <Pencil className="size-4" />
+                  </button>
+                </div>
+                {item.target_species && item.target_species.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {item.target_species.map((sp) => (
+                      <span
+                        key={sp.slug}
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          sp.is_primary ? "bg-brand-600 text-white" : "bg-ink-900/5 text-ink-700"
+                        }`}
+                      >
+                        {sp.common_name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-5 grid grid-cols-3 border-t pt-4 text-sm">
+                  <p>{shortDate(item.starts_at)}</p>
+                  <strong>
+                    {item.occupied_slots}/{item.capacity}
+                  </strong>
+                  <strong>{money(item.price_per_person_cents)}</strong>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      {editing && (
+        <ExpeditionModal
+          token={token}
+          item={editing === "new" ? undefined : editing}
+          close={() => setEditing(null)}
+          saved={async () => {
+            setEditing(null);
+            await list.load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function ExpeditionModal({
+  token,
+  item,
+  close,
+  saved,
+}: {
+  token: string;
+  item?: Expedition;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const lodges = useData<Lodge[]>("lodges/", token, () => {});
+  const speciesList = useData<Species[]>("species/", token, () => {});
+
+  const [form, setForm] = useState({
+    name: item?.name ?? "",
+    destination: item?.destination ?? "",
+    departure_location: item?.departure_location ?? "",
+    starts_at: item?.starts_at ?? "",
+    ends_at: item?.ends_at ?? "",
+    capacity: String(item?.capacity ?? 12),
+    price: String((item?.price_per_person_cents ?? 249000) / 100),
+    deposit: String((item?.deposit_cents ?? 120000) / 100),
+    balance_due_days_before: String(item?.balance_due_days_before ?? 30),
+    status: item?.status ?? "DRAFT",
+    summary: item?.summary ?? "",
+    lodge_id: item?.lodge?.id ?? item?.lodge_id ?? "",
+    cover_image_url: item?.cover_image_url ?? "",
+    inclusions: (item?.inclusions ?? [
+      "Hospedagem Completa na Pousada",
+      "Combustível e Óleo 100% Inclusos",
+      "Open Bar (Cervejas e Refrigerantes)",
+      "Kit Sashimi, Ceviche e petiscos",
+      "Iscas Nativas Vivas",
+      "Guias Nativos Especializados",
+      "Torneio com Troféus e Banner da Equipe",
+      "Seguro Viagem",
+      "Água mineral, Refrigerante e Gelo abundante",
+      "Internet Wi-Fi na Pousada",
+    ]).join("\n"),
+  });
+
+  const [selectedSpecies, setSelectedSpecies] = useState<string[]>(
+    item?.target_species?.map((s) => s.slug) ?? item?.species_slugs ?? ["piraiba", "pirarara", "bargada"]
+  );
+  const [error, setError] = useState("");
+
+  const onLodgeChange = (lodgeId: string) => {
+    const chosen = lodges.data?.find((l) => l.id === lodgeId);
+    setForm((prev) => ({
+      ...prev,
+      lodge_id: lodgeId,
+      departure_location: prev.departure_location || (chosen ? `${chosen.city}/${chosen.state}` : ""),
+      destination: chosen ? `${chosen.city}/${chosen.state} (${chosen.name})` : prev.destination,
+    }));
+  };
+
+  const toggleSpecies = (slug: string) => {
+    setSelectedSpecies((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
+    );
+  };
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const body = {
+        ...form,
+        capacity: Number(form.capacity),
+        price_per_person_cents: Math.round(Number(form.price) * 100),
+        deposit_cents: Math.round(Number(form.deposit) * 100),
+        balance_due_days_before: Number(form.balance_due_days_before),
+        lodge_id: form.lodge_id || null,
+        species_slugs: selectedSpecies,
+        inclusions: form.inclusions
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      };
+      await request(item ? `expeditions/${item.id}/` : "expeditions/", token, {
+        method: item ? "PATCH" : "POST",
+        body: JSON.stringify(body),
+      });
+      await saved();
+    } catch (value) {
+      setError(errorMessage(value));
+    }
+  }
+
+  const input = (name: keyof typeof form, label: string, type = "text") => (
+    <Field label={label} type={type} value={form[name]} set={(value) => setForm({ ...form, [name]: value })} />
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
+      <form onSubmit={submit} className="my-5 w-full max-w-2xl rounded-2xl bg-white p-6">
+        <div className="flex justify-between">
+          <h2 className="text-2xl font-black">{item ? "Editar expedição" : "Nova expedição"}</h2>
+          <button type="button" onClick={close}>
+            <X />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          {input("name", "Nome")}
+          <label className="text-xs font-bold">
+            Pousada parceira
+            <select
+              value={form.lodge_id}
+              onChange={(e) => onLodgeChange(e.target.value)}
+              className="mt-1 h-10 w-full rounded-lg border px-3"
+            >
+              <option value="">Nenhuma / Personalizada</option>
+              {lodges.data?.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.city}/{l.state})
+                </option>
+              ))}
+            </select>
+          </label>
+          {input("destination", "Destino")}
+          {input("departure_location", "Local de saída")}
+          {input("capacity", "Capacidade", "number")}
+          {input("starts_at", "Data inicial", "date")}
+          {input("ends_at", "Data final", "date")}
+          {input("price", "Valor por pessoa", "number")}
+          {input("deposit", "Sinal", "number")}
+          {input("balance_due_days_before", "Vencimento do saldo (dias)", "number")}
+          <label className="text-xs font-bold">
+            Status
+            <select
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value })}
+              className="mt-1 h-10 w-full rounded-lg border px-3"
+            >
+              {Object.entries(labels)
+                .slice(0, 7)
+                .map(([key, value]) => (
+                  <option key={key} value={key}>
+                    {value}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {input("cover_image_url", "URL da Imagem de Capa")}
+          <label className="text-xs font-bold sm:col-span-2">
+            Resumo
+            <textarea
+              value={form.summary}
+              onChange={(e) => setForm({ ...form, summary: e.target.value })}
+              className="mt-1 min-h-20 w-full rounded-lg border p-3"
+            />
+          </label>
+          <div className="sm:col-span-2">
+            <span className="text-xs font-bold">Espécies-alvo da expedição</span>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {speciesList.data?.map((s) => (
+                <label
+                  key={s.slug}
+                  className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
+                    selectedSpecies.includes(s.slug)
+                      ? "border-brand-600 bg-brand-50 text-brand-800"
+                      : "border-ink-900/10 text-ink-600"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSpecies.includes(s.slug)}
+                    onChange={() => toggleSpecies(s.slug)}
+                    className="sr-only"
+                  />
+                  <Fish className="size-3" />
+                  {s.common_name}
+                </label>
+              ))}
+            </div>
+          </div>
+          <label className="text-xs font-bold sm:col-span-2">
+            Inclusões All Inclusive (uma por linha)
+            <textarea
+              value={form.inclusions}
+              onChange={(e) => setForm({ ...form, inclusions: e.target.value })}
+              rows={4}
+              className="mt-1 w-full rounded-lg border p-3 font-mono text-xs"
+            />
+          </label>
+        </div>
+        {error && <p className="mt-3 text-red-700">{error}</p>}
+        <button className="mt-5 rounded-lg bg-brand-600 px-5 py-3 font-bold text-white">Salvar</button>
+      </form>
+    </div>
+  );
+}
+
+function LodgesPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
+  const list = useData<Lodge[]>("lodges/", token, unauthorized);
+  const [editing, setEditing] = useState<Lodge | "new" | null>(null);
+
+  return (
+    <div>
+      <Header
+        title="Pousadas e Estruturas"
+        subtitle="Gerencie pousadas parceiras, comodidades, localização e ponto de encontro."
+        action={
+          <button
+            onClick={() => setEditing("new")}
+            className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white"
+          >
+            <Plus className="mr-2 inline size-4" />
+            Nova pousada
+          </button>
+        }
+      />
+      <div className="mt-6">
+        <State loading={list.loading} error={list.error} />
+        {list.data && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {list.data.map((item) => (
+              <article key={item.id} className="rounded-xl bg-white p-5">
+                <div className="flex justify-between">
+                  <div>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                        item.active ? "bg-brand-100 text-brand-800" : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {item.active ? "Ativa" : "Inativa"}
+                    </span>
+                    <h3 className="mt-2 text-xl font-black">{item.name}</h3>
+                    <p className="text-sm font-bold text-brand-700">
+                      {item.city} — {item.state}
+                      {item.river_section ? ` · ${item.river_section}` : ""}
+                    </p>
+                  </div>
+                  <button onClick={() => setEditing(item)} className="rounded-lg border p-2">
+                    <Pencil className="size-4" />
+                  </button>
+                </div>
+                {item.description && (
+                  <p className="mt-3 text-xs text-ink-600 line-clamp-2">{item.description}</p>
+                )}
+                {item.amenities && item.amenities.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {item.amenities.map((a) => (
+                      <span key={a} className="rounded bg-ink-900/5 px-2 py-0.5 text-[11px] font-semibold text-ink-700">
+                        {a}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {item.meeting_point && (
+                  <p className="mt-3 border-t pt-2 text-xs text-ink-500">
+                    <strong>Encontro:</strong> {item.meeting_point}
+                  </p>
+                )}
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      {editing && (
+        <LodgeModal
+          token={token}
+          item={editing === "new" ? undefined : editing}
+          close={() => setEditing(null)}
+          saved={async () => {
+            setEditing(null);
+            await list.load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function LodgeModal({
+  token,
+  item,
+  close,
+  saved,
+}: {
+  token: string;
+  item?: Lodge;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    name: item?.name ?? "",
+    slug: item?.slug ?? "",
+    city: item?.city ?? "",
+    state: item?.state ?? "MT",
+    river_section: item?.river_section ?? "Médio Araguaia",
+    description: item?.description ?? "",
+    amenities: (item?.amenities ?? []).join(", "),
+    meeting_point: item?.meeting_point ?? "",
+    directions: item?.directions ?? "",
+    cover_image_url: item?.cover_image_url ?? "",
+    active: item?.active ?? true,
+  });
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      const body = {
+        ...form,
+        amenities: form.amenities
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      };
+      await request(item ? `lodges/${item.id}/` : "lodges/", token, {
+        method: item ? "PATCH" : "POST",
+        body: JSON.stringify(body),
+      });
+      await saved();
+    } catch (value) {
+      setError(errorMessage(value));
+    }
+  }
+
+  const input = (name: keyof typeof form, label: string) => (
+    <Field
+      label={label}
+      value={form[name] as string}
+      set={(value) => setForm({ ...form, [name]: value })}
+    />
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
+      <form onSubmit={submit} className="my-5 w-full max-w-2xl rounded-2xl bg-white p-6">
+        <div className="flex justify-between">
+          <h2 className="text-2xl font-black">{item ? "Editar pousada" : "Nova pousada"}</h2>
+          <button type="button" onClick={close}>
+            <X />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          {input("name", "Nome da pousada")}
+          {input("slug", "Identificador (slug)")}
+          {input("city", "Cidade")}
+          {input("state", "Estado (UF)")}
+          {input("river_section", "Trecho do rio")}
+          {input("cover_image_url", "URL da imagem de capa")}
+          <label className="text-xs font-bold sm:col-span-2">
+            Comodidades (separadas por vírgula)
+            <input
+              value={form.amenities}
+              onChange={(e) => setForm({ ...form, amenities: e.target.value })}
+              placeholder="Ex: Suítes Climatizadas, Piscina, Wi-Fi, Deck Flutuante"
+              className="mt-1 h-10 w-full rounded-lg border px-3"
+            />
+          </label>
+          <label className="text-xs font-bold sm:col-span-2">
+            Ponto de encontro
+            <input
+              value={form.meeting_point}
+              onChange={(e) => setForm({ ...form, meeting_point: e.target.value })}
+              placeholder="Ex: Pousada Solar das Águas — Recepção"
+              className="mt-1 h-10 w-full rounded-lg border px-3"
+            />
+          </label>
+          <label className="text-xs font-bold sm:col-span-2">
+            Descrição da pousada
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              className="mt-1 min-h-20 w-full rounded-lg border p-3"
+            />
+          </label>
+          <label className="text-xs font-bold sm:col-span-2">
+            Como chegar (direções)
+            <textarea
+              value={form.directions}
+              onChange={(e) => setForm({ ...form, directions: e.target.value })}
+              className="mt-1 min-h-16 w-full rounded-lg border p-3"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs font-bold sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+            />
+            Pousada ativa no sistema
+          </label>
+        </div>
+        {error && <p className="mt-3 text-red-700">{error}</p>}
+        <button className="mt-5 rounded-lg bg-brand-600 px-5 py-3 font-bold text-white">Salvar</button>
+      </form>
+    </div>
+  );
+}
 
 function ConfigurationPanel({ token, unauthorized }: { token:string; unauthorized:()=>void }) { const expeditions=useData<Expedition[]>("expeditions/",token,unauthorized); const [selected,setSelected]=useState(""); const selectedId=selected||expeditions.data?.[0]?.id||""; const config=useData<Configuration>(selectedId?`expeditions/${selectedId}/configuration/`:null,token,unauthorized); return <div><Header title="Configuração operacional" subtitle="Defina encontro, bebidas oferecidas e checklist." /><div className="mt-5"><ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data??[]} all={false}/></div><div className="mt-6"><State loading={config.loading} error={config.error}/>{config.data&&<ConfigEditor key={selectedId} expedition={expeditions.data?.find(value=>value.id===selectedId)} config={config.data} token={token} reload={config.load}/>}</div></div>; }
 function ConfigEditor({ expedition,config,token,reload }: { expedition?:Expedition; config:Configuration; token:string; reload:()=>Promise<void> }) { const [departure,setDeparture]=useState(config.departure_location??""); const [instructions,setInstructions]=useState(config.meeting_instructions??""); const [products,setProducts]=useState(config.products??[]); const [offers,setOffers]=useState(config.offers??[]); const [checklist,setChecklist]=useState(config.checklist_items??config.checklist??[]); const [message,setMessage]=useState(""); const locked=["IN_PROGRESS","COMPLETED"].includes(expedition?.status??""); async function save(){if(!expedition)return;try{await request(`expeditions/${expedition.id}/configuration/`,token,{method:"PUT",body:JSON.stringify({departure_location:departure,meeting_instructions:instructions,products,offers,checklist_items:checklist})});setMessage("Configuração salva.");await reload();}catch(value){setMessage(errorMessage(value));}} function updatePackage(productId:string,size:number){setProducts(products.map(product=>product.id===productId?{...product,package_size:size||null}:product))} return <div className="space-y-6">{locked&&<p className="rounded-lg bg-amber-50 p-4 font-bold">Configuração bloqueada após o início da expedição.</p>}<Box title="Encontro"><div className="grid gap-3 sm:grid-cols-2"><Field label="Local de saída" value={departure} set={setDeparture}/><Field label="Orientações de encontro" value={instructions} set={setInstructions}/></div></Box><section className="rounded-xl bg-white p-5"><div className="flex justify-between"><div><h3 className="font-black">Oferta de bebidas</h3><p className="text-sm text-ink-500">O viajante escolhe opções, sem informar unidades.</p></div><button disabled={locked} onClick={()=>setOffers([...offers,{product_id:"",standard_quantity_per_participant:1,display_order:offers.length+1,note:"",active:true}])} className="rounded-lg border px-3 text-sm font-bold"><Plus className="mr-1 inline size-4"/>Oferta</button></div>{offers.map((offer,index)=><div key={offer.id??index} className="mt-3 grid gap-3 rounded-lg border p-3 lg:grid-cols-[2fr_1fr_1fr_2fr_auto]"><label className="text-xs font-bold">Bebida<select value={offer.product_id} onChange={e=>setOffers(offers.map((value,i)=>i===index?{...value,product_id:e.target.value}:value))} className="mt-1 h-10 w-full rounded-lg border"><option value="">Selecione</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} ({product.unit})</option>)}</select></label><NumberField label="Padrão/pessoa" value={offer.standard_quantity_per_participant} set={number=>setOffers(offers.map((value,i)=>i===index?{...value,standard_quantity_per_participant:number}:value))}/><NumberField label="Por embalagem" value={products.find(product=>product.id===offer.product_id)?.package_size??0} set={number=>updatePackage(offer.product_id,number)}/><Field label="Observação" value={offer.note} set={note=>setOffers(offers.map((value,i)=>i===index?{...value,note}:value))}/><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={offer.active} onChange={e=>setOffers(offers.map((value,i)=>i===index?{...value,active:e.target.checked}:value))}/>Ativa</label></div>)}{!offers.length&&<Empty>Nenhuma bebida oferecida.</Empty>}</section><section className="rounded-xl bg-white p-5"><div className="flex justify-between"><h3 className="font-black">Checklist</h3><button disabled={locked} onClick={()=>setChecklist([...checklist,{title:"",description:"",required:true,active:true,display_order:checklist.length+1}])} className="rounded-lg border px-3 text-sm font-bold"><Plus className="mr-1 inline size-4"/>Item</button></div>{checklist.map((item,index)=><div key={item.id??index} className="mt-3 grid gap-3 rounded-lg border p-3 lg:grid-cols-[2fr_3fr_auto_auto]"><Field label="Título" value={item.title} set={title=>setChecklist(checklist.map((value,i)=>i===index?{...value,title}:value))}/><Field label="Orientação" value={item.description} set={description=>setChecklist(checklist.map((value,i)=>i===index?{...value,description}:value))}/><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={item.required} onChange={e=>setChecklist(checklist.map((value,i)=>i===index?{...value,required:e.target.checked}:value))}/>Obrigatório</label><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={item.active} onChange={e=>setChecklist(checklist.map((value,i)=>i===index?{...value,active:e.target.checked}:value))}/>Ativo</label></div>)}{!checklist.length&&<Empty>Nenhum item configurado.</Empty>}</section>{message&&<p className="rounded-lg bg-brand-50 p-3 font-bold">{message}</p>}<button disabled={locked} onClick={()=>void save()} className="rounded-lg bg-brand-600 px-5 py-3 font-bold text-white disabled:opacity-50">Salvar configuração</button></div>; }

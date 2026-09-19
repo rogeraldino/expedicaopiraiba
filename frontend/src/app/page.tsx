@@ -22,6 +22,29 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { ButtonLink } from "@/components/ui/button-link";
 
+type TargetSpecies = {
+  id: string;
+  common_name: string;
+  slug: string;
+  scientific_name?: string;
+  category: string;
+  is_primary: boolean;
+};
+
+type Lodge = {
+  id: string;
+  name: string;
+  slug: string;
+  city: string;
+  state: string;
+  river_section?: string;
+  description?: string;
+  amenities?: string[];
+  meeting_point?: string;
+  directions?: string;
+  cover_image_url?: string;
+};
+
 type Expedition = {
   id: string;
   name: string;
@@ -34,14 +57,70 @@ type Expedition = {
   available_slots: number;
   price_per_person_cents: number;
   summary: string;
+  cover_image_url?: string;
+  lodge?: Lodge | null;
+  target_species?: TargetSpecies[];
+  inclusions?: string[];
 };
 
+const defaultSpecies: TargetSpecies[] = [
+  { id: "1", common_name: "Piraíba", slug: "piraiba", category: "COURO", is_primary: true },
+  { id: "2", common_name: "Pirarara", slug: "pirarara", category: "COURO", is_primary: true },
+  { id: "3", common_name: "Bargada", slug: "bargada", category: "COURO", is_primary: false },
+];
+
 const preview: Expedition[] = [
+  {
+    id: "sao-felix-01-out",
+    name: "São Félix do Araguaia — 01 a 04 Out",
+    slug: "sao-felix-01-out",
+    destination: "São Félix do Araguaia/MT (Pousada Solar das Águas)",
+    departure_location: "São Félix do Araguaia/MT",
+    starts_at: "2026-10-01",
+    ends_at: "2026-10-04",
+    duration_days: 4,
+    available_slots: 12,
+    price_per_person_cents: 560000,
+    summary: "4 dias de pescaria completos All Inclusive no Rio Araguaia na Pousada Solar das Águas.",
+    cover_image_url: "/expeditions/ponte-sao-felix.jpg",
+    lodge: {
+      id: "solar-das-aguas",
+      name: "Pousada Solar das Águas",
+      slug: "solar-das-aguas",
+      city: "São Félix do Araguaia",
+      state: "MT",
+      river_section: "Médio Araguaia",
+    },
+    target_species: defaultSpecies,
+  },
+  {
+    id: "bandeirantes-15-out",
+    name: "Bandeirantes — 15 a 18 Out",
+    slug: "bandeirantes-15-out",
+    destination: "Bandeirantes/GO (Pousada Canaã)",
+    departure_location: "Bandeirantes/GO",
+    starts_at: "2026-10-15",
+    ends_at: "2026-10-18",
+    duration_days: 4,
+    available_slots: 12,
+    price_per_person_cents: 510000,
+    summary: "4 dias de pescaria de gigantes All Inclusive no Rio Araguaia na Pousada Canaã.",
+    cover_image_url: "/expeditions/bandeirantes-piraiba.jpg",
+    lodge: {
+      id: "pousada-canaa",
+      name: "Pousada Canaã",
+      slug: "pousada-canaa",
+      city: "Bandeirantes",
+      state: "GO",
+      river_section: "Alto-Médio Araguaia",
+    },
+    target_species: defaultSpecies,
+  },
   {
     id: "bandeirantes-casais-22-out",
     name: "Pescaria de Casais — 22 a 24 Out",
     slug: "bandeirantes-casais-22-out",
-    destination: "Bandeirantes/GO (Pousada Canoa)",
+    destination: "Bandeirantes/GO (Pousada Canaã)",
     departure_location: "Bandeirantes/GO",
     starts_at: "2026-10-22",
     ends_at: "2026-10-24",
@@ -49,6 +128,16 @@ const preview: Expedition[] = [
     available_slots: 12,
     price_per_person_cents: 420000,
     summary: "Momentos a dois e memórias para sempre. R$ 8.400 por casal.",
+    cover_image_url: "/expeditions/casais-pesca.jpg",
+    lodge: {
+      id: "pousada-canaa",
+      name: "Pousada Canaã",
+      slug: "pousada-canaa",
+      city: "Bandeirantes",
+      state: "GO",
+      river_section: "Alto-Médio Araguaia",
+    },
+    target_species: defaultSpecies,
   },
   {
     id: "sao-felix-28-out",
@@ -62,6 +151,16 @@ const preview: Expedition[] = [
     available_slots: 12,
     price_per_person_cents: 560000,
     summary: "Fechamento de temporada 2026 com chave de ouro em São Félix do Araguaia.",
+    cover_image_url: "/expeditions/por-do-sol-araguaia.jpg",
+    lodge: {
+      id: "solar-das-aguas",
+      name: "Pousada Solar das Águas",
+      slug: "solar-das-aguas",
+      city: "São Félix do Araguaia",
+      state: "MT",
+      river_section: "Médio Araguaia",
+    },
+    target_species: defaultSpecies,
   },
 ];
 
@@ -208,7 +307,7 @@ export default async function Home() {
         <div className="mt-8 grid gap-6 md:grid-cols-2 max-w-5xl">
           {expeditions.map((item) => {
             const isCasais = item.slug.includes("casais");
-            const imageSrc = expeditionImages[item.slug] || "/expeditions/duble-peixes.jpg";
+            const imageSrc = item.cover_image_url || expeditionImages[item.slug] || "/expeditions/duble-peixes.jpg";
 
             return (
               <article
@@ -222,6 +321,7 @@ export default async function Home() {
                     src={imageSrc}
                     alt={item.name}
                     fill
+                    unoptimized={imageSrc.startsWith("http")}
                     sizes="(min-width:1280px) 25vw, (min-width:768px) 50vw, 100vw"
                     className="object-cover"
                   />
@@ -235,7 +335,9 @@ export default async function Home() {
                     </span>
                   )}
                   <div className="absolute bottom-3 left-3 right-3 text-white">
-                    <p className="text-xs font-bold text-sand-300">{item.departure_location}</p>
+                    <p className="text-xs font-bold text-sand-300">
+                      {item.lodge ? `${item.lodge.name} · ${item.departure_location}` : item.departure_location}
+                    </p>
                     <h3 className="text-lg font-black leading-tight drop-shadow">{item.name}</h3>
                   </div>
                 </div>
@@ -243,12 +345,30 @@ export default async function Home() {
                 <div className="flex flex-1 flex-col p-5">
                   <p className="text-xs text-ink-600 line-clamp-2">{item.summary}</p>
 
+                  {item.target_species && item.target_species.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {item.target_species.slice(0, 3).map((species) => (
+                        <span
+                          key={species.slug}
+                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            species.is_primary
+                              ? "bg-brand-600 text-white"
+                              : "border border-brand-200 bg-brand-50 text-brand-800"
+                          }`}
+                        >
+                          <Fish className="size-2.5" />
+                          {species.common_name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="mt-4 space-y-2 border-y border-ink-900/10 py-3 text-xs text-ink-500">
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
                         <MapPin className="size-3.5 text-brand-600" /> Destino
                       </span>
-                      <strong className="text-ink-900">{item.destination.split(" (")[0]}</strong>
+                      <strong className="text-ink-900">{item.lodge?.name || item.destination.split(" (")[0]}</strong>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5">

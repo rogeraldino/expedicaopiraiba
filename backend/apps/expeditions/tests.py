@@ -75,3 +75,51 @@ class PublishedExpeditionApiTests(TestCase):
         self.assertEqual(self.expedition.status, Expedition.Status.CLOSED)
         with self.assertRaises(ValidationError):
             transition_expedition(expedition_id=self.expedition.id, target_status=Expedition.Status.COMPLETED)
+
+    def test_returns_lodge_species_and_media_in_public_endpoints(self):
+        from .models import Lodge, TargetSpecies, ExpeditionSpecies
+        lodge = Lodge.objects.create(
+            name="Pousada das Águas Teste",
+            city="São Félix",
+            state="MT",
+            river_section="Rio Araguaia",
+            amenities=["Wi-Fi", "Piscina"],
+            meeting_point="Aeroporto",
+            directions="Siga a rota",
+            cover_image_url="/test-lodge.jpg"
+        )
+        species1 = TargetSpecies.objects.create(slug="piraiba_teste", common_name="Piraíba Teste", category="COURO")
+        species2 = TargetSpecies.objects.create(slug="tucunare_teste", common_name="Tucunaré Teste", category="ESCAMA")
+        self.expedition.lodge = lodge
+        self.expedition.cover_image_url = "/test-cover.jpg"
+        self.expedition.gallery_image_urls = ["/test-1.jpg", "/test-2.jpg"]
+        self.expedition.inclusions = ["All Inclusive Teste"]
+        self.expedition.save()
+        ExpeditionSpecies.objects.create(expedition=self.expedition, species=species1, is_primary=True, display_order=0)
+        ExpeditionSpecies.objects.create(expedition=self.expedition, species=species2, is_primary=False, display_order=1)
+
+        # 1. /api/expeditions/
+        res = self.client.get("/api/expeditions/")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()[0]
+        self.assertEqual(data["cover_image_url"], "/test-cover.jpg")
+        self.assertEqual(data["inclusions"], ["All Inclusive Teste"])
+        self.assertEqual(data["lodge"]["name"], "Pousada das Águas Teste")
+        self.assertEqual(len(data["target_species"]), 2)
+        self.assertTrue(data["target_species"][0]["is_primary"])
+        self.assertEqual(data["target_species"][0]["slug"], "piraiba_teste")
+
+        # 2. /api/expeditions/{slug}/
+        res_detail = self.client.get(f"/api/expeditions/{self.expedition.slug}/")
+        self.assertEqual(res_detail.status_code, 200)
+        self.assertEqual(res_detail.json()["lodge"]["city"], "São Félix")
+
+        # 3. /api/lodges/
+        res_lodges = self.client.get("/api/lodges/")
+        self.assertEqual(res_lodges.status_code, 200)
+        self.assertTrue(any(l["slug"] == lodge.slug for l in res_lodges.json()))
+
+        # 4. /api/species/
+        res_species = self.client.get("/api/species/")
+        self.assertEqual(res_species.status_code, 200)
+        self.assertTrue(any(s["slug"] == "piraiba_teste" for s in res_species.json()))

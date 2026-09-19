@@ -2,24 +2,92 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from apps.expeditions.models import Expedition
+from apps.expeditions.models import Expedition, ExpeditionSpecies, Lodge, TargetSpecies
 from apps.expeditions.services import transition_expedition
 from apps.payments.models import Payment
 from apps.reservations.models import Reservation, ReservationEvent
+
+
+class OperationsLodgeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Lodge
+        fields = (
+            "id",
+            "name",
+            "slug",
+            "city",
+            "state",
+            "river_section",
+            "description",
+            "amenities",
+            "meeting_point",
+            "directions",
+            "cover_image_url",
+            "active",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = ("id", "slug", "created_at", "updated_at")
 
 
 class OperationsExpeditionSerializer(serializers.ModelSerializer):
     occupied_slots = serializers.IntegerField(read_only=True)
     available_slots = serializers.SerializerMethodField()
     duration_days = serializers.IntegerField(read_only=True)
+    lodge = OperationsLodgeSerializer(read_only=True)
+    lodge_id = serializers.PrimaryKeyRelatedField(
+        queryset=Lodge.objects.all(), source="lodge", required=False, allow_null=True
+    )
+    target_species = serializers.SerializerMethodField()
+    species_slugs = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
 
     class Meta:
         model = Expedition
-        fields = ("id", "name", "slug", "destination", "departure_location", "meeting_instructions", "starts_at", "ends_at", "duration_days", "capacity", "occupied_slots", "available_slots", "price_per_person_cents", "deposit_cents", "balance_due_days_before", "status", "summary", "created_at", "updated_at")
+        fields = (
+            "id",
+            "name",
+            "slug",
+            "destination",
+            "departure_location",
+            "meeting_instructions",
+            "starts_at",
+            "ends_at",
+            "duration_days",
+            "capacity",
+            "occupied_slots",
+            "available_slots",
+            "price_per_person_cents",
+            "deposit_cents",
+            "balance_due_days_before",
+            "status",
+            "summary",
+            "cover_image_url",
+            "gallery_image_urls",
+            "inclusions",
+            "lodge",
+            "lodge_id",
+            "target_species",
+            "species_slugs",
+            "created_at",
+            "updated_at",
+        )
         read_only_fields = ("id", "slug", "occupied_slots", "available_slots", "duration_days", "created_at", "updated_at")
 
     def get_available_slots(self, obj):
         return max(obj.capacity - getattr(obj, "occupied_slots", 0), 0)
+
+    def get_target_species(self, obj):
+        links = obj.expedition_species.select_related("species").order_by("-is_primary", "display_order")
+        return [
+            {
+                "slug": link.species.slug,
+                "common_name": link.species.common_name,
+                "category": link.species.category,
+                "is_primary": link.is_primary,
+            }
+            for link in links
+            if link.species.active
+        ]
 
     def validate(self, attrs):
         starts_at = attrs.get("starts_at", getattr(self.instance, "starts_at", None))
@@ -32,12 +100,35 @@ class OperationsExpeditionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"deposit_cents": "O sinal não pode superar o valor por pessoa."})
         return attrs
 
+    def _sync_species(self, expedition, slugs):
+        ExpeditionSpecies.objects.filter(expedition=expedition).delete()
+        for index, slug in enumerate(slugs):
+            sp = TargetSpecies.objects.filter(slug=slug, active=True).first()
+            if sp:
+                ExpeditionSpecies.objects.create(
+                    expedition=expedition,
+                    species=sp,
+                    is_primary=index == 0,
+                    display_order=index,
+                )
+
+    @transaction.atomic
+    def create(self, validated_data):
+        species_slugs = validated_data.pop("species_slugs", None)
+        instance = super().create(validated_data)
+        if species_slugs is not None:
+            self._sync_species(instance, species_slugs)
+        return instance
+
     @transaction.atomic
     def update(self, instance, validated_data):
+        species_slugs = validated_data.pop("species_slugs", None)
         target_status = validated_data.pop("status", instance.status)
         instance = super().update(instance, validated_data)
         if target_status != instance.status:
             instance = transition_expedition(expedition_id=instance.id, target_status=target_status)
+        if species_slugs is not None:
+            self._sync_species(instance, species_slugs)
         return instance
 
 

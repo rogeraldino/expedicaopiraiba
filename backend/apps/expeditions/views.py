@@ -1,14 +1,18 @@
 from rest_framework import generics
 
-from .models import Expedition
-from .serializers import ExpeditionSerializer
+from .models import Expedition, Lodge, TargetSpecies
+from .serializers import ExpeditionSerializer, LodgeSerializer, TargetSpeciesSerializer
 
 
 class PublishedExpeditionList(generics.ListAPIView):
     serializer_class = ExpeditionSerializer
 
     def get_queryset(self):
-        return Expedition.objects.filter(status=Expedition.Status.PUBLISHED).prefetch_related("reservations")
+        return (
+            Expedition.objects.filter(status=Expedition.Status.PUBLISHED)
+            .select_related("lodge")
+            .prefetch_related("reservations", "expedition_species__species")
+        )
 
 
 class PublishedExpeditionDetail(generics.RetrieveAPIView):
@@ -16,4 +20,22 @@ class PublishedExpeditionDetail(generics.RetrieveAPIView):
     lookup_field = "slug"
 
     def get_queryset(self):
-        return Expedition.objects.filter(status=Expedition.Status.PUBLISHED).prefetch_related("reservations")
+        return (
+            Expedition.objects.filter(status=Expedition.Status.PUBLISHED)
+            .select_related("lodge")
+            .prefetch_related("reservations", "expedition_species__species")
+        )
+
+
+class LodgeListView(generics.ListAPIView):
+    serializer_class = LodgeSerializer
+
+    def get_queryset(self):
+        return Lodge.objects.filter(active=True).order_by("name")
+
+
+class TargetSpeciesListView(generics.ListAPIView):
+    serializer_class = TargetSpeciesSerializer
+
+    def get_queryset(self):
+        return TargetSpecies.objects.filter(active=True).order_by("category", "common_name")
