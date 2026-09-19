@@ -231,43 +231,35 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
 
         <article className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-black uppercase text-brand-800">Peixes Gigantes do Rio Araguaia</h2>
-          <p className="mt-1 text-xs text-ink-500">Espécies-alvo desta expedição e principais capturas da região.</p>
+          <p className="mt-1 text-xs text-ink-500">Os maiores peixes de água doce do Brasil no seu anzol.</p>
           <div className="mt-5 flex flex-wrap gap-2.5">
-            {expedition.target_species && expedition.target_species.length > 0 ? (
-              expedition.target_species.map((species) => (
-                <span
-                  key={species.slug}
-                  className={`flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-black ${
-                    species.is_primary
-                      ? "bg-brand-600 text-white shadow-sm"
-                      : "border border-brand-200 bg-brand-50/80 text-brand-800"
-                  }`}
-                >
-                  <Fish className="size-3.5 text-current" />
-                  {species.common_name}
-                  {species.scientific_name && (
-                    <span className="text-[10px] font-normal italic opacity-85">({species.scientific_name})</span>
-                  )}
-                  {species.is_primary && (
-                    <span className="rounded bg-brand-800/70 px-1 text-[9px] uppercase tracking-wider text-sand-200">
-                      Alvo Principal
-                    </span>
-                  )}
-                </span>
-              ))
-            ) : (
-              ["Piraíba (+2m)", "Pirarara Lendária", "Bargada", "Tucunaré Azul", "Aruanã", "Dourada", "Mandubé", "Corvina", "Bicuda", "Cachorra", "Barbado", "Tambaqui", "Cachara", "Pintado"].map(
-                (name) => (
-                  <span
-                    key={name}
-                    className="flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50/80 px-3.5 py-1.5 text-xs font-black text-brand-800"
-                  >
-                    <Fish className="size-3.5 text-brand-600" />
-                    {name}
-                  </span>
-                )
-              )
-            )}
+            {(expedition.target_species && expedition.target_species.length > 0
+              ? expedition.target_species.map((s) => s.common_name)
+              : [
+                  "Piraíba (+2m)",
+                  "Pirarara Lendária",
+                  "Bargada",
+                  "Tucunaré Azul",
+                  "Aruanã",
+                  "Dourada",
+                  "Mandubé",
+                  "Corvina",
+                  "Bicuda",
+                  "Cachorra",
+                  "Barbado",
+                  "Tambaqui",
+                  "Cachara",
+                  "Pintado",
+                ]
+            ).map((name) => (
+              <span
+                key={name}
+                className="flex items-center gap-2 rounded-full border border-brand-200 bg-brand-50/80 px-3.5 py-1.5 text-xs font-black text-brand-800"
+              >
+                <Fish className="size-3.5 text-brand-600" />
+                {name}
+              </span>
+            ))}
           </div>
 
           <h3 className="mt-6 text-sm font-black uppercase text-brand-800 flex items-center gap-2">

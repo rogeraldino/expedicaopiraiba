@@ -1,11 +1,27 @@
 from django.db import transaction
 from django.utils import timezone
+from django.utils.text import slugify
 from rest_framework import serializers
 
 from apps.expeditions.models import Expedition, ExpeditionSpecies, Lodge, TargetSpecies
 from apps.expeditions.services import transition_expedition
 from apps.payments.models import Payment
 from apps.reservations.models import Reservation, ReservationEvent
+
+
+class OperationsSpeciesSerializer(serializers.ModelSerializer):
+    slug = serializers.CharField(max_length=60, required=False)
+
+    class Meta:
+        model = TargetSpecies
+        fields = ("slug", "common_name", "scientific_name", "category", "active")
+
+    def create(self, validated_data):
+        if not validated_data.get("slug"):
+            validated_data["slug"] = slugify(validated_data.get("common_name", ""))
+        else:
+            validated_data["slug"] = slugify(validated_data["slug"])
+        return super().create(validated_data)
 
 
 class OperationsLodgeSerializer(serializers.ModelSerializer):
@@ -118,6 +134,10 @@ class OperationsExpeditionSerializer(serializers.ModelSerializer):
         instance = super().create(validated_data)
         if species_slugs is not None:
             self._sync_species(instance, species_slugs)
+        else:
+            default_slugs = list(TargetSpecies.objects.filter(active=True).values_list("slug", flat=True))
+            if default_slugs:
+                self._sync_species(instance, default_slugs)
         return instance
 
     @transaction.atomic

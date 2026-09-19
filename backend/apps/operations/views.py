@@ -25,6 +25,7 @@ from .serializers import (
     OperationsExpeditionSerializer,
     OperationsLodgeSerializer,
     OperationsReservationSerializer,
+    OperationsSpeciesSerializer,
     ParticipantUpdateSerializer,
 )
 
@@ -293,12 +294,21 @@ class LodgeDetailView(generics.RetrieveUpdateAPIView):
     queryset = Lodge.objects.all()
 
 
-class SpeciesListView(OperationsView):
-    def get(self, request):
-        return Response([
-            {"slug": s.slug, "common_name": s.common_name, "scientific_name": s.scientific_name, "category": s.category}
-            for s in TargetSpecies.objects.filter(active=True).order_by("category", "common_name")
-        ])
+class SpeciesListCreateView(generics.ListCreateAPIView):
+    authentication_classes = [OperationsAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OperationsSpeciesSerializer
+
+    def get_queryset(self):
+        return TargetSpecies.objects.all().order_by("category", "common_name")
+
+
+class SpeciesDetailView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = [OperationsAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = OperationsSpeciesSerializer
+    queryset = TargetSpecies.objects.all()
+    lookup_field = "slug"
 
 
 class ReservationDetailView(OperationsView):

@@ -33,14 +33,41 @@ LODGES = [
 ]
 
 SPECIES = [
-    {"slug": "piraiba", "common_name": "Piraíba", "scientific_name": "Brachyplatystoma filamentosum", "category": "COURO"},
-    {"slug": "pirarara", "common_name": "Pirarara", "scientific_name": "Phractocephalus hemioliopterus", "category": "COURO"},
-    {"slug": "filhote_bargada", "common_name": "Filhote / Bargada", "scientific_name": "Brachyplatystoma rousseauxii", "category": "COURO"},
-    {"slug": "barbado", "common_name": "Barbado", "scientific_name": "Pinirampus pirinampu", "category": "COURO"},
-    {"slug": "jau", "common_name": "Jaú", "scientific_name": "Paulicea luetkeni", "category": "COURO"},
-    {"slug": "tucunare", "common_name": "Tucunaré", "scientific_name": "Cichla spp.", "category": "ESCAMA"},
-    {"slug": "apapa", "common_name": "Apapá", "scientific_name": "Pellona castelnaeana", "category": "ESCAMA"},
+    {"slug": "piraiba", "common_name": "Piraíba (+2m)", "scientific_name": "Brachyplatystoma filamentosum", "category": "COURO"},
+    {"slug": "pirarara", "common_name": "Pirarara Lendária", "scientific_name": "Phractocephalus hemioliopterus", "category": "COURO"},
+    {"slug": "bargada", "common_name": "Bargada", "scientific_name": "Brachyplatystoma rousseauxii", "category": "COURO"},
+    {"slug": "tucunare", "common_name": "Tucunaré Azul", "scientific_name": "Cichla piquiti", "category": "ESCAMA"},
+    {"slug": "aruana", "common_name": "Aruanã", "scientific_name": "Osteoglossum bicirrhosum", "category": "ESCAMA"},
+    {"slug": "dourada", "common_name": "Dourada", "scientific_name": "Brachyplatystoma flavicans", "category": "COURO"},
+    {"slug": "mandube", "common_name": "Mandubé", "scientific_name": "Ageneiosus inermis", "category": "COURO"},
+    {"slug": "corvina", "common_name": "Corvina", "scientific_name": "Plagioscion squamosissimus", "category": "ESCAMA"},
     {"slug": "bicuda", "common_name": "Bicuda", "scientific_name": "Boulengerella cuvieri", "category": "ESCAMA"},
+    {"slug": "cachorra", "common_name": "Cachorra", "scientific_name": "Hydrolycus armatus", "category": "ESCAMA"},
+    {"slug": "barbado", "common_name": "Barbado", "scientific_name": "Pinirampus pirinampu", "category": "COURO"},
+    {"slug": "tambaqui", "common_name": "Tambaqui", "scientific_name": "Colossoma macropomum", "category": "ESCAMA"},
+    {"slug": "cachara", "common_name": "Cachara", "scientific_name": "Pseudoplatystoma fasciatum", "category": "COURO"},
+    {"slug": "pintado", "common_name": "Pintado", "scientific_name": "Pseudoplatystoma corruscans", "category": "COURO"},
+    {"slug": "jau", "common_name": "Jaú Gigante", "scientific_name": "Paulicea luetkeni", "category": "COURO"},
+    {"slug": "apapa", "common_name": "Apapá", "scientific_name": "Pellona castelnaeana", "category": "ESCAMA"},
+]
+
+ARAGUAIA_DEFAULT_SPECIES_KEYS = [
+    "piraiba",
+    "pirarara",
+    "bargada",
+    "tucunare",
+    "aruana",
+    "dourada",
+    "mandube",
+    "corvina",
+    "bicuda",
+    "cachorra",
+    "barbado",
+    "tambaqui",
+    "cachara",
+    "pintado",
+    "jau",
+    "apapa",
 ]
 
 DEFAULT_INCLUSIONS = [
@@ -85,7 +112,7 @@ class Command(BaseCommand):
                 "lodge": lodges_map["pousada-solar-das-aguas"],
                 "cover_image_url": "/expeditions/ponte-sao-felix.jpg",
                 "inclusions": DEFAULT_INCLUSIONS,
-                "species": ["piraiba", "pirarara", "filhote_bargada"],
+                "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
             {
                 "slug": "bandeirantes-15-out",
@@ -102,7 +129,7 @@ class Command(BaseCommand):
                 "lodge": lodges_map["pousada-canaa"],
                 "cover_image_url": "/expeditions/bandeirantes-piraiba.jpg",
                 "inclusions": DEFAULT_INCLUSIONS,
-                "species": ["piraiba", "pirarara", "filhote_bargada"],
+                "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
             {
                 "slug": "bandeirantes-casais-22-out",
@@ -119,7 +146,7 @@ class Command(BaseCommand):
                 "lodge": lodges_map["pousada-canaa"],
                 "cover_image_url": "/expeditions/casais-pesca.jpg",
                 "inclusions": DEFAULT_INCLUSIONS,
-                "species": ["pirarara", "tucunare", "apapa"],
+                "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
             {
                 "slug": "sao-felix-28-out",
@@ -136,7 +163,7 @@ class Command(BaseCommand):
                 "lodge": lodges_map["pousada-solar-das-aguas"],
                 "cover_image_url": "/expeditions/por-do-sol-araguaia.jpg",
                 "inclusions": DEFAULT_INCLUSIONS,
-                "species": ["piraiba", "pirarara", "filhote_bargada"],
+                "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
             {
                 "slug": "rio-araguaia",
@@ -153,7 +180,7 @@ class Command(BaseCommand):
                 "lodge": lodges_map["pousada-solar-das-aguas"],
                 "cover_image_url": "/expeditions/barco-araguaia.jpg",
                 "inclusions": DEFAULT_INCLUSIONS,
-                "species": ["piraiba", "pirarara"],
+                "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
         ]
 
@@ -161,6 +188,7 @@ class Command(BaseCommand):
             slug = item.pop("slug")
             species_keys = item.pop("species", [])
             expedition, created = Expedition.objects.update_or_create(slug=slug, defaults=item)
+            ExpeditionSpecies.objects.filter(expedition=expedition).delete()
             for idx, sp_key in enumerate(species_keys):
                 sp = species_map.get(sp_key)
                 if sp:

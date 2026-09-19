@@ -6,9 +6,9 @@ import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 
 import { AlertTriangle, BarChart3, CalendarDays, Check, Copy, Download, ExternalLink, FileText, Fish, House, ListChecks, LogOut, Menu, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, TicketCheck, X } from "lucide-react";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
-type Section = "overview" | "reservations" | "expeditions" | "lodges" | "manifest" | "configuration" | "shopping";
+type Section = "overview" | "reservations" | "expeditions" | "lodges" | "species" | "manifest" | "configuration" | "shopping";
 type Lodge = { id: string; name: string; slug: string; city: string; state: string; river_section?: string; description?: string; amenities?: string[]; meeting_point?: string; directions?: string; cover_image_url?: string; active: boolean };
-type Species = { id: string; common_name: string; slug: string; scientific_name?: string; category: string; active: boolean };
+type Species = { id?: string; common_name: string; slug: string; scientific_name?: string; category: string; active?: boolean };
 type Expedition = { id: string; name: string; slug: string; destination: string; departure_location?: string; starts_at: string; ends_at: string; capacity: number; occupied_slots: number; available_slots: number; price_per_person_cents: number; deposit_cents: number; balance_due_days_before: number; status: string; summary: string; lodge?: Lodge | null; lodge_id?: string | null; cover_image_url?: string; target_species?: (Species & { is_primary?: boolean })[]; species_slugs?: string[]; inclusions?: string[] };
 type Participant = { id: string; name: string; cpf?: string; phone: string; birth_date?: string | null; emergency_contact_name?: string; emergency_contact_phone?: string; operational_notes?: string; onboarding_status: string; preferences_confirmed?: boolean; dietary_confirmed?: boolean; checklist_completed?: boolean; selected_offers?: { id: string; name: string }[]; dietary_restrictions?: string[]; dietary_details?: string };
 type OperationalAlert = { id?: string; type?: string; level?: string; title?: string; message: string; reservation_id?: string; expedition_id?: string };
@@ -44,11 +44,11 @@ export function AdminPanel() {
   const logout = useCallback(() => { sessionStorage.removeItem("operations-token"); setToken(null); }, []);
   if (!ready) return <div className="min-h-screen bg-brand-900" />;
   if (!token) return <Login onLogin={value => { sessionStorage.setItem("operations-token", value); setToken(value); }} />;
-  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["manifest", "Manifesto", FileText], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
+  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["species", "Catálogo de Peixes", Fish], ["manifest", "Manifesto", FileText], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
   return <div className="min-h-screen bg-[#f4f6f2] lg:grid lg:grid-cols-[260px_1fr]">
     <aside className={`fixed inset-y-0 left-0 z-40 w-[260px] bg-brand-900 text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${menu ? "translate-x-0" : "-translate-x-full"}`}><div className="flex h-full flex-col p-5"><div className="flex items-center gap-3 border-b border-white/10 pb-5"><Image src="/brand/logo-expedicao-piraiba.png" alt="" width={48} height={48} className="size-12 rounded-full" /><div><strong className="block text-sm">EXPEDIÇÃO PIRAÍBA</strong><span className="text-[10px] tracking-[.2em] text-white/60">PAINEL OPERACIONAL</span></div><button aria-label="Fechar menu" onClick={() => setMenu(false)} className="ml-auto lg:hidden"><X /></button></div><nav className="mt-6 space-y-2">{nav.map(([value,label,Icon]) => <button key={value} onClick={() => { setSection(value); setMenu(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold ${section === value ? "bg-white text-brand-900" : "text-white/75 hover:bg-white/10"}`}><Icon className="size-5" />{label}</button>)}</nav><Link href="/" className="mt-auto flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><Fish className="size-5" />Ver site</Link><button onClick={logout} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><LogOut className="size-5" />Sair</button></div></aside>
     {menu && <button aria-label="Fechar menu" className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMenu(false)} />}
-    <main className="min-w-0"><header className="flex min-h-16 items-center border-b bg-white px-5 lg:px-8"><button aria-label="Abrir menu" onClick={() => setMenu(true)} className="mr-4 lg:hidden"><Menu /></button><div><p className="text-xs font-bold uppercase tracking-widest text-brand-600">Área administrativa</p><h1 className="text-xl font-black">{nav.find(item => item[0] === section)?.[1]}</h1></div><div className="ml-auto flex items-center gap-2 text-sm text-ink-500"><ShieldCheck className="size-5 text-brand-600" /><span className="hidden sm:inline">Sessão protegida</span></div></header><div className="p-5 lg:p-8">{section === "overview" && <OverviewPanel token={token} unauthorized={logout} go={setSection} />}{section === "reservations" && <ReservationsPanel token={token} unauthorized={logout} />}{section === "expeditions" && <ExpeditionsPanel token={token} unauthorized={logout} />}{section === "lodges" && <LodgesPanel token={token} unauthorized={logout} />}{section === "manifest" && <ManifestPanel token={token} unauthorized={logout} />}{section === "configuration" && <ConfigurationPanel token={token} unauthorized={logout} />}{section === "shopping" && <ShoppingPanel token={token} unauthorized={logout} />}</div></main>
+    <main className="min-w-0"><header className="flex min-h-16 items-center border-b bg-white px-5 lg:px-8"><button aria-label="Abrir menu" onClick={() => setMenu(true)} className="mr-4 lg:hidden"><Menu /></button><div><p className="text-xs font-bold uppercase tracking-widest text-brand-600">Área administrativa</p><h1 className="text-xl font-black">{nav.find(item => item[0] === section)?.[1]}</h1></div><div className="ml-auto flex items-center gap-2 text-sm text-ink-500"><ShieldCheck className="size-5 text-brand-600" /><span className="hidden sm:inline">Sessão protegida</span></div></header><div className="p-5 lg:p-8">{section === "overview" && <OverviewPanel token={token} unauthorized={logout} go={setSection} />}{section === "reservations" && <ReservationsPanel token={token} unauthorized={logout} />}{section === "expeditions" && <ExpeditionsPanel token={token} unauthorized={logout} />}{section === "lodges" && <LodgesPanel token={token} unauthorized={logout} />}{section === "species" && <SpeciesPanel token={token} unauthorized={logout} />}{section === "manifest" && <ManifestPanel token={token} unauthorized={logout} />}{section === "configuration" && <ConfigurationPanel token={token} unauthorized={logout} />}{section === "shopping" && <ShoppingPanel token={token} unauthorized={logout} />}</div></main>
   </div>;
 }
 
@@ -937,8 +937,14 @@ function ExpeditionModal({
   });
 
   const [selectedSpecies, setSelectedSpecies] = useState<string[]>(
-    item?.target_species?.map((s) => s.slug) ?? item?.species_slugs ?? ["piraiba", "pirarara", "bargada"]
+    item?.target_species?.map((s) => s.slug) ?? item?.species_slugs ?? []
   );
+
+  useEffect(() => {
+    if (!item && selectedSpecies.length === 0 && speciesList.data && speciesList.data.length > 0) {
+      setSelectedSpecies(speciesList.data.map((s) => s.slug));
+    }
+  }, [item, speciesList.data]);
   const [error, setError] = useState("");
 
   const onLodgeChange = (lodgeId: string) => {
@@ -1047,15 +1053,34 @@ function ExpeditionModal({
             />
           </label>
           <div className="sm:col-span-2">
-            <span className="text-xs font-bold">Espécies-alvo da expedição</span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold">Espécies presentes nesta expedição</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSpecies(speciesList.data?.map((s) => s.slug) ?? [])}
+                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                >
+                  Selecionar todas (Padrão Araguaia)
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSpecies([])}
+                  className="text-[11px] font-bold text-ink-500 hover:underline"
+                >
+                  Limpar
+                </button>
+              </div>
+            </div>
             <div className="mt-2 flex flex-wrap gap-2">
               {speciesList.data?.map((s) => (
                 <label
                   key={s.slug}
                   className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
                     selectedSpecies.includes(s.slug)
-                      ? "border-brand-600 bg-brand-50 text-brand-800"
-                      : "border-ink-900/10 text-ink-600"
+                      ? "border-brand-600 bg-brand-50 text-brand-800 shadow-sm"
+                      : "border-ink-900/10 text-ink-600 hover:bg-gray-50"
                   }`}
                 >
                   <input
@@ -1283,6 +1308,181 @@ function LodgeModal({
         </div>
         {error && <p className="mt-3 text-red-700">{error}</p>}
         <button className="mt-5 rounded-lg bg-brand-600 px-5 py-3 font-bold text-white">Salvar</button>
+      </form>
+    </div>
+  );
+}
+
+function SpeciesPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
+  const list = useData<Species[]>("species/", token, unauthorized);
+  const [editing, setEditing] = useState<Species | "new" | null>(null);
+
+  return (
+    <div>
+      <Header
+        title="Catálogo de Peixes do Bioma"
+        subtitle="Gerencie as espécies nativas, categorias (Couro/Escama) e status para seleção nas expedições."
+        action={
+          <button
+            onClick={() => setEditing("new")}
+            className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-brand-700"
+          >
+            <Plus className="mr-2 inline size-4" />
+            Novo peixe
+          </button>
+        }
+      />
+      <div className="mt-6">
+        <State loading={list.loading} error={list.error} />
+        {list.data && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {list.data.map((item) => (
+              <article key={item.slug} className="rounded-xl border border-ink-900/10 bg-white p-5 shadow-sm transition hover:shadow">
+                <div className="flex items-start justify-between">
+                  <div className="flex flex-wrap gap-1.5">
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                        item.active !== false ? "bg-brand-100 text-brand-800" : "bg-gray-100 text-gray-700"
+                      }`}
+                    >
+                      {item.active !== false ? "Ativo" : "Inativo"}
+                    </span>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                        item.category === "COURO" ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
+                      }`}
+                    >
+                      {item.category === "COURO" ? "Peixe de Couro" : "Peixe de Escama"}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setEditing(item)}
+                    className="rounded-lg border p-1.5 text-ink-600 hover:bg-gray-50"
+                    title="Editar peixe"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-50 text-brand-700">
+                    <Fish className="size-4" />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-black text-ink-900 leading-snug">{item.common_name}</h3>
+                    {item.scientific_name && (
+                      <p className="text-xs italic text-ink-500">{item.scientific_name}</p>
+                    )}
+                  </div>
+                </div>
+                <p className="mt-3 border-t pt-2 text-[10px] font-mono text-ink-400">slug: {item.slug}</p>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+      {editing && (
+        <SpeciesModal
+          token={token}
+          item={editing === "new" ? undefined : editing}
+          close={() => setEditing(null)}
+          saved={async () => {
+            setEditing(null);
+            await list.load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SpeciesModal({
+  token,
+  item,
+  close,
+  saved,
+}: {
+  token: string;
+  item?: Species;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    common_name: item?.common_name ?? "",
+    slug: item?.slug ?? "",
+    scientific_name: item?.scientific_name ?? "",
+    category: item?.category ?? "COURO",
+    active: item?.active ?? true,
+  });
+  const [error, setError] = useState("");
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await request(item ? `species/${item.slug}/` : "species/", token, {
+        method: item ? "PATCH" : "POST",
+        body: JSON.stringify(form),
+      });
+      await saved();
+    } catch (value) {
+      setError(errorMessage(value));
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
+      <form onSubmit={submit} className="my-5 w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex justify-between items-center">
+          <h2 className="text-xl font-black">{item ? "Editar peixe" : "Novo peixe no catálogo"}</h2>
+          <button type="button" onClick={close} className="rounded-lg p-1 text-ink-500 hover:bg-gray-100">
+            <X className="size-5" />
+          </button>
+        </div>
+        <div className="mt-5 grid gap-4">
+          <Field
+            label="Nome popular (ex: Piraíba (+2m), Pirarara Lendária, Bargada)"
+            value={form.common_name}
+            set={(value) => setForm({ ...form, common_name: value })}
+          />
+          <Field
+            label="Identificador (slug) — Deixe vazio para gerar automaticamente"
+            value={form.slug}
+            set={(value) => setForm({ ...form, slug: value })}
+          />
+          <Field
+            label="Nome científico (opcional, ex: Brachyplatystoma filamentosum)"
+            value={form.scientific_name}
+            set={(value) => setForm({ ...form, scientific_name: value })}
+          />
+          <label className="text-xs font-bold">
+            Categoria da espécie
+            <select
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-semibold"
+            >
+              <option value="COURO">Peixe de Couro</option>
+              <option value="ESCAMA">Peixe de Escama</option>
+            </select>
+          </label>
+          <label className="flex items-center gap-2 text-xs font-bold text-ink-800">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+              className="size-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+            />
+            Peixe ativo no catálogo para expedições
+          </label>
+        </div>
+        {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
+        <div className="mt-6 flex justify-end gap-3">
+          <button type="button" onClick={close} className="rounded-lg border px-4 py-2 text-sm font-bold">
+            Cancelar
+          </button>
+          <button type="submit" className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold text-white shadow hover:bg-brand-700">
+            {item ? "Salvar alterações" : "Cadastrar peixe"}
+          </button>
+        </div>
       </form>
     </div>
   );

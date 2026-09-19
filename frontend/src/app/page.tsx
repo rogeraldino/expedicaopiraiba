@@ -345,24 +345,6 @@ export default async function Home() {
                 <div className="flex flex-1 flex-col p-5">
                   <p className="text-xs text-ink-600 line-clamp-2">{item.summary}</p>
 
-                  {item.target_species && item.target_species.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {item.target_species.slice(0, 3).map((species) => (
-                        <span
-                          key={species.slug}
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            species.is_primary
-                              ? "bg-brand-600 text-white"
-                              : "border border-brand-200 bg-brand-50 text-brand-800"
-                          }`}
-                        >
-                          <Fish className="size-2.5" />
-                          {species.common_name}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-
                   <div className="mt-4 space-y-2 border-y border-ink-900/10 py-3 text-xs text-ink-500">
                     <div className="flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
