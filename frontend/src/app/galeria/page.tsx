@@ -8,7 +8,7 @@ import { SiteHeader } from "@/components/layout/site-header";
 const photos = [
   { src: "img-20260723-wa0173.jpg", title: "Pescaria de Casais — Troféu Araguaia", desc: "Casal celebrando a captura de uma gigante no Araguaia. Experiência inesquecível a dois." },
   { src: "rogerio-e-uli-piraiba-206-1.jpg", title: "Piraíba de 2,06m — Rogério e Uli", desc: "Gigante lendária de mais de 2 metros fisgada e manejada com respeito no poço das piraíbas." },
-  { src: "tetel-e-a-piraiba-top.jpg", title: "Piraíba Gigante — Tetel", desc: "Batalha emocionante no Araguaia com um dos maiores troféus da temporada." },
+  { src: "img-20250417-wa0027.jpg", title: "Pirarara Monstro no Barranco", desc: "Batalha emocionante no Araguaia contra uma das maiores pirararas da temporada." },
   { src: "wender-piraiba-186-3.jpg", title: "Piraíba de 1,86m — Wender", desc: "Troféu embarcado em Bandeirantes após mais de uma hora de pura adrenalina." },
   { src: "trible-de-pirararas-3.jpg", title: "Triplê Histórico de Pirararas", desc: "Três pescadores com três pirararas gigantes capturadas simultaneamente na mesma ação." },
   { src: "duble-de-piraiba-e-pirarara-top-1.jpg", title: "Dublê Épico de Piraíba e Pirarara", desc: "A magia do Rio Araguaia: dois gigantes de espécies nobres no mesmo momento." },

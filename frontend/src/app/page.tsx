@@ -38,32 +38,6 @@ type Expedition = {
 
 const preview: Expedition[] = [
   {
-    id: "sao-felix-01-out",
-    name: "São Félix do Araguaia — 01 a 04 Out",
-    slug: "sao-felix-01-out",
-    destination: "São Félix do Araguaia/MT (Pousada Solar das Águas)",
-    departure_location: "São Félix do Araguaia/MT",
-    starts_at: "2026-10-01",
-    ends_at: "2026-10-04",
-    duration_days: 4,
-    available_slots: 12,
-    price_per_person_cents: 560000,
-    summary: "4 dias de pescaria completos All Inclusive no Rio Araguaia na Pousada Solar das Águas.",
-  },
-  {
-    id: "bandeirantes-15-out",
-    name: "Bandeirantes — 15 a 18 Out",
-    slug: "bandeirantes-15-out",
-    destination: "Bandeirantes/GO (Pousada Canoa)",
-    departure_location: "Bandeirantes/GO",
-    starts_at: "2026-10-15",
-    ends_at: "2026-10-18",
-    duration_days: 4,
-    available_slots: 12,
-    price_per_person_cents: 510000,
-    summary: "4 dias de pescaria de gigantes All Inclusive no Rio Araguaia na Pousada Canoa.",
-  },
-  {
     id: "bandeirantes-casais-22-out",
     name: "Pescaria de Casais — 22 a 24 Out",
     slug: "bandeirantes-casais-22-out",
@@ -120,7 +94,7 @@ const gallery = [
   ["trible-de-pirararas-3.jpg", "Triplê Histórico de Pirararas"],
   ["duble-de-piraiba-e-pirarara-top-1.jpg", "Dublê de Piraíba e Pirarara"],
   ["img-20260723-wa0173.jpg", "Troféu Pescaria de Casais"],
-  ["tetel-e-a-piraiba-top.jpg", "Piraíba Gigante do Tetel"],
+  ["img-20250417-wa0027.jpg", "Pirarara Monstro no Barranco"],
   ["img-20260723-wa0169.jpg", "Pirarara Gigante na Praia"],
   ["img-20260723-wa0170.jpg", "Pirarara Vermelha no Barco"],
   ["img-20260723-wa0198.jpg", "Piraíba Prateada do Araguaia"],
@@ -220,7 +194,7 @@ export default async function Home() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-600">Calendário Oficial 2026</p>
             <h2 className="mt-2 text-3xl font-black leading-tight sm:text-4xl text-brand-900">
-              Quatro Destinos. Experiências Inesquecíveis.
+              Expedições Confirmadas 2026. Experiências Inesquecíveis.
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-ink-600">
               Pescaria de alta performance para fechar o ano com chave de ouro no Rio Araguaia. Escolha sua data e garanta sua vaga.
@@ -231,7 +205,7 @@ export default async function Home() {
           </span>
         </div>
 
-        <div className="mt-8 grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-8 grid gap-6 md:grid-cols-2 max-w-5xl">
           {expeditions.map((item) => {
             const isCasais = item.slug.includes("casais");
             const imageSrc = expeditionImages[item.slug] || "/expeditions/duble-peixes.jpg";

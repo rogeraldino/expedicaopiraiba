@@ -10,11 +10,9 @@
 1. **Home & Vitrine Oficial (`/`):**
    - **Branding Real:** *"Há mais de 20 anos mostrando o que existe de melhor na pesca esportiva de gigantes"*.
    - **Os 4 Pilares da Marca:** Enfrentar Gigantes, Batalhas Inesquecíveis, Gastronomia no Rio, Torneio com Troféus.
-   - **Grade 2026 Completa (4 Expedições Oficiais):**
-     1. `São Félix do Araguaia — 01 a 04 Out` (Pousada Solar das Águas) — R$ 5.600/pessoa
-     2. `Bandeirantes — 15 a 18 Out` (Pousada Canoa) — R$ 5.100/pessoa
-     3. `Pescaria de Casais — 22 a 24 Out` (Pousada Canoa) — R$ 8.400/casal
-     4. `São Félix do Araguaia — 28 a 31 Out` (Pousada Solar das Águas) — R$ 5.600/pessoa
+   - **Grade 2026 Oficial:**
+     1. `Pescaria de Casais — 22 a 24 Out` (Pousada Canoa) — R$ 8.400/casal
+     2. `São Félix do Araguaia — 28 a 31 Out` (Pousada Solar das Águas) — R$ 5.600/pessoa
    - **Detalhamento All Inclusive:** Hospedagem, combustível 100% incluso, guias nativos, iscas, kit ceviche/sashimi, open bar (Heineken, Original, Amstel), rádio VHF e torneio entre duplas.
    - **Grade 2027 (São Félix do Araguaia):** 8 datas confirmadas de Abril a Outubro com botão de lista de espera.
    - **Contatos Oficiais:** WhatsApp `(62) 9 8161-2128` e Instagram `@expedicaopiraiba`.
