@@ -166,7 +166,26 @@ class OperationsReservationSerializer(serializers.ModelSerializer):
 
     def get_participants(self, obj):
         required = set(obj.expedition.checklist_items.filter(active=True, required=True).values_list("id", flat=True))
-        return [{"id": str(item.id), "name": item.full_name, "phone": item.phone, "onboarding_status": item.onboarding_status, "preferences_confirmed": bool(item.product_choices_confirmed_at), "dietary_confirmed": bool(item.dietary_confirmed_at), "checklist_completed": required.issubset(set(item.checklist_completions.filter(completed=True).values_list("item_id", flat=True))), "selected_offers": [{"id": str(c.expedition_product_id), "name": c.expedition_product.product.name} for c in item.product_choices.all() if c.selected], "dietary_restrictions": [x.restriction.name for x in item.dietary_restrictions.all()], "dietary_details": item.dietary_details} for item in obj.participants.all()]
+        return [
+            {
+                "id": str(item.id),
+                "name": item.full_name,
+                "cpf": item.cpf,
+                "phone": item.phone,
+                "birth_date": item.birth_date,
+                "emergency_contact_name": item.emergency_contact_name,
+                "emergency_contact_phone": item.emergency_contact_phone,
+                "operational_notes": item.operational_notes,
+                "onboarding_status": item.onboarding_status,
+                "preferences_confirmed": bool(item.product_choices_confirmed_at),
+                "dietary_confirmed": bool(item.dietary_confirmed_at),
+                "checklist_completed": required.issubset(set(item.checklist_completions.filter(completed=True).values_list("item_id", flat=True))),
+                "selected_offers": [{"id": str(c.expedition_product_id), "name": c.expedition_product.product.name} for c in item.product_choices.all() if c.selected],
+                "dietary_restrictions": [x.restriction.name for x in item.dietary_restrictions.all()],
+                "dietary_details": item.dietary_details,
+            }
+            for item in obj.participants.all()
+        ]
 
     def get_alerts(self, obj):
         participants = list(obj.participants.all())
@@ -177,3 +196,48 @@ class OperationsReservationSerializer(serializers.ModelSerializer):
         required = set(obj.expedition.checklist_items.filter(active=True, required=True).values_list("id", flat=True))
         if required and any(not required.issubset(set(p.checklist_completions.filter(completed=True).values_list("item_id", flat=True))) for p in participants): alerts.append("Há checklist obrigatório pendente.")
         return alerts
+
+
+class ManualReservationSerializer(serializers.Serializer):
+    expedition_id = serializers.UUIDField()
+    customer_name = serializers.CharField(max_length=160)
+    customer_cpf = serializers.CharField(max_length=20)
+    customer_email = serializers.EmailField()
+    customer_phone = serializers.CharField(max_length=30)
+    spots_count = serializers.IntegerField(min_value=1, max_value=12)
+    status = serializers.ChoiceField(choices=["HELD", "CONFIRMED"], default="CONFIRMED")
+    hold_hours = serializers.IntegerField(min_value=1, max_value=72, default=24, required=False)
+    payment_type = serializers.ChoiceField(choices=["FULL", "DEPOSIT", "NONE"], default="DEPOSIT", required=False)
+    payment_amount_cents = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    participant_names = serializers.ListField(child=serializers.CharField(max_length=160), required=False, default=list)
+    reason = serializers.CharField(max_length=500)
+
+    def validate_customer_cpf(self, value):
+        digits = "".join(c for c in value if c.isdigit())
+        if len(digits) != 11:
+            raise serializers.ValidationError("O CPF deve conter exatamente 11 dígitos numéricos.")
+        if len(set(digits)) == 1:
+            raise serializers.ValidationError("CPF inválido.")
+        return digits
+
+    def validate(self, attrs):
+        status = attrs.get("status", "CONFIRMED")
+        payment_type = attrs.get("payment_type", "DEPOSIT")
+        if status == "CONFIRMED" and payment_type == "NONE":
+            raise serializers.ValidationError({"payment_type": "Reservas manuais confirmadas exigem registro de pagamento (DEPOSIT ou FULL)."})
+        if status == "HELD":
+            attrs["payment_type"] = "NONE"
+        return attrs
+
+
+class ParticipantUpdateSerializer(serializers.Serializer):
+    full_name = serializers.CharField(max_length=160, required=False)
+    cpf = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    birth_date = serializers.DateField(required=False, allow_null=True)
+    emergency_contact_name = serializers.CharField(max_length=160, required=False, allow_blank=True)
+    emergency_contact_phone = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    operational_notes = serializers.CharField(required=False, allow_blank=True)
+    onboarding_status = serializers.ChoiceField(choices=["PENDING", "IN_PROGRESS", "COMPLETED"], required=False)
+    is_substitution = serializers.BooleanField(default=False)
+    substitution_reason = serializers.CharField(max_length=500, required=False, allow_blank=True)

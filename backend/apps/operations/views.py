@@ -1,6 +1,7 @@
 import csv
 import io
 import math
+from datetime import timedelta
 from django.db import transaction
 from django.db.models import Count, F, IntegerField, Q, Sum, Value
 from django.http import HttpResponse
@@ -19,7 +20,13 @@ from apps.reservations.services import record_reservation_event, transition_lock
 from apps.payments.services import process_paid_event
 
 from .authentication import OperationsAuthentication, create_admin_token, validate_credentials
-from .serializers import OperationsExpeditionSerializer, OperationsLodgeSerializer, OperationsReservationSerializer
+from .serializers import (
+    ManualReservationSerializer,
+    OperationsExpeditionSerializer,
+    OperationsLodgeSerializer,
+    OperationsReservationSerializer,
+    ParticipantUpdateSerializer,
+)
 
 ACTIVE_RESERVATIONS = (Reservation.Status.CONFIRMED, Reservation.Status.PAID)
 
@@ -107,6 +114,149 @@ class ReservationListView(OperationsView):
         if expedition:
             queryset = queryset.filter(expedition_id=expedition)
         return Response(OperationsReservationSerializer(queryset[:100], many=True).data)
+
+    @transaction.atomic
+    def post(self, request):
+        serializer = ManualReservationSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        try:
+            expedition = Expedition.objects.select_for_update().get(id=data["expedition_id"])
+        except Expedition.DoesNotExist:
+            return Response({"detail": "Expedição não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+
+        spots = data["spots_count"]
+        active_q = (
+            Q(reservations__status__in=ACTIVE_RESERVATIONS)
+            | Q(reservations__status=Reservation.Status.PARTIALLY_PAID, reservations__payments__status=Payment.Status.PAID, reservations__payments__amount_cents__gte=F("reservations__deposit_cents"))
+            | Q(reservations__status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT), reservations__held_until__gt=timezone.now())
+        )
+        exp_with_occ = Expedition.objects.filter(id=expedition.id).annotate(
+            occupied_slots=Coalesce(Sum("reservations__participant_count", filter=active_q), Value(0), output_field=IntegerField())
+        ).first()
+        available = exp_with_occ.capacity - exp_with_occ.occupied_slots
+        if spots > available:
+            return Response({"detail": f"Capacidade insuficiente. Apenas {available} vaga(s) disponível(is)."}, status=status.HTTP_409_CONFLICT)
+
+        clean_cpf = data["customer_cpf"]
+        customer, _ = Customer.objects.get_or_create(
+            cpf=clean_cpf,
+            defaults={
+                "full_name": data["customer_name"],
+                "email": data["customer_email"],
+                "phone": data["customer_phone"],
+            },
+        )
+        customer.full_name = data["customer_name"]
+        customer.email = data["customer_email"]
+        customer.phone = data["customer_phone"]
+        customer.save()
+
+        unit_price = expedition.price_per_person_cents
+        total_price = unit_price * spots
+        # Sinal é de 20% à vista
+        deposit = round(total_price * 0.20)
+        balance_days = getattr(expedition, "balance_due_days_before", 30)
+        balance_due_at = expedition.starts_at - timedelta(days=balance_days)
+
+        status_choice = data["status"]
+        if status_choice == "HELD":
+            hold_hours = data.get("hold_hours", 24)
+            held_until = timezone.now() + timedelta(hours=hold_hours)
+            res_status = Reservation.Status.HELD
+            payment_plan = Reservation.PaymentPlan.DEPOSIT
+        else:
+            held_until = None
+            payment_type = data.get("payment_type", "DEPOSIT")
+            if payment_type == "FULL":
+                res_status = Reservation.Status.PAID
+                payment_plan = Reservation.PaymentPlan.FULL
+            else:
+                res_status = Reservation.Status.CONFIRMED
+                payment_plan = Reservation.PaymentPlan.DEPOSIT
+
+        reservation = Reservation.objects.create(
+            customer=customer,
+            expedition=expedition,
+            participant_count=spots,
+            status=res_status,
+            held_until=held_until,
+            unit_price_cents=unit_price,
+            total_price_cents=total_price,
+            deposit_cents=deposit,
+            payment_plan=payment_plan,
+            balance_due_at=balance_due_at,
+        )
+
+        provided_names = data.get("participant_names", [])
+        for i in range(spots):
+            if i < len(provided_names) and provided_names[i].strip():
+                p_name = provided_names[i].strip()
+            elif i == 0:
+                p_name = customer.full_name
+            else:
+                p_name = f"Participante {i + 1}"
+
+            ReservationParticipant.objects.create(
+                reservation=reservation,
+                full_name=p_name,
+                cpf=clean_cpf if i == 0 else "",
+                phone=customer.phone if i == 0 else "",
+                onboarding_status=ReservationParticipant.OnboardingStatus.PENDING,
+            )
+
+        reason = data["reason"]
+        if status_choice == "CONFIRMED":
+            payment_type = data.get("payment_type", "DEPOSIT")
+            amount = data.get("payment_amount_cents")
+            if not amount:
+                amount = total_price if payment_type == "FULL" else deposit
+
+            payment = Payment.objects.create(
+                reservation=reservation,
+                purpose=Payment.Purpose.MANUAL,
+                provider="ADMIN",
+                method="MANUAL",
+                external_id=f"manual-{reservation.id}-{int(timezone.now().timestamp())}",
+                amount_cents=amount,
+                status=Payment.Status.PAID,
+                paid_at=timezone.now(),
+            )
+            record_reservation_event(
+                reservation=reservation,
+                event_type="PAYMENT_CONFIRMED",
+                actor_type=ReservationEvent.ActorType.ADMIN,
+                actor_identifier="operations",
+                reason=reason,
+                payload={"payment_id": str(payment.id), "amount_cents": amount, "method": "MANUAL"},
+            )
+
+        record_reservation_event(
+            reservation=reservation,
+            event_type="MANUAL_RESERVATION_CREATED",
+            actor_type=ReservationEvent.ActorType.ADMIN,
+            actor_identifier="operations",
+            reason=reason,
+            payload={
+                "spots_count": spots,
+                "status": res_status,
+                "payment_type": data.get("payment_type", "NONE"),
+                "deposit_cents": deposit,
+                "total_price_cents": total_price,
+            },
+        )
+
+        refreshed = Reservation.objects.select_related("customer", "expedition").prefetch_related(
+            "participants__product_choices__expedition_product__product",
+            "participants__dietary_restrictions__restriction",
+            "participants__checklist_completions",
+            "payments",
+            "events",
+            "expedition__checklist_items",
+        ).get(id=reservation.id)
+        return Response(OperationsReservationSerializer(refreshed).data, status=status.HTTP_201_CREATED)
 
 
 class ExpeditionListCreateView(generics.ListCreateAPIView):
@@ -313,3 +463,189 @@ class ConsolidationView(OperationsView):
 
 class ConsolidationCsvView(ConsolidationView): format = "csv"
 class ConsolidationTxtView(ConsolidationView): format = "txt"
+
+
+class ParticipantUpdateView(OperationsView):
+    @transaction.atomic
+    def patch(self, request, reservation_id, participant_id):
+        serializer = ParticipantUpdateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            reservation = Reservation.objects.select_for_update().get(id=reservation_id)
+            participant = ReservationParticipant.objects.select_for_update().get(id=participant_id, reservation=reservation)
+        except (Reservation.DoesNotExist, ReservationParticipant.DoesNotExist):
+            return Response({"detail": "Reserva ou participante não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        data = serializer.validated_data
+        is_sub = data.get("is_substitution", False)
+        sub_reason = data.get("substitution_reason", "").strip()
+
+        if is_sub:
+            old_name = participant.full_name
+            new_name = data.get("full_name", participant.full_name).strip()
+            participant.full_name = new_name
+            if "cpf" in data:
+                participant.cpf = "".join(c for c in data["cpf"] if c.isdigit())
+            if "phone" in data:
+                participant.phone = data["phone"]
+            if "birth_date" in data:
+                participant.birth_date = data["birth_date"]
+            if "emergency_contact_name" in data:
+                participant.emergency_contact_name = data["emergency_contact_name"]
+            if "emergency_contact_phone" in data:
+                participant.emergency_contact_phone = data["emergency_contact_phone"]
+            if "operational_notes" in data:
+                participant.operational_notes = data["operational_notes"]
+
+            # Reset preferences and onboarding for replaced participant
+            participant.onboarding_status = ReservationParticipant.OnboardingStatus.PENDING
+            participant.completed_at = None
+            participant.product_choices_confirmed_at = None
+            participant.dietary_confirmed_at = None
+            participant.dietary_details = ""
+            participant.dietary_restrictions.all().delete()
+            participant.product_choices.all().delete()
+            participant.checklist_completions.all().delete()
+            participant.save()
+
+            record_reservation_event(
+                reservation=reservation,
+                event_type="PARTICIPANT_SUBSTITUTED",
+                actor_type=ReservationEvent.ActorType.ADMIN,
+                actor_identifier="operations",
+                reason=sub_reason or f"Substituição de {old_name} por {new_name}",
+                payload={"participant_id": str(participant.id), "previous_name": old_name, "new_name": new_name},
+            )
+        else:
+            updated_fields = []
+            for field in ("full_name", "phone", "birth_date", "emergency_contact_name", "emergency_contact_phone", "operational_notes", "onboarding_status"):
+                if field in data:
+                    setattr(participant, field, data[field])
+                    updated_fields.append(field)
+            if "cpf" in data:
+                participant.cpf = "".join(c for c in data["cpf"] if c.isdigit())
+                updated_fields.append("cpf")
+            participant.save()
+
+            record_reservation_event(
+                reservation=reservation,
+                event_type="PARTICIPANT_UPDATED",
+                actor_type=ReservationEvent.ActorType.ADMIN,
+                actor_identifier="operations",
+                reason="Atualização cadastral do participante",
+                payload={"participant_id": str(participant.id), "updated_fields": updated_fields},
+            )
+
+        refreshed = Reservation.objects.select_related("customer", "expedition").prefetch_related(
+            "participants__product_choices__expedition_product__product",
+            "participants__dietary_restrictions__restriction",
+            "participants__checklist_completions",
+            "payments",
+            "events",
+            "expedition__checklist_items",
+        ).get(id=reservation.id)
+        return Response(OperationsReservationSerializer(refreshed).data)
+
+
+class ExpeditionManifestView(OperationsView):
+    format = "json"
+
+    def get(self, request, expedition_id):
+        try:
+            expedition = Expedition.objects.select_related("lodge").get(id=expedition_id)
+        except Expedition.DoesNotExist:
+            return Response({"detail": "Expedição não encontrada."}, status=status.HTTP_404_NOT_FOUND)
+
+        valid_states = (Reservation.Status.CONFIRMED, Reservation.Status.PAID, Reservation.Status.PARTIALLY_PAID)
+        reservations = (
+            Reservation.objects.filter(expedition=expedition, status__in=valid_states)
+            .select_related("customer")
+            .prefetch_related("participants__dietary_restrictions__restriction")
+            .order_by("created_at")
+        )
+
+        passengers = []
+        for res in reservations:
+            for p in res.participants.all():
+                passengers.append({
+                    "id": str(p.id),
+                    "name": p.full_name,
+                    "cpf": p.cpf,
+                    "phone": p.phone,
+                    "birth_date": str(p.birth_date) if p.birth_date else "",
+                    "emergency_contact_name": p.emergency_contact_name,
+                    "emergency_contact_phone": p.emergency_contact_phone,
+                    "operational_notes": p.operational_notes,
+                    "onboarding_status": p.onboarding_status,
+                    "dietary_restrictions": [r.restriction.name for r in p.dietary_restrictions.all()],
+                    "dietary_details": p.dietary_details,
+                    "reservation_id": str(res.id),
+                    "customer_name": res.customer.full_name,
+                    "customer_phone": res.customer.phone,
+                    "reservation_status": res.status,
+                })
+
+        if self.format == "json":
+            return Response({
+                "expedition": {
+                    "id": str(expedition.id),
+                    "name": expedition.name,
+                    "slug": expedition.slug,
+                    "destination": expedition.destination,
+                    "departure_location": expedition.departure_location,
+                    "lodge_name": expedition.lodge.name if expedition.lodge else expedition.destination,
+                    "starts_at": str(expedition.starts_at),
+                    "ends_at": str(expedition.ends_at),
+                    "capacity": expedition.capacity,
+                    "total_passengers": len(passengers),
+                },
+                "passengers": passengers,
+                "generated_at": timezone.now().isoformat(),
+            })
+
+        def safe_csv(val):
+            text = str(val or "")
+            return "'" + text if text.startswith(("=", "+", "-", "@")) else text
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow((
+            "Nº",
+            "Nome Completo",
+            "CPF",
+            "Telefone",
+            "Data de Nascimento",
+            "Contato de Emergência",
+            "Telefone de Emergência",
+            "Restrições Alimentares",
+            "Detalhes da Restrição",
+            "Status da Ficha",
+            "Titular da Reserva",
+            "Telefone do Titular",
+        ))
+        for index, p in enumerate(passengers, start=1):
+            dietary_str = ", ".join(p["dietary_restrictions"])
+            writer.writerow((
+                index,
+                safe_csv(p["name"]),
+                safe_csv(p["cpf"]),
+                safe_csv(p["phone"]),
+                safe_csv(p["birth_date"]),
+                safe_csv(p["emergency_contact_name"]),
+                safe_csv(p["emergency_contact_phone"]),
+                safe_csv(dietary_str),
+                safe_csv(p["dietary_details"]),
+                safe_csv(p["onboarding_status"]),
+                safe_csv(p["customer_name"]),
+                safe_csv(p["customer_phone"]),
+            ))
+
+        response = HttpResponse("\ufeff" + output.getvalue(), content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="manifesto-{expedition.slug}.csv"'
+        return response
+
+
+class ExpeditionManifestCsvView(ExpeditionManifestView):
+    format = "csv"

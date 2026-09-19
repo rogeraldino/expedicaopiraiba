@@ -126,3 +126,135 @@ class OperationsApiTests(TestCase):
         }, format="json", **auth)
         self.assertEqual(patch_res.status_code, 200)
         self.assertEqual(len(patch_res.data["inclusions"]), 3)
+
+    def test_manual_reservation_creation_held_and_confirmed_with_20_percent_deposit(self):
+        auth = self.login()
+        # 1. Criação Manual HELD
+        held_payload = {
+            "expedition_id": str(self.expedition.id),
+            "customer_name": "Carlos Silveira",
+            "customer_cpf": "52998224725",
+            "customer_email": "carlos@example.com",
+            "customer_phone": "(62) 99123-4567",
+            "spots_count": 2,
+            "status": "HELD",
+            "hold_hours": 36,
+            "participant_names": ["Carlos Silveira", "Marcos Lima"],
+            "reason": "Venda via WhatsApp - aguardando TED"
+        }
+        held_res = self.client.post("/api/operations/reservations/", held_payload, format="json", **auth)
+        self.assertEqual(held_res.status_code, 201)
+        self.assertEqual(held_res.data["status"], "HELD")
+        self.assertEqual(held_res.data["participant_count"], 2)
+        # Total = 2 * 249000 = 498000. 20% à vista = 99600
+        self.assertEqual(held_res.data["total_price_cents"], 498000)
+        self.assertEqual(held_res.data["deposit_cents"], 99600)
+        self.assertEqual(len(held_res.data["participants"]), 2)
+        self.assertEqual(held_res.data["participants"][1]["name"], "Marcos Lima")
+
+        # 2. Criação Manual CONFIRMED com sinal de 20% à vista
+        confirmed_payload = {
+            "expedition_id": str(self.expedition.id),
+            "customer_name": "Roberto Alves",
+            "customer_cpf": "11144477735",
+            "customer_email": "roberto@example.com",
+            "customer_phone": "(62) 98888-1111",
+            "spots_count": 1,
+            "status": "CONFIRMED",
+            "payment_type": "DEPOSIT",
+            "reason": "Sinal pago via PIX direto na conta física"
+        }
+        conf_res = self.client.post("/api/operations/reservations/", confirmed_payload, format="json", **auth)
+        self.assertEqual(conf_res.status_code, 201)
+        self.assertEqual(conf_res.data["status"], "CONFIRMED")
+        # Preço 249000 -> sinal de 20% = 49800
+        self.assertEqual(conf_res.data["deposit_cents"], 49800)
+        self.assertEqual(conf_res.data["paid_amount_cents"], 49800)
+        self.assertEqual(conf_res.data["remaining_balance_cents"], 199200)
+
+        # 3. Tentativa de ultrapassar a capacidade (restam 12 - 3 = 9 vagas)
+        over_res = self.client.post("/api/operations/reservations/", {
+            **confirmed_payload,
+            "spots_count": 10,
+        }, format="json", **auth)
+        self.assertEqual(over_res.status_code, 409)
+
+    def test_participant_update_and_substitution_audit(self):
+        auth = self.login()
+        # Cria reserva
+        res = self.client.post("/api/operations/reservations/", {
+            "expedition_id": str(self.expedition.id),
+            "customer_name": "Pescador Titular",
+            "customer_cpf": "52998224725",
+            "customer_email": "titular@example.com",
+            "customer_phone": "(62) 99999-0000",
+            "spots_count": 2,
+            "status": "CONFIRMED",
+            "payment_type": "FULL",
+            "participant_names": ["Pescador 1", "Pescador Desistente"],
+            "reason": "Pagamento integral confirmado"
+        }, format="json", **auth)
+        self.assertEqual(res.status_code, 201)
+        res_id = res.data["id"]
+        pax_id = res.data["participants"][1]["id"]
+
+        # Atualiza dados cadastrais normais
+        patch_res = self.client.patch(f"/api/operations/reservations/{res_id}/participants/{pax_id}/", {
+            "phone": "(62) 97777-6666",
+            "emergency_contact_name": "Esposa Ana",
+            "emergency_contact_phone": "(62) 97777-5555"
+        }, format="json", **auth)
+        self.assertEqual(patch_res.status_code, 200)
+        updated_pax = next(p for p in patch_res.data["participants"] if p["id"] == pax_id)
+        self.assertEqual(updated_pax["phone"], "(62) 97777-6666")
+        self.assertEqual(updated_pax["emergency_contact_name"], "Esposa Ana")
+
+        # Substitui participante por outro pescador
+        sub_res = self.client.patch(f"/api/operations/reservations/{res_id}/participants/{pax_id}/", {
+            "full_name": "Novo Pescador Amigo",
+            "phone": "(62) 98888-3333",
+            "is_substitution": True,
+            "substitution_reason": "Substituição por motivo de cirurgia do titular anterior"
+        }, format="json", **auth)
+        self.assertEqual(sub_res.status_code, 200)
+        subbed_pax = next(p for p in sub_res.data["participants"] if p["id"] == pax_id)
+        self.assertEqual(subbed_pax["name"], "Novo Pescador Amigo")
+        self.assertEqual(subbed_pax["onboarding_status"], "PENDING")
+
+        # Verifica evento gravado
+        reservation = Reservation.objects.get(id=res_id)
+        sub_event = reservation.events.filter(event_type="PARTICIPANT_SUBSTITUTED").first()
+        self.assertIsNotNone(sub_event)
+        self.assertEqual(sub_event.payload["previous_name"], "Pescador Desistente")
+        self.assertEqual(sub_event.payload["new_name"], "Novo Pescador Amigo")
+
+    def test_expedition_manifest_json_and_csv_safe(self):
+        auth = self.login()
+        # Cria reserva com participante com nome contendo tentativa de injeção de fórmula
+        self.client.post("/api/operations/reservations/", {
+            "expedition_id": str(self.expedition.id),
+            "customer_name": "=CMD('calc')",
+            "customer_cpf": "52998224725",
+            "customer_email": "injection@example.com",
+            "customer_phone": "(62) 99999-8888",
+            "spots_count": 1,
+            "status": "CONFIRMED",
+            "payment_type": "DEPOSIT",
+            "reason": "Teste de segurança CSV"
+        }, format="json", **auth)
+
+        # 1. Manifest JSON
+        json_res = self.client.get(f"/api/operations/expeditions/{self.expedition.id}/manifest/", **auth)
+        self.assertEqual(json_res.status_code, 200)
+        self.assertEqual(json_res.data["expedition"]["name"], "Rio Araguaia")
+        self.assertTrue(len(json_res.data["passengers"]) >= 1)
+
+        # 2. Manifest CSV
+        csv_res = self.client.get(f"/api/operations/expeditions/{self.expedition.id}/manifest.csv", **auth)
+        self.assertEqual(csv_res.status_code, 200)
+        self.assertTrue(csv_res["Content-Type"].startswith("text/csv"))
+        content = csv_res.content.decode("utf-8")
+        self.assertTrue(content.startswith("\ufeff"))  # UTF-8 BOM
+        self.assertIn("Nome Completo", content)
+        # Verifica se o valor com = foi neutralizado com aspas/apóstrofo
+        self.assertIn("'=CMD('calc')", content)

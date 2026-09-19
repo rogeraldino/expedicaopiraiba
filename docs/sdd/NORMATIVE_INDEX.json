@@ -67,6 +67,24 @@
       "accepted_at": "2026-09-19",
       "accepted_by": "Rodrigo",
       "accepted_evidence": "specs/archive/E02_Customizacao-Expedicoes/ponytail.md"
+    },
+    {
+      "id": "E03-VENDA-DIRETA-MANIFESTO",
+      "concept": "Venda direta manual pelo admin, substituição de participantes e manifesto oficial de embarque",
+      "owner": "specs/archive/E03_Venda-Direta-Manifesto/spec.md",
+      "status": "normative",
+      "version": "0.1",
+      "scope": "reserva manual, gestão de passageiros, exportação de manifesto e links rápidos",
+      "supersedes": [],
+      "superseded_by": [],
+      "lifecycle": "ARCHIVED",
+      "ready_at": "2026-09-19",
+      "ready_by": "Rodrigo",
+      "ready_evidence": "specs/archive/E03_Venda-Direta-Manifesto/grill.md",
+      "acceptance_status": "ACCEPTED",
+      "accepted_at": "2026-09-19",
+      "accepted_by": "Rodrigo",
+      "accepted_evidence": "specs/archive/E03_Venda-Direta-Manifesto/ponytail.md"
     }
   ]
 }

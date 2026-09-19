@@ -3,8 +3,9 @@
 > **Estado do Sistema:**
 > - Épica E01 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E01_P0-Closure/`);
 > - Épica E02 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E02_Customizacao-Expedicoes/`);
-> - Próximo Trabalho Selecionável no Backlog: `specs/backlog/REQUISITOS_E_GAPS_PROXIMAS_EPICAS.md` (Épica E03 — Venda Direta / Reserva Manual e Manifesto).<br/>
-> **Última Atualização:** 19/09/2026 (Aceite formal por Rodrigo e arquivamento de E02)
+> - Épica E03 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E03_Venda-Direta-Manifesto/`);
+> - Próximo Trabalho Selecionável no Backlog: Épica E04 (Portal do Cliente, Reacesso e Ficha de Embarque Digital).<br/>
+> **Última Atualização:** 19/09/2026 (Homologação e Arquivamento da Épica E03)
 
 ---
 
@@ -51,44 +52,48 @@
    - **Gestão de Pousadas e Estruturas (`LodgesPanel` / `LodgeModal`):** Cadastro e edição completa de pousadas parceiras (cidade, UF, rio, comodidades, ponto de encontro, direções de viagem e status ativo/inativo).
    - **Gestão de Expedições (`ExpeditionsPanel` / `ExpeditionModal`):** Criação e edição com vinculação de pousada parceira (auto-preenchimento de local de saída e instruções), espécies-alvo com flag prioritária, URL da imagem de capa e inclusões All Inclusive linha a linha.
    - **Configuração Operacional & Cardápio Mestre:** Seleção das bebidas ativas para cada expedição a partir do catálogo mestre enxuto (10 itens oficiais) e quantidade padrão por pessoa (`standard_quantity_per_participant`).
-   - **Gestão de Reservas:** Filtro por expedição, status e busca textual (nome, CPF, telefone), detalhamento nominal com status de cadastro, preferências, restrições e checklist de cada participante.
+   - **Gestão de Reservas & Venda Direta (`ManualReservationModal`):**
+     - Criação manual de reservas com auto-vínculo de cliente por CPF/e-mail;
+     - Regra de negócio estrita de **sinal de 20% à vista** ou quitação integral (100%);
+     - Trava pessimista `select_for_update()` com prevenção absoluta de overbooking;
+     - Instanciação imediata de participantes com dados preliminares.
+   - **Ações Rápidas & Cobrança Comercial:**
+     - "Copiar Link do Cliente" direto para onboarding/pagamento;
+     - "Cobrança via WhatsApp" com mensagem formatada contendo dados da expedição, passageiros, valores e chave PIX.
+   - **Edição & Substituição Formal de Participantes (`ParticipantModal`):**
+     - Atualização cadastral de passageiros (CPF, telefone, nascimento, emergência, notas);
+     - Substituição formal com registro em auditoria (`PARTICIPANT_SUBSTITUTED`) e reset de status (`PENDING`) e preferências/restrições, evitando dados obsoletos.
+   - **Manifesto Oficial de Embarque (`ManifestPanel`):**
+     - Visualização tabular completa de passageiros confirmados, emergência, saúde, colete e dados da pousada;
+     - Exportação em CSV com sanitização sistemática contra Formula Injection (`safe_csv`) e UTF-8 BOM para Excel;
+     - Botão de impressão formatada direta para prancheta de campo.
    - **Operações Financeiras Auditadas:** Registro de pagamento manual simulado com justificativa obrigatória e cancelamento auditado.
    - **Lista de Compras Consolidada:** Cálculo atômico baseado em snapshot transacional (`participantes_que_escolheram × quantidade_padrão`), conversão em caixas/fardos (`package_size`) com sobra, breakdown nominal por produto e exportação em CSV (com neutralização contra injeção de fórmulas) e texto puro.
 
 ---
 
-### 2. Validação Integrada e Confiabilidade (Checkpoints E02)
+### 2. Validação Integrada e Confiabilidade (Checkpoints E03)
 
 Toda a suíte e os gates da Constituição estão 100% validados:
 
 ```bash
-# 1. Testes do Backend com PostgreSQL real (31 testes com locks de concorrência)
-cd backend && POSTGRES_HOST=172.19.0.2 .venv/bin/python manage.py test
-# Resultado: 31 testes OK (0 falhas, 0 erros, 0 skips)
+# 1. Testes do Backend com PostgreSQL real (34 testes com locks de concorrência)
+docker compose -f compose.production.yaml exec -T backend python manage.py test
+# Resultado: Ran 34 tests in 32.460s — OK (0 falhas, 0 erros)
 
-# 2. Testes do Backend com SQLite
-cd backend && TEST_SQLITE=true .venv/bin/python manage.py test
-# Resultado: 31 testes OK (0 falhas, 0 erros, 1 skip para PG concurrency)
-
-# 3. Verificação de integridade de migrações Django
-cd backend && TEST_SQLITE=true .venv/bin/python manage.py makemigrations --check
+# 2. Verificação de integridade de migrações Django
+docker compose -f compose.production.yaml exec -T backend python manage.py makemigrations --check
 # Resultado: No changes detected
 
-# 4. Qualidade e tipos do frontend
-cd frontend && npm run lint
-# Resultado: 0 erros, 0 avisos
-cd frontend && npx tsc --noEmit
-# Resultado: 0 erros
+# 3. Build de produção do frontend (Next.js Turbopack + TypeScript typecheck)
+docker compose -f compose.production.yaml build frontend
+# Resultado: Image built successfully, 0 erros de tipagem, 0 falhas
 
-# 5. Build de produção do frontend (Next.js Turbopack)
-cd frontend && npm run build
-# Resultado: Compiled successfully (6 páginas estáticas, 4 dinâmicas)
-
-# 6. Integridade documental e owners normativos
+# 4. Integridade documental e owners normativos
 python3 scripts/check_docs.py
-# Resultado: documentação válida: 5 owners normativos
+# Resultado: documentação válida: 6 owners normativos
 
-# 7. Higiene do Git
+# 5. Higiene do Git
 git diff --check
 # Resultado: limpo (0 infrações)
 ```
