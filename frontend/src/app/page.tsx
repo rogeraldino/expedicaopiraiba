@@ -129,7 +129,7 @@ export default async function Home() {
           fill
           priority
           sizes="100vw"
-          className="object-cover object-center opacity-45"
+          className="object-cover object-center opacity-75"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-brand-950 via-brand-950/80 to-transparent lg:w-3/4" />
         <div className="absolute inset-0 bg-gradient-to-t from-brand-950 via-transparent to-black/30" />
@@ -142,9 +142,9 @@ export default async function Home() {
             <h1 className="mt-4 max-w-3xl text-5xl font-black leading-[.95] tracking-tight sm:text-6xl lg:text-7xl hero-headline">
               O Rio Araguaia está chamando.
             </h1>
-            <p className="mt-5 max-w-xl text-lg leading-7 text-white/90 drop-shadow">
+            <p className="mt-5 max-w-xl text-lg leading-7 text-emerald-300 font-medium drop-shadow-md">
               Há mais de 20 anos mostrando o que existe de melhor na pesca esportiva de gigantes. Barco, guias nativos, combustível,
-              gastronomia e estrutura <strong>Tudo All Inclusive</strong>.
+              gastronomia e estrutura <strong className="text-white font-black underline decoration-emerald-400 decoration-2 underline-offset-4">Tudo All Inclusive</strong>.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <ButtonLink href="#expedicoes" variant="secondary" className="shadow-xl">
