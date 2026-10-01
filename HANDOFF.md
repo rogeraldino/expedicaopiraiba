@@ -5,8 +5,9 @@
 > - Épica E02 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E02_Customizacao-Expedicoes/`);
 > - Épica E03 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E03_Venda-Direta-Manifesto/`);
 > - Épica E04 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E04_Portal-Cliente-Ficha/`);
-> - Próximo Trabalho Selecionável no Backlog: Épica E05 (Automação de Saldos, Comunicação Operacional & Relatórios de Margem).<br/>
-> **Última Atualização:** 19/09/2026 (Homologação e Arquivamento da Épica E04)
+> - Próximo Trabalho Selecionável no Backlog: Épica E05 (Automação de Saldos, Comunicação Operacional & Relatórios de Margem);<br/>
+> - **Especificação de Autonomia Operacional Modular:** [ESPECIFICACAO_SISTEMA_OPERACIONAL_MODULAR.md](specs/backlog/ESPECIFICACAO_SISTEMA_OPERACIONAL_MODULAR.md) (Rios, Bacias, Pousadas Modulares, Pacotes Reutilizáveis, Tralhas de Pesca e CRM de Clientes).<br/>
+> **Última Atualização:** 01/10/2026 (Especificação da Arquitetura Operacional Modular)
 
 ---
 
