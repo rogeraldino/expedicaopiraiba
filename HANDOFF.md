@@ -10,7 +10,7 @@
 > - **Fase B — Pacotes Reutilizáveis e Construtor de Expedições (`FASEB-PACOTES-CONSTRUTOR-EXPEDICOES`):** Concluída, `ACCEPTED` por Rodrigo e arquivada em `specs/archive/FaseB_Pacotes-Construtor-Expedicoes/`;<br/>
 > - **Fase C — Locação/Venda de Tralhas e CRM de Pescadores (`FASEC-TRALHAS-CRM-PESCADORES`):** Concluída, `ACCEPTED` por Rodrigo e arquivada em `specs/archive/FaseC_Tralhas-CRM-Pescadores/`;<br/>
 > - **Refinamento de UX & Simplificação do Painel do Administrador:** Concluído e testado (Pousadas com cidades-polo e comodidades padrão em 1 clique, pacotes com tags interativas, Wizard em 3 etapas com herança direta de peixes da pousada, cálculo automático de sinal de 20%, sugestão de nomes e publicação direta, e kits prontos de tralhas).<br/>
-> - **Desafio Piraíba 2026:** implementação e validação local concluídas; Ponytail e ACCEPTED humano pendentes.<br/>
+> - **Desafio Piraíba 2026:** implementação e validação local concluídas, Ponytail PASS e ACCEPTED por Rodrigo; dossiê arquivado em `specs/archive/Desafio_Piraiba_2026/`.<br/>
 > **Última Atualização:** 02/10/2026 (Desafio Piraíba publicado no Docker local)
 
 ---
@@ -230,8 +230,8 @@ Validação: `npm run build` passou (incluindo TypeScript), ESLint dos arquivos 
 
 ### Desafio Piraíba — Rio Araguaia (2026-10-02)
 
-- Spec HIGH v1.0 em `specs/active/Desafio_Piraiba_2026/`; Grill e Counsel registrados; Rodrigo declarou READY nesta sessão em 02/10/2026. Ponytail e ACCEPTED pendentes.
+- Spec HIGH v1.0 em `specs/archive/Desafio_Piraiba_2026/`; Grill e Counsel registrados, Rodrigo declarou READY e ACCEPTED nesta sessão em 02/10/2026 após Ponytail PASS. SHA aceito: `d57b037c1e0275563917b1579482520d5effdf57`.
 - Carga dedicada `create_desafio_piraiba_2026` executada no PostgreSQL do Docker local. Expedição `cbab883e-48c7-4aa3-9c4a-7a902db21363` publicada com 12 vagas, 28–31/10, São Félix do Araguaia/MT, origem Goiânia/GO, R$ 5.600, sinal R$ 1.120 e saldo 7 dias antes. Pousada, novo Pacote da Expedição, cardápio com Heineken/Stella/Original (18 unidades por opção escolhida) e 16 espécies vinculados; nenhuma reserva criada. Equipamentos não foram criados. Reexecutar o comando sem reservas reconcilia os dados aprovados e sobrescreve edições posteriores feitas no admin.
 - Capa e quatro fotos usam arquivos existentes de `frontend/public/gallery`; wizard permite escolha visual de capa e galeria, com persistência por endpoints existentes. Hero exibe a próxima expedição publicada com vagas e CTA para checkout. Dados demonstrativos foram retirados dos fallbacks públicos.
 - As 17 comodidades pedidas já existiam no catálogo, sem duplicação. O comando verifica sua presença e impede alterar uma expedição com reservas. A segunda execução manteve o mesmo ID.
-- Validação até aqui: API pública retornou os dados corretos; 31 testes backend e 2 testes da seleção hero passaram; a home local mostrou nome/capa/CTA corretos, detalhe e checkout retornaram 200, slug ausente retornou 404. Build Next.js/TypeScript, Django check, migrações sem alterações, `make check-docs` e `git diff --check` passaram. Lint geral ainda acusa 9 erros React preexistentes. Revisão Ponytail será finalizada antes do encerramento.
+- Validação local: API pública retornou os dados corretos; 31 testes backend e 2 testes da seleção hero passaram; a home local mostrou nome/capa/CTA corretos, detalhe e checkout retornaram 200, slug ausente retornou 404. Build Next.js/TypeScript, Django check, migrações sem alterações, `make check-docs` e `git diff --check` passaram. Lint geral ainda acusa 9 erros React preexistentes. Ponytail independente concluiu PASS; produção remota não foi alterada nesta sessão.

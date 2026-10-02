@@ -3,13 +3,17 @@
 ```yaml
 identificador_normativo: DESAFIO-PIRAIBA-2026
 classificacao_risco: HIGH
-status_documento: VALIDATED
+status_documento: ACCEPTED
 versao: 1.0
 data_criacao: 2026-10-02
 autoridade_de_produto: Rodrigo
 ready_at: 2026-10-02
 ready_by: Rodrigo
 ready_evidence: resposta explícita "READY — implementar v1.0" nesta sessão
+accepted_at: 2026-10-02
+accepted_by: Rodrigo
+accepted_evidence: pedido explícito "so aceita e faz o push" nesta sessão, após Ponytail PASS
+accepted_implementation_sha: d57b037c1e0275563917b1579482520d5effdf57
 owners:
   - docs/sdd/CONSTITUTION.md
   - specs/archive/E02_Customizacao-Expedicoes/spec.md
