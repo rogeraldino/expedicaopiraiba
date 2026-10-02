@@ -311,14 +311,14 @@ class LodgeListCreateView(generics.ListCreateAPIView):
     serializer_class = OperationsLodgeSerializer
 
     def get_queryset(self):
-        return Lodge.objects.all().select_related("river").prefetch_related("amenities_structured").order_by("name")
+        return Lodge.objects.all().select_related("river").prefetch_related("amenities_structured", "target_species").order_by("name")
 
 
 class LodgeDetailView(generics.RetrieveUpdateAPIView):
     authentication_classes = [OperationsAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     serializer_class = OperationsLodgeSerializer
-    queryset = Lodge.objects.all().select_related("river").prefetch_related("amenities_structured")
+    queryset = Lodge.objects.all().select_related("river").prefetch_related("amenities_structured", "target_species")
 
 
 class RiverListCreateView(generics.ListCreateAPIView):
@@ -422,6 +422,13 @@ class AmenityListView(generics.ListCreateAPIView):
         if active is not None:
             qs = qs.filter(active=active.lower() in ("true", "1"))
         return qs.order_by("category", "display_order", "name")
+
+
+class AmenityDetailView(generics.RetrieveUpdateDestroyAPIView):
+    authentication_classes = [OperationsAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AmenitySerializer
+    queryset = Amenity.objects.all()
 
 
 class SpeciesListCreateView(generics.ListCreateAPIView):

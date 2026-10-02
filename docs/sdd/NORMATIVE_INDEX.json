@@ -157,6 +157,24 @@
       "accepted_at": "2026-10-01",
       "accepted_by": "Rodrigo",
       "accepted_evidence": "specs/archive/FaseC_Tralhas-CRM-Pescadores/ponytail.md"
+    },
+    {
+      "id": "REFINAMENTO-POUSADAS-WIZARD",
+      "concept": "Refinamento UX de Pousadas com peixes diretos, comodidades dinâmicas, galeria de imagens e simplificação do Construtor de Expedições para 3 etapas",
+      "owner": "specs/active/Refinamento_UX_Pousadas_Wizard/spec.md",
+      "status": "normative",
+      "version": "0.1",
+      "scope": "modelos Lodge e Amenity, serializers de operações, seletor de galeria e ExpeditionWizardModal",
+      "supersedes": [],
+      "superseded_by": [],
+      "lifecycle": "IN_PROGRESS",
+      "ready_at": "2026-10-02",
+      "ready_by": "Rodrigo",
+      "ready_evidence": "instrução direta do organizador Rodrigo",
+      "acceptance_status": "PENDING",
+      "accepted_at": null,
+      "accepted_by": null,
+      "accepted_evidence": null
     }
   ]
 }

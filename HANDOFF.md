@@ -9,7 +9,8 @@
 > - **Fase A — Domínio Geográfico e Pousadas Modulares (`FASEA-DOMINIO-GEOGRAFICO-POUSADAS`):** Concluída, `ACCEPTED` e arquivada em `specs/archive/FaseA_Dominio-Geografico-Pousadas/`;<br/>
 > - **Fase B — Pacotes Reutilizáveis e Construtor de Expedições (`FASEB-PACOTES-CONSTRUTOR-EXPEDICOES`):** Concluída, `ACCEPTED` por Rodrigo e arquivada em `specs/archive/FaseB_Pacotes-Construtor-Expedicoes/`;<br/>
 > - **Fase C — Locação/Venda de Tralhas e CRM de Pescadores (`FASEC-TRALHAS-CRM-PESCADORES`):** Concluída, `ACCEPTED` por Rodrigo e arquivada em `specs/archive/FaseC_Tralhas-CRM-Pescadores/`;<br/>
-> **Última Atualização:** 01/10/2026 (Fase C Concluída, Aceita e Arquivada)
+> - **Refinamento de UX & Simplificação do Painel do Administrador:** Concluído e testado (Pousadas com cidades-polo e comodidades padrão em 1 clique, pacotes com tags interativas, Wizard em 3 etapas com herança direta de peixes da pousada, cálculo automático de sinal de 20%, sugestão de nomes e publicação direta, e kits prontos de tralhas).<br/>
+> **Última Atualização:** 02/10/2026 (Refinamento de UX Implementado e Verificado)
 
 ---
 

@@ -3,14 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, Beer, CalendarDays, Check, ChevronLeft, ChevronRight, Compass, Copy, Download, ExternalLink, FileText, Fish, House, Layers, ListChecks, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, Sparkles, TicketCheck, Trash2, Users, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Beer, CalendarDays, Check, ChevronLeft, ChevronRight, Compass, Copy, Download, ExternalLink, FileText, Fish, House, ImageIcon, Layers, ListChecks, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, Sparkles, TicketCheck, Trash2, Users, X } from "lucide-react";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 type Section = "overview" | "reservations" | "expeditions" | "lodges" | "rivers" | "species" | "packages" | "gear" | "customers" | "manifest" | "configuration" | "shopping";
 type Amenity = { id: string; name: string; category: string; category_display: string; icon_key?: string; description?: string; display_order: number; active: boolean };
 type RiverSpecies = { id: string; species: string; species_name: string; species_slug: string; scientific_name?: string; category?: string; is_native: boolean; is_trophy: boolean; best_season?: string };
 type River = { id: string; name: string; slug: string; basin: string; basin_display: string; states: string[]; description?: string; regulations?: string; active: boolean; species_count?: number; lodges_count?: number; created_at?: string; updated_at?: string };
-type Lodge = { id: string; name: string; slug: string; city: string; state: string; river_section?: string; river?: River | null; river_id?: string | null; description?: string; boat_fleet_details?: string; amenities?: string[]; amenities_detailed?: { id: string; name: string; category: string; category_display: string; icon_key?: string; description?: string }[]; meeting_point?: string; directions?: string; cover_image_url?: string; active: boolean };
+type Lodge = { id: string; name: string; slug: string; city: string; state: string; river_section?: string; river?: River | null; river_id?: string | null; description?: string; boat_fleet_details?: string; amenities?: string[]; amenities_detailed?: { id: string; name: string; category: string; category_display: string; icon_key?: string; description?: string }[]; target_species?: Species[]; meeting_point?: string; directions?: string; cover_image_url?: string; active: boolean };
 type Species = { id?: string; common_name: string; slug: string; scientific_name?: string; category: string; active?: boolean };
 type AllInclusivePackage = { id: string; name: string; slug: string; description: string; inclusions: string[]; active: boolean; expeditions_count?: number; created_at?: string; updated_at?: string };
 type BeveragePackageItem = { id?: string; product?: number | string; product_id?: number | string; product_name?: string; product_category?: string; product_unit?: string; standard_quantity_per_participant: number; display_order: number; note: string };
@@ -54,7 +54,7 @@ export function AdminPanel() {
   const logout = useCallback(() => { sessionStorage.removeItem("operations-token"); setToken(null); }, []);
   if (!ready) return <div className="min-h-screen bg-brand-900" />;
   if (!token) return <Login onLogin={value => { sessionStorage.setItem("operations-token", value); setToken(value); }} />;
-  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["rivers", "Rios & Bacias", Compass], ["species", "Catálogo de Peixes", Fish], ["packages", "Pacotes & Cardápios", Layers], ["gear", "Tralhas & Loja", Package], ["customers", "CRM Pescadores", Users], ["manifest", "Manifesto", FileText], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
+  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["species", "Catálogo de Peixes", Fish], ["packages", "Pacotes & Cardápios", Layers], ["gear", "Tralhas & Loja", Package], ["customers", "CRM Pescadores", Users], ["manifest", "Manifesto", FileText], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
   return <div className="min-h-screen bg-[#f4f6f2] lg:grid lg:grid-cols-[260px_1fr]">
     <aside className={`fixed inset-y-0 left-0 z-40 w-[260px] bg-brand-900 text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${menu ? "translate-x-0" : "-translate-x-full"}`}><div className="flex h-full flex-col p-5"><div className="flex items-center gap-3 border-b border-white/10 pb-5"><Image src="/brand/logo-expedicao-piraiba.png" alt="" width={48} height={48} className="size-12 rounded-full" /><div><strong className="block text-sm">EXPEDIÇÃO PIRAÍBA</strong><span className="text-[10px] tracking-[.2em] text-white/60">PAINEL OPERACIONAL</span></div><button aria-label="Fechar menu" onClick={() => setMenu(false)} className="ml-auto lg:hidden"><X /></button></div><nav className="mt-6 space-y-2">{nav.map(([value,label,Icon]) => <button key={value} onClick={() => { setSection(value); setMenu(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold ${section === value ? "bg-white text-brand-900" : "text-white/75 hover:bg-white/10"}`}><Icon className="size-5" />{label}</button>)}</nav><Link href="/" className="mt-auto flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><Fish className="size-5" />Ver site</Link><button onClick={logout} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><LogOut className="size-5" />Sair</button></div></aside>
     {menu && <button aria-label="Fechar menu" className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMenu(false)} />}
@@ -1019,6 +1019,108 @@ function ExpeditionsPanel({ token, unauthorized }: { token: string; unauthorized
   );
 }
 
+const GALLERY_PHOTOS = [
+  { url: "/gallery/piraiba-rio.jpg", label: "Piraíba no Rio Araguaia" },
+  { url: "/gallery/estrutura-expedicao.jpg", label: "Estrutura & Acampamento" },
+  { url: "/gallery/barco-araguaia.jpg", label: "Barco no Rio Araguaia" },
+  { url: "/gallery/tres-pirararas.jpg", label: "Três Pirararas" },
+  { url: "/gallery/ponte-sao-felix.jpg", label: "Ponte São Félix do Araguaia" },
+  { url: "/gallery/pescaria-barco.jpg", label: "Pescaria no Barco" },
+  { url: "/gallery/expedicao-rio.jpg", label: "Expedição no Rio" },
+  { url: "/gallery/captura-dupla.jpg", label: "Captura Dupla de Gigantes" },
+  { url: "/gallery/piraiba-splash.jpg", label: "Salto da Piraíba" },
+  { url: "/expeditions/por-do-sol-araguaia.jpg", label: "Pôr do Sol no Araguaia" },
+  { url: "/expeditions/casais-pesca.jpg", label: "Casais na Pesca" },
+  { url: "/expeditions/bandeirantes-piraiba.jpg", label: "Piraíba em Bandeirantes" },
+  { url: "/gallery/foto-1.jpg", label: "Foto Galeria 1" },
+  { url: "/gallery/foto-2.jpg", label: "Foto Galeria 2" },
+  { url: "/gallery/foto-3.jpg", label: "Foto Galeria 3" },
+  { url: "/gallery/foto-5.jpg", label: "Foto Galeria 5" },
+  { url: "/gallery/foto-6.jpg", label: "Foto Galeria 6" },
+  { url: "/gallery/foto-7.jpg", label: "Foto Galeria 7" },
+  { url: "/gallery/foto-9.jpg", label: "Foto Galeria 9" },
+  { url: "/gallery/foto-10.jpg", label: "Foto Galeria 10" },
+  { url: "/gallery/foto-11.jpg", label: "Foto Galeria 11" },
+  { url: "/gallery/foto-12.jpg", label: "Foto Galeria 12" },
+];
+
+function GalleryPickerModal({
+  currentUrl,
+  onSelect,
+  close,
+}: {
+  currentUrl?: string;
+  onSelect: (url: string) => void;
+  close: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4">
+      <div className="my-5 flex w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="size-5 text-brand-600" />
+            <h3 className="text-lg font-black text-ink-900">Escolha uma Imagem da Galeria</h3>
+          </div>
+          <button type="button" onClick={close} className="rounded-lg p-1 hover:bg-gray-100">
+            <X className="size-5" />
+          </button>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto p-6">
+          <p className="mb-4 text-xs text-ink-500">
+            Clique sobre a foto desejada para selecioná-la como imagem de capa.
+          </p>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            {GALLERY_PHOTOS.map((photo) => {
+              const isSelected = currentUrl === photo.url;
+              return (
+                <button
+                  key={photo.url}
+                  type="button"
+                  onClick={() => {
+                    onSelect(photo.url);
+                    close();
+                  }}
+                  className={`group relative flex flex-col overflow-hidden rounded-xl border-2 text-left transition ${
+                    isSelected
+                      ? "border-brand-600 ring-2 ring-brand-500"
+                      : "border-gray-200 hover:border-brand-400"
+                  }`}
+                >
+                  <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
+                    <img
+                      src={photo.url}
+                      alt={photo.label}
+                      className="size-full object-cover transition-transform group-hover:scale-105"
+                    />
+                    {isSelected && (
+                      <span className="absolute right-2 top-2 rounded-full bg-brand-600 p-1 text-white shadow">
+                        <Check className="size-3" />
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-2">
+                    <p className="truncate text-xs font-bold text-ink-800">{photo.label}</p>
+                    <p className="truncate text-[10px] text-ink-400">{photo.url}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex justify-end border-t px-6 py-3">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg border px-4 py-2 text-xs font-bold text-ink-700 hover:bg-gray-50"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ExpeditionWizardModal({
   token,
   item,
@@ -1030,7 +1132,7 @@ function ExpeditionWizardModal({
   close: () => void;
   saved: () => Promise<void>;
 }) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
 
   const rivers = useData<River[]>("rivers/", token, () => {});
   const lodges = useData<Lodge[]>("lodges/", token, () => {});
@@ -1081,14 +1183,27 @@ function ExpeditionWizardModal({
   const [riverNotice, setRiverNotice] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showAllSpecies, setShowAllSpecies] = useState(false);
+  const [showGalleryPicker, setShowGalleryPicker] = useState(false);
 
-  // River species for selected river
-  const riverSpecies = useData<RiverSpecies[]>(
-    form.river_id ? `rivers/${form.river_id}/species/` : null,
-    token,
-    () => {}
-  );
+  function generateExpeditionName(lodgeName?: string, startsAt?: string) {
+    if (!lodgeName) return "";
+    let suffix = "";
+    if (startsAt) {
+      const parts = startsAt.split("-");
+      if (parts.length >= 2) {
+        const year = parts[0];
+        const month = parseInt(parts[1], 10);
+        const monthNames = [
+          "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+          "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+        ];
+        if (month >= 1 && month <= 12) {
+          suffix = ` — ${monthNames[month - 1]}/${year}`;
+        }
+      }
+    }
+    return `Expedição ${lodgeName}${suffix}`;
+  }
 
   // Auto-populate initial river if lodge is pre-set
   useEffect(() => {
@@ -1098,6 +1213,35 @@ function ExpeditionWizardModal({
       if (rId) setForm((prev) => ({ ...prev, river_id: rId }));
     }
   }, [form.lodge_id, form.river_id, lodges.data]);
+
+  // Auto-select package if only 1 package exists
+  useEffect(() => {
+    if (!form.all_inclusive_package_id && allInclusivePackages.data?.length === 1) {
+      const singlePkg = allInclusivePackages.data[0];
+      if (singlePkg) {
+        setForm((prev) => ({
+          ...prev,
+          all_inclusive_package_id: singlePkg.id,
+          inclusions: singlePkg.inclusions && singlePkg.inclusions.length > 0
+            ? singlePkg.inclusions.join("\n")
+            : prev.inclusions,
+        }));
+      }
+    }
+  }, [allInclusivePackages.data, form.all_inclusive_package_id]);
+
+  // Auto-select beverage package if only 1 beverage package exists
+  useEffect(() => {
+    if (!form.beverage_package_id && beveragePackages.data?.length === 1) {
+      const singleBev = beveragePackages.data[0];
+      if (singleBev) {
+        setForm((prev) => ({
+          ...prev,
+          beverage_package_id: singleBev.id,
+        }));
+      }
+    }
+  }, [beveragePackages.data, form.beverage_package_id]);
 
   const onRiverChange = (newRiverId: string) => {
     setRiverNotice("");
@@ -1119,42 +1263,44 @@ function ExpeditionWizardModal({
     const chosen = lodges.data?.find((l) => l.id === lodgeId);
     setForm((prev) => {
       const chosenRiverId = chosen?.river?.id ?? chosen?.river_id ?? prev.river_id;
+      const shouldUpdateName = !prev.name.trim() || prev.name.startsWith("Expedição ");
       return {
         ...prev,
         lodge_id: lodgeId,
         river_id: chosenRiverId || prev.river_id,
+        name: shouldUpdateName && chosen ? generateExpeditionName(chosen.name, prev.starts_at) : prev.name,
         departure_location: prev.departure_location || (chosen ? `${chosen.city}/${chosen.state}` : ""),
         destination: chosen ? `${chosen.city}/${chosen.state} (${chosen.name})` : prev.destination,
         cover_image_url: prev.cover_image_url || (chosen?.cover_image_url ?? ""),
       };
     });
+
+    if (chosen?.target_species && chosen.target_species.length > 0) {
+      setSelectedSpecies(chosen.target_species.map((s) => s.slug));
+      setPrimarySpecies(chosen.target_species[0]?.slug ?? "");
+    }
   };
 
-  // Pre-select river species if new expedition and no species yet selected
-  useEffect(() => {
-    if (!item && selectedSpecies.length === 0 && riverSpecies.data && riverSpecies.data.length > 0) {
-      const slugs = riverSpecies.data.map((s) => s.species_slug);
-      setSelectedSpecies(slugs);
-      const trophy = riverSpecies.data.find((s) => s.is_trophy);
-      if (trophy) setPrimarySpecies(trophy.species_slug);
-      else if (slugs[0]) setPrimarySpecies(slugs[0]);
-    }
-  }, [item, riverSpecies.data]);
-
-  const toggleSpecies = (slug: string) => {
-    setSelectedSpecies((prev) => {
-      if (prev.includes(slug)) {
-        const next = prev.filter((s) => s !== slug);
-        if (primarySpecies === slug) {
-          setPrimarySpecies(next[0] ?? "");
-        }
-        return next;
-      } else {
-        const next = [...prev, slug];
-        if (!primarySpecies) setPrimarySpecies(slug);
-        return next;
-      }
+  const onStartsAtChange = (newDate: string) => {
+    setForm((prev) => {
+      const chosenLodge = lodges.data?.find((l) => l.id === prev.lodge_id);
+      const shouldUpdateName = !prev.name.trim() || prev.name.startsWith("Expedição ");
+      return {
+        ...prev,
+        starts_at: newDate,
+        name: shouldUpdateName && chosenLodge ? generateExpeditionName(chosenLodge.name, newDate) : prev.name,
+      };
     });
+  };
+
+  const onPriceChange = (val: string) => {
+    const pNum = Number(val) || 0;
+    const minDeposit = Math.ceil(pNum * 0.20);
+    setForm((prev) => ({
+      ...prev,
+      price: val,
+      deposit: pNum > 0 ? String(minDeposit) : prev.deposit,
+    }));
   };
 
   const onAllInclusiveChange = (packageId: string) => {
@@ -1189,26 +1335,19 @@ function ExpeditionWizardModal({
     return diffDays > 0 ? diffDays : null;
   }, [form.starts_at, form.ends_at]);
 
-  const availableLodges = useMemo(() => {
-    if (!lodges.data) return [];
-    if (!form.river_id) return lodges.data;
-    return lodges.data.filter(
-      (l) => (l.river?.id ?? l.river_id) === form.river_id
-    );
-  }, [lodges.data, form.river_id]);
-
   const selectedLodge = lodges.data?.find((l) => l.id === form.lodge_id);
-  const selectedRiver = rivers.data?.find((r) => r.id === form.river_id);
   const selectedBeveragePkg = beveragePackages.data?.find((p) => p.id === form.beverage_package_id);
   const selectedAllInclusivePkg = allInclusivePackages.data?.find((p) => p.id === form.all_inclusive_package_id);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function submit(event?: FormEvent, targetStatus?: string) {
+    if (event) event.preventDefault();
     setError("");
+
+    const finalStatus = targetStatus || form.status;
 
     if (!form.name.trim()) {
       setError("O nome da expedição é obrigatório.");
-      setStep(4);
+      setStep(3);
       return;
     }
     if (!form.destination.trim()) {
@@ -1218,12 +1357,12 @@ function ExpeditionWizardModal({
     }
     if (!form.starts_at || !form.ends_at) {
       setError("As datas de início e término são obrigatórias.");
-      setStep(4);
+      setStep(3);
       return;
     }
     if (new Date(form.ends_at) < new Date(form.starts_at)) {
       setError("A data final deve ser posterior ou igual à inicial.");
-      setStep(4);
+      setStep(3);
       return;
     }
 
@@ -1233,12 +1372,12 @@ function ExpeditionWizardModal({
 
     if (priceCents > 0 && depositCents < minDepositCents) {
       setError(`O sinal mínimo deve ser de pelo menos 20% do valor por pessoa (${money(minDepositCents)}).`);
-      setStep(4);
+      setStep(3);
       return;
     }
     if (depositCents > priceCents) {
       setError("O sinal não pode ser superior ao valor por pessoa.");
-      setStep(4);
+      setStep(3);
       return;
     }
 
@@ -1258,13 +1397,13 @@ function ExpeditionWizardModal({
         price_per_person_cents: priceCents,
         deposit_cents: depositCents,
         balance_due_days_before: Number(form.balance_due_days_before) || 30,
-        status: form.status,
+        status: finalStatus,
         summary: form.summary.trim(),
         cover_image_url: form.cover_image_url.trim(),
         lodge_id: form.lodge_id || null,
         all_inclusive_package_id: form.all_inclusive_package_id || null,
         beverage_package_id: form.beverage_package_id || null,
-        species_slugs: orderedSpecies,
+        species_slugs: orderedSpecies.length > 0 ? orderedSpecies : undefined,
         inclusions: form.inclusions
           .split("\n")
           .map((s) => s.trim())
@@ -1284,10 +1423,9 @@ function ExpeditionWizardModal({
   }
 
   const steps = [
-    { num: 1, title: "Destino & Pousada", Icon: Compass },
-    { num: 2, title: "Espécies do Rio", Icon: Fish },
-    { num: 3, title: "Pacotes & Cardápio", Icon: Layers },
-    { num: 4, title: "Comercial & Vagas", Icon: CalendarDays },
+    { num: 1, title: "Destino & Pousada", Icon: House },
+    { num: 2, title: "Pacote & Cardápio", Icon: Layers },
+    { num: 3, title: "Comercial & Vagas", Icon: CalendarDays },
   ] as const;
 
   return (
@@ -1303,7 +1441,7 @@ function ExpeditionWizardModal({
               </h2>
             </div>
             <p className="text-xs text-ink-500">
-              Fluxo guiado em 4 etapas · Padrão operacional normativo
+              Fluxo simplificado em 3 etapas · Integração com Pousadas e Pacotes
             </p>
           </div>
           <button type="button" onClick={close} className="rounded-lg p-1 text-ink-400 hover:bg-gray-100">
@@ -1312,7 +1450,7 @@ function ExpeditionWizardModal({
         </div>
 
         {/* Stepper Tabs */}
-        <div className="grid grid-cols-2 border-b bg-gray-50/75 p-2 sm:grid-cols-4 sm:gap-2">
+        <div className="grid grid-cols-3 gap-2 border-b bg-gray-50/75 p-3">
           {steps.map(({ num, title, Icon }) => {
             const isActive = step === num;
             const isDone = step > num;
@@ -1320,7 +1458,7 @@ function ExpeditionWizardModal({
               <button
                 key={num}
                 type="button"
-                onClick={() => setStep(num as 1 | 2 | 3 | 4)}
+                onClick={() => setStep(num as 1 | 2 | 3)}
                 className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition ${
                   isActive
                     ? "bg-white text-brand-900 shadow-sm ring-1 ring-black/5"
@@ -1365,36 +1503,20 @@ function ExpeditionWizardModal({
               <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
                 <h3 className="text-sm font-black text-brand-900">Etapa 1: Definição Geográfica & Hospedagem</h3>
                 <p className="mt-1 text-xs text-brand-700">
-                  Selecione o rio e a pousada parceira. As informações de destino, ponto de encontro e frotas de barcos serão pré-preenchidas automaticamente.
+                  Selecione a pousada parceira. A localização e o catálogo de peixes cadastrados na pousada serão associados automaticamente a esta expedição.
                 </p>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-xs font-bold text-ink-800">
-                  Rio da Bacia
-                  <select
-                    value={form.river_id}
-                    onChange={(e) => onRiverChange(e.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium"
-                  >
-                    <option value="">Selecione um rio (filtra pousadas)...</option>
-                    {rivers.data?.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name} ({r.basin_display})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
+              <div>
                 <label className="text-xs font-bold text-ink-800">
                   Pousada Parceira
                   <select
                     value={form.lodge_id}
                     onChange={(e) => onLodgeChange(e.target.value)}
-                    className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium"
+                    className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium text-ink-900"
                   >
-                    <option value="">Nenhuma / Personalizada</option>
-                    {availableLodges.map((l) => (
+                    <option value="">Selecione a pousada parceira...</option>
+                    {lodges.data?.map((l) => (
                       <option key={l.id} value={l.id}>
                         {l.name} — {l.city}/{l.state}
                       </option>
@@ -1411,25 +1533,28 @@ function ExpeditionWizardModal({
                       <strong className="text-sm font-black text-ink-900">{selectedLodge.name}</strong>
                       <span className="ml-2 text-ink-500">
                         {selectedLodge.city}/{selectedLodge.state}
-                        {selectedLodge.river_section ? ` · Trecho ${selectedLodge.river_section}` : ""}
                       </span>
                     </div>
-                    {selectedLodge.river && (
-                      <span className="rounded-full bg-brand-100 px-2.5 py-0.5 font-bold text-brand-800">
-                        {selectedLodge.river.name}
-                      </span>
-                    )}
                   </div>
 
-                  {selectedLodge.boat_fleet_details && (
-                    <div className="mt-2.5">
-                      <span className="font-bold text-ink-700">Estrutura de Barcos & Motores:</span>
-                      <p className="mt-0.5 text-ink-600">{selectedLodge.boat_fleet_details}</p>
+                  {selectedLodge.target_species && selectedLodge.target_species.length > 0 && (
+                    <div className="mt-3">
+                      <span className="font-bold text-ink-700">Peixes Disponíveis nesta Pousada:</span>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {selectedLodge.target_species.map((sp) => (
+                          <span
+                            key={sp.slug}
+                            className="rounded-full bg-brand-50 px-2.5 py-0.5 text-[11px] font-bold text-brand-900 ring-1 ring-brand-600/20"
+                          >
+                            🐟 {sp.common_name}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
 
                   {selectedLodge.meeting_point && (
-                    <div className="mt-2">
+                    <div className="mt-2.5">
                       <span className="font-bold text-ink-700">Ponto de Encontro Padrão:</span>
                       <p className="mt-0.5 text-ink-600">{selectedLodge.meeting_point}</p>
                     </div>
@@ -1468,196 +1593,21 @@ function ExpeditionWizardModal({
             </div>
           )}
 
-          {/* STEP 2: Espécies do Rio */}
+          {/* STEP 2: Pacote & Cardápio */}
           {step === 2 && (
-            <div className="space-y-4">
-              <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
-                <h3 className="text-sm font-black text-brand-900">Etapa 2: Espécies-Alvo do Rio</h3>
-                <p className="mt-1 text-xs text-brand-700">
-                  {selectedRiver
-                    ? `Catálogo do Rio ${selectedRiver.name}. Selecione as espécies presentes e defina a estrela principal da expedição.`
-                    : "Selecione as espécies que serão o foco desta pescaria. É recomendável definir ao menos um peixe de troféu."}
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
-                <div className="text-xs text-ink-600">
-                  <strong>{selectedSpecies.length}</strong> espécie(s) marcada(s)
-                  {primarySpecies && (
-                    <span className="ml-2 font-bold text-brand-700">
-                      (Principal: {speciesList.data?.find((s) => s.slug === primarySpecies)?.common_name || primarySpecies})
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {riverSpecies.data && riverSpecies.data.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const riverSlugs = riverSpecies.data!.map((s) => s.species_slug);
-                        setSelectedSpecies(riverSlugs);
-                        const trophy = riverSpecies.data!.find((s) => s.is_trophy);
-                        if (trophy) setPrimarySpecies(trophy.species_slug);
-                        else if (riverSlugs[0]) setPrimarySpecies(riverSlugs[0]);
-                      }}
-                      className="text-xs font-bold text-brand-600 hover:underline"
-                    >
-                      Selecionar recomendadas do rio
-                    </button>
-                  )}
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const allSlugs = speciesList.data?.map((s) => s.slug) ?? [];
-                      setSelectedSpecies(allSlugs);
-                      if (!primarySpecies && allSlugs[0]) setPrimarySpecies(allSlugs[0]);
-                    }}
-                    className="text-xs font-bold text-ink-600 hover:underline"
-                  >
-                    Marcar todas
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSpecies([]);
-                      setPrimarySpecies("");
-                    }}
-                    className="text-xs font-bold text-ink-400 hover:underline"
-                  >
-                    Limpar
-                  </button>
-                </div>
-              </div>
-
-              {/* River specific species */}
-              {riverSpecies.data && riverSpecies.data.length > 0 && (
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-ink-500">
-                    Espécies Registradas no Rio {selectedRiver?.name}
-                  </h4>
-                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                    {riverSpecies.data.map((rsp) => {
-                      const isSelected = selectedSpecies.includes(rsp.species_slug);
-                      const isPrimary = primarySpecies === rsp.species_slug;
-                      return (
-                        <div
-                          key={rsp.id}
-                          className={`flex items-center justify-between rounded-xl border p-3 transition ${
-                            isSelected
-                              ? "border-brand-500 bg-brand-50/40"
-                              : "border-gray-200 bg-white opacity-70 hover:opacity-100"
-                          }`}
-                        >
-                          <label className="flex flex-1 cursor-pointer items-center gap-2.5">
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleSpecies(rsp.species_slug)}
-                              className="size-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
-                            />
-                            <div>
-                              <div className="flex items-center gap-1.5">
-                                <strong className="text-xs text-ink-900">{rsp.species_name}</strong>
-                                {rsp.is_trophy && (
-                                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-900">
-                                    🏆 Troféu
-                                  </span>
-                                )}
-                              </div>
-                              <span className="block text-[10px] text-ink-500">
-                                {rsp.category === "COURO" ? "Peixe de Couro" : "Peixe de Escama"}
-                                {rsp.best_season ? ` · Temporada: ${rsp.best_season}` : ""}
-                              </span>
-                            </div>
-                          </label>
-
-                          {isSelected && (
-                            <button
-                              type="button"
-                              onClick={() => setPrimarySpecies(rsp.species_slug)}
-                              className={`rounded-lg px-2 py-1 text-[10px] font-bold transition ${
-                                isPrimary
-                                  ? "bg-brand-600 text-white shadow-sm"
-                                  : "border bg-white text-ink-600 hover:bg-gray-100"
-                              }`}
-                            >
-                              {isPrimary ? "★ Principal" : "Tornar Principal"}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* General catalogue option */}
-              <div className="border-t pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowAllSpecies(!showAllSpecies)}
-                  className="flex items-center gap-1 text-xs font-bold text-brand-600 hover:underline"
-                >
-                  {showAllSpecies ? "− Ocultar catálogo geral completo" : "+ Adicionar espécies de outros rios / catálogo geral"}
-                </button>
-
-                {showAllSpecies && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {speciesList.data?.map((s) => {
-                      const isSelected = selectedSpecies.includes(s.slug);
-                      const isPrimary = primarySpecies === s.slug;
-                      return (
-                        <div
-                          key={s.slug}
-                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
-                            isSelected
-                              ? "border-brand-600 bg-brand-50 text-brand-800 shadow-sm"
-                              : "border-ink-900/10 text-ink-600 hover:bg-gray-50"
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleSpecies(s.slug)}
-                            className="size-3.5 rounded border-gray-300 text-brand-600"
-                          />
-                          <span>{s.common_name}</span>
-                          {isSelected && (
-                            <button
-                              type="button"
-                              onClick={() => setPrimarySpecies(s.slug)}
-                              title={isPrimary ? "Espécie principal da expedição" : "Definir como principal"}
-                              className={`ml-1 text-[10px] ${isPrimary ? "text-amber-600 font-black" : "text-gray-400 hover:text-brand-600"}`}
-                            >
-                              {isPrimary ? "★" : "☆"}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* STEP 3: Pacotes & Cardápio */}
-          {step === 3 && (
             <div className="space-y-5">
               <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
-                <h3 className="text-sm font-black text-brand-900">Etapa 3: Pacotes Reutilizáveis & Bebidas</h3>
+                <h3 className="text-sm font-black text-brand-900">Etapa 2: Pacote da Expedição & Bebidas</h3>
                 <p className="mt-1 text-xs text-brand-700">
-                  Associe moldes de All Inclusive e Cardápio de Bebidas. O All Inclusive carrega uma cópia das inclusões para personalização exclusiva desta expedição.
+                  Associe moldes de Pacote da Expedição e Cardápio de Bebidas. O pacote carrega uma cópia das inclusões para personalização exclusiva desta expedição.
                 </p>
               </div>
 
-              {/* All Inclusive Section */}
+              {/* Pacote da Expedição Section */}
               <div className="rounded-xl border p-4">
                 <div className="flex items-center gap-2">
                   <Layers className="size-4 text-brand-600" />
-                  <h4 className="text-sm font-black text-ink-900">Pacote All Inclusive Base</h4>
+                  <h4 className="text-sm font-black text-ink-900">Pacote da Expedição</h4>
                 </div>
 
                 <div className="mt-3">
@@ -1666,7 +1616,7 @@ function ExpeditionWizardModal({
                     onChange={(e) => onAllInclusiveChange(e.target.value)}
                     className="h-10 w-full rounded-lg border bg-white px-3 text-sm font-bold text-ink-800"
                   >
-                    <option value="">Nenhum pacote All Inclusive vinculado (Personalizado)</option>
+                    <option value="">Nenhum pacote vinculado (Personalizado)</option>
                     {allInclusivePackages.data?.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} ({p.inclusions?.length ?? 0} benefícios)
@@ -1731,7 +1681,6 @@ function ExpeditionWizardModal({
 
                 {selectedBeveragePkg && (
                   <div className="mt-3 space-y-2 rounded-lg bg-gray-50 p-3 text-xs">
-                    <p className="text-ink-600">{selectedBeveragePkg.description}</p>
                     <p className="font-bold text-ink-700">Cotas sincronizadas por participante:</p>
                     <div className="grid gap-1.5 sm:grid-cols-2">
                       {selectedBeveragePkg.items?.map((it, idx) => (
@@ -1755,22 +1704,44 @@ function ExpeditionWizardModal({
             </div>
           )}
 
-          {/* STEP 4: Comercial & Vagas */}
-          {step === 4 && (
+          {/* STEP 3: Comercial & Vagas */}
+          {step === 3 && (
             <div className="space-y-4">
               <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
-                <h3 className="text-sm font-black text-brand-900">Etapa 4: Parâmetros Comerciais & Publicação</h3>
+                <h3 className="text-sm font-black text-brand-900">Etapa 3: Parâmetros Comerciais & Publicação</h3>
                 <p className="mt-1 text-xs text-brand-700">
                   Defina datas, capacidade e valores. Pela Constituição do projeto, o sinal mínimo obrigatório é de 20% do valor total por pessoa.
                 </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label="Nome da Expedição"
-                  value={form.name}
-                  set={(v) => setForm({ ...form, name: v })}
-                />
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-ink-800">Nome da Expedição *</label>
+                    {selectedLodge && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            name: generateExpeditionName(selectedLodge.name, prev.starts_at),
+                          }))
+                        }
+                        className="text-[11px] font-bold text-brand-600 hover:underline"
+                      >
+                        ⚡ Sugerir Nome
+                      </button>
+                    )}
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="Ex: Expedição Pousada Cristal — Out/2026"
+                    className="h-10 w-full rounded-lg border px-3 text-sm font-bold"
+                  />
+                </div>
 
                 <label className="text-xs font-bold text-ink-800">
                   Status Operacional
@@ -1794,7 +1765,7 @@ function ExpeditionWizardModal({
                     label="Data de Início"
                     type="date"
                     value={form.starts_at}
-                    set={(v) => setForm({ ...form, starts_at: v })}
+                    set={onStartsAtChange}
                   />
                 </div>
 
@@ -1831,21 +1802,33 @@ function ExpeditionWizardModal({
                     label="Valor por Pessoa (R$)"
                     type="number"
                     value={form.price}
-                    set={(v) => setForm({ ...form, price: v })}
+                    set={onPriceChange}
                   />
                   {priceNum > 0 && (
                     <span className="mt-1 block text-right text-[11px] text-ink-500">
-                      Mínimo de sinal exigido (20%): <strong>{money(minDepositNum * 100)}</strong>
+                      Sinal de 20% autocalculado: <strong>{money(minDepositNum * 100)}</strong>
                     </span>
                   )}
                 </div>
 
                 <div>
-                  <Field
-                    label="Valor do Sinal (R$)"
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-ink-800">Valor do Sinal (R$)</label>
+                    {priceNum > 0 && depositNum !== minDepositNum && (
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, deposit: String(minDepositNum) }))}
+                        className="text-[11px] font-bold text-brand-600 hover:underline"
+                      >
+                        Redefinir 20%
+                      </button>
+                    )}
+                  </div>
+                  <input
                     type="number"
                     value={form.deposit}
-                    set={(v) => setForm({ ...form, deposit: v })}
+                    onChange={(e) => setForm({ ...form, deposit: e.target.value })}
+                    className="h-10 w-full rounded-lg border px-3 text-sm font-bold"
                   />
                   {depositNum > 0 && priceNum > 0 && (
                     <span className="mt-1 block text-right text-[11px] font-bold text-ink-600">
@@ -1874,11 +1857,55 @@ function ExpeditionWizardModal({
                 </div>
               )}
 
-              <Field
-                label="URL da Imagem de Capa"
-                value={form.cover_image_url}
-                set={(v) => setForm({ ...form, cover_image_url: v })}
-              />
+              {/* Cover Image with Gallery Picker */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-ink-800">Imagem de Capa da Expedição</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowGalleryPicker(true)}
+                    className="flex items-center gap-1.5 rounded-lg border border-brand-600 bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700 hover:bg-brand-100"
+                  >
+                    <ImageIcon className="size-3.5" />
+                    Escolher da Galeria
+                  </button>
+                </div>
+
+                {form.cover_image_url ? (
+                  <div className="mt-2 flex items-center gap-3 rounded-xl border bg-gray-50 p-2">
+                    <img
+                      src={form.cover_image_url}
+                      alt="Capa da expedição"
+                      className="size-16 rounded-lg object-cover shadow-sm"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <input
+                        value={form.cover_image_url}
+                        onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })}
+                        placeholder="URL ou caminho da imagem"
+                        className="h-8 w-full rounded border bg-white px-2 text-xs"
+                      />
+                      <p className="mt-0.5 text-[10px] text-ink-500">Foto selecionada para a expedição</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, cover_image_url: "" })}
+                      className="rounded p-1 text-ink-400 hover:bg-gray-200 hover:text-ink-700"
+                      title="Remover imagem"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => setShowGalleryPicker(true)}
+                    className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/50 py-4 text-xs font-bold text-ink-600 transition hover:border-brand-500 hover:bg-brand-50/30"
+                  >
+                    <ImageIcon className="size-4 text-brand-600" />
+                    <span>Nenhuma imagem selecionada. Clique para escolher da galeria de fotos.</span>
+                  </div>
+                )}
+              </div>
 
               <label className="block text-xs font-bold text-ink-800">
                 Resumo Executivo da Expedição
@@ -1903,14 +1930,13 @@ function ExpeditionWizardModal({
                     <strong>{selectedLodge?.name || "Não selecionada"}</strong>
                   </div>
                   <div>
-                    <span className="text-ink-500">Espécies:</span>{" "}
+                    <span className="text-ink-500">Peixes da Pousada:</span>{" "}
                     <strong>
-                      {selectedSpecies.length} selecionadas
-                      {primarySpecies ? ` (Principal: ${primarySpecies})` : ""}
+                      {selectedSpecies.length} espécie(s) vinculada(s)
                     </strong>
                   </div>
                   <div>
-                    <span className="text-ink-500">Pacote All Inclusive:</span>{" "}
+                    <span className="text-ink-500">Pacote da Expedição:</span>{" "}
                     <strong>{selectedAllInclusivePkg?.name || "Personalizado"}</strong>
                   </div>
                   <div>
@@ -1945,7 +1971,7 @@ function ExpeditionWizardModal({
             {step > 1 && (
               <button
                 type="button"
-                onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3 | 4)}
+                onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}
                 className="flex items-center gap-1 rounded-lg border px-4 py-2 text-sm font-bold text-ink-700 hover:bg-gray-50"
               >
                 <ChevronLeft className="size-4" />
@@ -1953,27 +1979,47 @@ function ExpeditionWizardModal({
               </button>
             )}
 
-            {step < 4 ? (
+            {step < 3 ? (
               <button
                 type="button"
-                onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3 | 4)}
+                onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3)}
                 className="flex items-center gap-1 rounded-lg bg-brand-900 px-5 py-2 text-sm font-bold text-white hover:bg-brand-800"
               >
                 Avançar
                 <ChevronRight className="size-4" />
               </button>
             ) : (
-              <button
-                type="submit"
-                disabled={loading}
-                className="rounded-lg bg-brand-600 px-6 py-2 text-sm font-bold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
-              >
-                {loading ? "Salvando..." : item ? "Salvar alterações" : "Criar expedição"}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => submit(undefined, "DRAFT")}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-bold text-ink-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {loading ? "Salvando..." : "Salvar como Rascunho"}
+                </button>
+                <button
+                  type="button"
+                  disabled={loading}
+                  onClick={() => submit(undefined, "PUBLISHED")}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+                >
+                  <Sparkles className="size-4" />
+                  {loading ? "Salvando..." : item ? "Salvar e Publicar" : "Publicar Imediatamente"}
+                </button>
+              </div>
             )}
           </div>
         </div>
       </form>
+
+      {showGalleryPicker && (
+        <GalleryPickerModal
+          currentUrl={form.cover_image_url}
+          onSelect={(url) => setForm((prev) => ({ ...prev, cover_image_url: url }))}
+          close={() => setShowGalleryPicker(false)}
+        />
+      )}
     </div>
   );
 }
@@ -2067,6 +2113,147 @@ function LodgesPanel({ token, unauthorized }: { token: string; unauthorized: () 
   );
 }
 
+function AmenityModal({
+  token,
+  item,
+  close,
+  saved,
+}: {
+  token: string;
+  item: Amenity | "new";
+  close: () => void;
+  saved: (createdAmenity?: Amenity) => Promise<void>;
+}) {
+  const isNew = item === "new";
+  const [name, setName] = useState(isNew ? "" : item.name);
+  const [category, setCategory] = useState(isNew ? "ROOM_COMFORT" : item.category);
+  const [description, setDescription] = useState(isNew ? "" : item.description ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const categories = [
+    { value: "ROOM_COMFORT", label: "Acomodação e Conforto" },
+    { value: "FISHING_STRUCTURE", label: "Estrutura Náutica e Pesca" },
+    { value: "GASTRONOMY", label: "Culinária e Bar" },
+    { value: "LEISURE", label: "Lazer e Bem-estar" },
+    { value: "CONNECTIVITY", label: "Conectividade e Apoio" },
+  ];
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) {
+      setError("O nome da comodidade é obrigatório.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const isEditing = !isNew;
+      const res = await request<Amenity>(
+        isEditing ? `amenities/${item.id}/` : "amenities/",
+        token,
+        {
+          method: isEditing ? "PATCH" : "POST",
+          body: JSON.stringify({
+            name: name.trim(),
+            category,
+            description: description.trim(),
+            active: true,
+          }),
+        }
+      );
+      await saved(isEditing ? undefined : res);
+      close();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/60 p-4">
+      <form onSubmit={handleSubmit} className="my-5 w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b pb-4">
+          <h3 className="text-lg font-black text-ink-900">
+            {isNew ? "Cadastrar Nova Comodidade" : "Editar Comodidade"}
+          </h3>
+          <button type="button" onClick={close} className="rounded p-1 hover:bg-gray-100">
+            <X className="size-4" />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          <label className="block text-xs font-bold text-ink-800">
+            Nome da Comodidade
+            <input
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Piscina com borda infinita"
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+            />
+          </label>
+
+          <label className="block text-xs font-bold text-ink-800">
+            Categoria
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="mt-1 h-10 w-full rounded-lg border bg-white px-3 text-sm font-medium"
+            >
+              {categories.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs font-bold text-ink-800">
+            Descrição (opcional)
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ex: Área de lazer com vista para o pôr do sol"
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+            />
+          </label>
+        </div>
+
+        {error && <p className="mt-3 text-xs font-bold text-red-600">{error}</p>}
+
+        <div className="mt-5 flex justify-end gap-2 border-t pt-4">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg border px-4 py-2 text-xs font-bold text-ink-700 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-brand-700 disabled:opacity-50"
+          >
+            {saving ? "Salvando..." : isNew ? "Cadastrar" : "Salvar"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+const ARAGUAIA_POLO_CITIES = [
+  { city: "São Félix do Araguaia", state: "MT" },
+  { city: "Luiz Alves", state: "GO" },
+  { city: "Bandeirantes", state: "GO" },
+  { city: "Cocalinho", state: "MT" },
+  { city: "Aruanã", state: "GO" },
+] as const;
+
 function LodgeModal({
   token,
   item,
@@ -2078,17 +2265,13 @@ function LodgeModal({
   close: () => void;
   saved: () => Promise<void>;
 }) {
-  const rivers = useData<River[]>("rivers/", token, () => {});
   const amenities = useData<Amenity[]>("amenities/", token, () => {});
+  const speciesData = useData<Species[]>("species/", token, () => {});
 
   const [form, setForm] = useState({
     name: item?.name ?? "",
-    slug: item?.slug ?? "",
     city: item?.city ?? "",
     state: item?.state ?? "MT",
-    river_id: item?.river?.id ?? item?.river_id ?? "",
-    river_section: item?.river_section ?? "Médio Araguaia",
-    boat_fleet_details: item?.boat_fleet_details ?? "",
     description: item?.description ?? "",
     meeting_point: item?.meeting_point ?? "",
     directions: item?.directions ?? "",
@@ -2103,24 +2286,53 @@ function LodgeModal({
     return [];
   });
 
-  useEffect(() => {
-    if (amenities.data && item?.amenities && selectedAmenityIds.length === 0) {
-      const legacyNames = new Set(item.amenities.map((n) => n.trim().toLowerCase()));
-      const matched = amenities.data
-        .filter((a) => legacyNames.has(a.name.trim().toLowerCase()))
-        .map((a) => a.id);
-      if (matched.length > 0) {
-        setSelectedAmenityIds(matched);
-      }
-    }
-  }, [amenities.data, item?.amenities, selectedAmenityIds.length]);
+  const [selectedSpeciesSlugs, setSelectedSpeciesSlugs] = useState<string[]>(
+    () => item?.target_species?.map((s) => s.slug) ?? []
+  );
 
+  const [editingAmenity, setEditingAmenity] = useState<Amenity | "new" | null>(null);
+  const [showGalleryPicker, setShowGalleryPicker] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  function selectStandardAmenities() {
+    if (!amenities.data) return;
+    const standardKeywords = [
+      "ar split", "ar-condicionado", "climatizada", "wi-fi", "starlink",
+      "barcos", "guias", "restaurante", "limpeza", "gelo", "refeições", "pensão"
+    ];
+    const defaultIds = amenities.data
+      .filter((a) => standardKeywords.some((k) => a.name.toLowerCase().includes(k)))
+      .map((a) => a.id);
+    setSelectedAmenityIds(defaultIds);
+  }
+
+  useEffect(() => {
+    if (amenities.data && selectedAmenityIds.length === 0) {
+      if (item?.amenities && item.amenities.length > 0) {
+        const legacyNames = new Set(item.amenities.map((n) => n.trim().toLowerCase()));
+        const matched = amenities.data
+          .filter((a) => legacyNames.has(a.name.trim().toLowerCase()))
+          .map((a) => a.id);
+        if (matched.length > 0) {
+          setSelectedAmenityIds(matched);
+        }
+      } else if (!item) {
+        // Pre-select standard amenities for a new lodge
+        selectStandardAmenities();
+      }
+    }
+  }, [amenities.data, item, selectedAmenityIds.length]);
 
   function toggleAmenity(id: string) {
     setSelectedAmenityIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  function toggleSpecies(slug: string) {
+    setSelectedSpeciesSlugs((prev) =>
+      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
     );
   }
 
@@ -2137,6 +2349,10 @@ function LodgeModal({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!form.name.trim()) {
+      setError("O nome da pousada é obrigatório.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -2146,10 +2362,11 @@ function LodgeModal({
 
       const body = {
         ...form,
-        river_id: form.river_id || null,
         amenity_ids: selectedAmenityIds,
         amenities: selectedNames.length > 0 ? selectedNames : item?.amenities ?? [],
+        species_slugs: selectedSpeciesSlugs,
       };
+
       await request(item ? `lodges/${item.id}/` : "lodges/", token, {
         method: item ? "PATCH" : "POST",
         body: JSON.stringify(body),
@@ -2176,7 +2393,7 @@ function LodgeModal({
         <div className="flex justify-between border-b pb-4">
           <div>
             <h2 className="text-2xl font-black">{item ? "Editar pousada" : "Nova pousada"}</h2>
-            <p className="text-xs text-ink-500">Defina localização, rio de atuação, frota de barcos e comodidades.</p>
+            <p className="text-xs text-ink-500">Defina localização, catálogo de peixes, imagem e comodidades.</p>
           </div>
           <button type="button" onClick={close} className="rounded p-1 hover:bg-gray-100">
             <X />
@@ -2184,49 +2401,165 @@ function LodgeModal({
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 max-h-[70vh] overflow-y-auto pr-2">
-          {input("name", "Nome da pousada")}
-          {input("slug", "Identificador (slug)")}
-
-          <label className="text-xs font-bold">
-            Rio de Atuação
-            <select
-              value={form.river_id}
-              onChange={(e) => setForm({ ...form, river_id: e.target.value })}
-              className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium text-ink-800"
-            >
-              <option value="">Selecione um rio</option>
-              {rivers.data?.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name} ({r.basin_display})
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {input("river_section", "Trecho do rio (Ex: Médio Araguaia)")}
-          {input("city", "Cidade")}
-          {input("state", "Estado (UF)")}
           <div className="sm:col-span-2">
-            {input("cover_image_url", "URL da imagem de capa")}
+            {input("name", "Nome da pousada")}
           </div>
 
-          <label className="text-xs font-bold sm:col-span-2">
-            Estrutura da Frota de Barcos (motores, trim, rádio, comodidade a bordo)
-            <textarea
-              value={form.boat_fleet_details}
-              onChange={(e) => setForm({ ...form, boat_fleet_details: e.target.value })}
-              placeholder="Ex: Barcos plataformados de 6m com motor Mercury 40/50HP c/ Trim elétrico, rádio VHF, cadeiras giratórias acolchoadas e caixas térmicas."
-              className="mt-1 min-h-16 w-full rounded-lg border p-3 text-xs"
-            />
-          </label>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-bold text-ink-800">
+              Preenchimento Rápido (Cidades-polo Araguaia)
+            </label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {ARAGUAIA_POLO_CITIES.map((polo) => {
+                const isSelected = form.city === polo.city && form.state === polo.state;
+                return (
+                  <button
+                    key={`${polo.city}-${polo.state}`}
+                    type="button"
+                    onClick={() => setForm((prev) => ({ ...prev, city: polo.city, state: polo.state }))}
+                    className={`rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+                      isSelected
+                        ? "border-brand-600 bg-brand-50 text-brand-900 ring-2 ring-brand-500/20"
+                        : "border-gray-200 bg-gray-50 text-ink-700 hover:border-brand-400 hover:bg-white"
+                    }`}
+                  >
+                    📍 {polo.city} ({polo.state})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-          {/* COMODIDADES CATEGORIZADAS */}
+          {input("city", "Cidade")}
+          {input("state", "Estado (UF)")}
+
+          {/* Cover image with Gallery Picker */}
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-ink-800">Imagem de Capa da Pousada</label>
+              <button
+                type="button"
+                onClick={() => setShowGalleryPicker(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-brand-600 bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700 hover:bg-brand-100"
+              >
+                <ImageIcon className="size-3.5" />
+                Escolher da Galeria
+              </button>
+            </div>
+
+            {form.cover_image_url ? (
+              <div className="mt-2 flex items-center gap-3 rounded-xl border bg-gray-50 p-2">
+                <img
+                  src={form.cover_image_url}
+                  alt="Capa da pousada"
+                  className="size-16 rounded-lg object-cover shadow-sm"
+                />
+                <div className="min-w-0 flex-1">
+                  <input
+                    value={form.cover_image_url}
+                    onChange={(e) => setForm({ ...form, cover_image_url: e.target.value })}
+                    placeholder="URL ou caminho da imagem"
+                    className="h-8 w-full rounded border bg-white px-2 text-xs"
+                  />
+                  <p className="mt-0.5 text-[10px] text-ink-500">Imagem selecionada para a pousada</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, cover_image_url: "" })}
+                  className="rounded p-1 text-ink-400 hover:bg-gray-200 hover:text-ink-700"
+                  title="Remover imagem"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <div
+                onClick={() => setShowGalleryPicker(true)}
+                className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/50 py-4 text-xs font-bold text-ink-600 transition hover:border-brand-500 hover:bg-brand-50/30"
+              >
+                <ImageIcon className="size-4 text-brand-600" />
+                <span>Nenhuma imagem selecionada. Clique para escolher da galeria de fotos.</span>
+              </div>
+            )}
+          </div>
+
+          {/* PEIXES DISPONÍVEIS NA POUSADA (CATÁLOGO RIO ARAGUAIA) */}
+          <div className="sm:col-span-2 border-t pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-ink-900 uppercase tracking-wider">
+                Peixes Disponíveis nesta Pousada ({selectedSpeciesSlugs.length} selecionados)
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSpeciesSlugs(speciesData.data?.map((s) => s.slug) ?? [])}
+                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                >
+                  Selecionar Todos os Peixes (Rio Araguaia)
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedSpeciesSlugs([])}
+                  className="text-[11px] font-bold text-ink-500 hover:underline"
+                >
+                  Limpar
+                </button>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2 max-h-48 overflow-y-auto p-2 border rounded-xl bg-gray-50/50">
+              {speciesData.data?.map((sp) => {
+                const checked = selectedSpeciesSlugs.includes(sp.slug);
+                return (
+                  <label
+                    key={sp.slug}
+                    className={`flex cursor-pointer items-center gap-2 rounded-lg border p-2 text-xs transition ${
+                      checked
+                        ? "border-brand-600 bg-brand-50 text-brand-950 font-bold"
+                        : "border-gray-200 bg-white text-ink-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleSpecies(sp.slug)}
+                      className="size-3.5 rounded text-brand-600"
+                    />
+                    <span className="truncate">{sp.common_name}</span>
+                    <span className="ml-auto text-[9px] uppercase font-bold text-ink-400">
+                      {sp.category === "COURO" ? "Couro" : "Escama"}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* COMODIDADES CATEGORIZADAS COM ADICIONAR / EDITAR */}
           <div className="sm:col-span-2 border-t pt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-ink-900 uppercase tracking-wider">
                 Comodidades Estruturadas ({selectedAmenityIds.length} selecionadas)
               </span>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingAmenity("new")}
+                  className="rounded bg-brand-50 border border-brand-600 px-2 py-0.5 text-[11px] font-bold text-brand-700 hover:bg-brand-100"
+                >
+                  <Plus className="mr-1 inline size-3" />
+                  Nova Comodidade
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  type="button"
+                  onClick={selectStandardAmenities}
+                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                >
+                  Padrão Pousada Completa
+                </button>
+                <span className="text-gray-300">|</span>
                 <button
                   type="button"
                   onClick={() => setSelectedAmenityIds(amenities.data?.map((a) => a.id) ?? [])}
@@ -2255,29 +2588,43 @@ function LodgeModal({
                     {items.map((a) => {
                       const checked = selectedAmenityIds.includes(a.id);
                       return (
-                        <label
+                        <div
                           key={a.id}
-                          className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-2.5 text-xs transition ${
+                          className={`flex items-start justify-between rounded-lg border p-2.5 text-xs transition ${
                             checked
                               ? "border-brand-600 bg-brand-50/70 text-brand-950 font-bold"
                               : "border-ink-900/10 bg-white text-ink-700 hover:bg-gray-50"
                           }`}
                         >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleAmenity(a.id)}
-                            className="mt-0.5 rounded text-brand-600"
-                          />
-                          <div className="min-w-0 flex-1">
-                            <span className="block leading-tight">{a.name}</span>
-                            {a.description && (
-                              <p className="mt-0.5 text-[11px] font-normal text-ink-500 line-clamp-1">
-                                {a.description}
-                              </p>
-                            )}
-                          </div>
-                        </label>
+                          <label className="flex flex-1 cursor-pointer items-start gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleAmenity(a.id)}
+                              className="mt-0.5 rounded text-brand-600"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <span className="block leading-tight">{a.name}</span>
+                              {a.description && (
+                                <p className="mt-0.5 text-[11px] font-normal text-ink-500 line-clamp-1">
+                                  {a.description}
+                                </p>
+                              )}
+                            </div>
+                          </label>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEditingAmenity(a);
+                            }}
+                            title="Editar esta comodidade"
+                            className="ml-2 rounded p-1 text-ink-400 hover:bg-gray-200 hover:text-brand-700"
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -2342,6 +2689,28 @@ function LodgeModal({
           </button>
         </div>
       </form>
+
+      {editingAmenity && (
+        <AmenityModal
+          token={token}
+          item={editingAmenity}
+          close={() => setEditingAmenity(null)}
+          saved={async (newA) => {
+            await amenities.load();
+            if (newA?.id) {
+              setSelectedAmenityIds((prev) => [...prev, newA.id]);
+            }
+          }}
+        />
+      )}
+
+      {showGalleryPicker && (
+        <GalleryPickerModal
+          currentUrl={form.cover_image_url}
+          onSelect={(url) => setForm((prev) => ({ ...prev, cover_image_url: url }))}
+          close={() => setShowGalleryPicker(false)}
+        />
+      )}
     </div>
   );
 }
@@ -3023,7 +3392,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
     <div>
       <Header
         title="Pacotes & Cardápios"
-        subtitle="Gerencie moldes reutilizáveis de All Inclusive e cardápios de bebidas para as expedições."
+        subtitle="Gerencie moldes reutilizáveis de pacotes e cardápios de bebidas para as expedições."
         action={
           tab === "all_inclusive" ? (
             <button
@@ -3034,7 +3403,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
               className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
             >
               <Plus className="mr-2 inline size-4" />
-              Novo pacote All Inclusive
+              Novo pacote da expedição
             </button>
           ) : (
             <button
@@ -3065,7 +3434,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
           }`}
         >
           <Layers className="size-4" />
-          Pacotes All Inclusive ({allInclusiveList.data?.length ?? 0})
+          Pacotes da Expedição ({allInclusiveList.data?.length ?? 0})
         </button>
         <button
           onClick={() => {
@@ -3160,7 +3529,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
                   </div>
                 </article>
               ))}
-              {!allInclusiveList.data.length && <Empty>Nenhum pacote All Inclusive cadastrado.</Empty>}
+              {!allInclusiveList.data.length && <Empty>Nenhum pacote da expedição cadastrado.</Empty>}
             </div>
           )}
         </div>
@@ -3276,6 +3645,21 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
   );
 }
 
+const STANDARD_INCLUSIONS_CATALOG = [
+  "Combustível e Óleo 100% Inclusos",
+  "Iscas Vivas Nativas (Tuviras/Caranguejos)",
+  "Hospedagem Completa na Pousada",
+  "Pensão Completa (Café, Almoço e Jantar)",
+  "Kit Sashimi, Ceviche e petiscos no rio",
+  "Bebidas e Gelo Abundante no Barco",
+  "Guias Nativos Especializados",
+  "Torneio com Troféus e Banner da Equipe",
+  "Seguro Viagem e Resgate",
+  "Internet Wi-Fi Starlink na Pousada",
+  "Lavanderia Diária Inclusa",
+  "Translado Aeroporto / Pousada",
+] as const;
+
 function AllInclusivePackageModal({
   token,
   item,
@@ -3287,36 +3671,46 @@ function AllInclusivePackageModal({
   close: () => void;
   saved: () => Promise<void>;
 }) {
-  const [form, setForm] = useState({
-    name: item?.name ?? "",
-    description: item?.description ?? "",
-    active: item?.active ?? true,
-    inclusions: (item?.inclusions ?? [
-      "Hospedagem Completa na Pousada",
-      "Combustível e Óleo 100% Inclusos",
-      "Kit Sashimi, Ceviche e petiscos no rio",
-      "Iscas Vivas Nativas",
-      "Guias Nativos Especializados",
-      "Torneio com Troféus e Banner da Equipe",
-      "Seguro Viagem",
-      "Água mineral, Refrigerante e Gelo abundante",
-      "Internet Wi-Fi na Pousada",
-    ]).join("\n"),
+  const [name, setName] = useState(item?.name ?? "");
+  const [description, setDescription] = useState(item?.description ?? "");
+  const [active, setActive] = useState(item?.active ?? true);
+  const [inclusions, setInclusions] = useState<string[]>(() => {
+    if (item?.inclusions && item.inclusions.length > 0) {
+      return item.inclusions;
+    }
+    return Array.from(STANDARD_INCLUSIONS_CATALOG.slice(0, 9));
   });
+  const [customInclusion, setCustomInclusion] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  function toggleInclusion(tag: string) {
+    setInclusions((prev) =>
+      prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]
+    );
+  }
+
+  function addCustomInclusion() {
+    const trimmed = customInclusion.trim();
+    if (!trimmed) return;
+    if (!inclusions.includes(trimmed)) {
+      setInclusions((prev) => [...prev, trimmed]);
+    }
+    setCustomInclusion("");
+  }
+
+  function removeInclusion(tag: string) {
+    setInclusions((prev) => prev.filter((x) => x !== tag));
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError("");
-    if (!form.name.trim()) {
+    if (!name.trim()) {
       setError("O nome do pacote é obrigatório.");
       return;
     }
-    const cleanInclusions = form.inclusions
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const cleanInclusions = inclusions.map((s) => s.trim()).filter(Boolean);
     if (cleanInclusions.length === 0) {
       setError("Insira ao menos um item de benefício/inclusão.");
       return;
@@ -3325,9 +3719,9 @@ function AllInclusivePackageModal({
     setLoading(true);
     try {
       const body = {
-        name: form.name.trim(),
-        description: form.description.trim(),
-        active: form.active,
+        name: name.trim(),
+        description: description.trim(),
+        active,
         inclusions: cleanInclusions,
       };
       await request(item ? `all-inclusive-packages/${item.id}/` : "all-inclusive-packages/", token, {
@@ -3349,7 +3743,7 @@ function AllInclusivePackageModal({
           <div className="flex items-center gap-2">
             <Layers className="size-5 text-brand-600" />
             <h2 className="text-xl font-black">
-              {item ? "Editar pacote All Inclusive" : "Novo pacote All Inclusive"}
+              {item ? "Editar pacote da expedição" : "Novo pacote da expedição"}
             </h2>
           </div>
           <button type="button" onClick={close} className="rounded-lg p-1 text-ink-400 hover:bg-gray-100">
@@ -3357,49 +3751,152 @@ function AllInclusivePackageModal({
           </button>
         </div>
 
-        <div className="mt-5 space-y-4">
+        <div className="mt-5 space-y-4 max-h-[75vh] overflow-y-auto pr-1">
           <label className="block text-xs font-bold text-ink-800">
             Nome do Pacote
             <input
               type="text"
               required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Ex: All Inclusive Casais VIP (Tudo Incluso)"
-              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ex: Pacote Casais VIP (Tudo Incluso)"
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
             />
           </label>
 
           <label className="block text-xs font-bold text-ink-800">
             Descrição do Molde
             <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
               rows={2}
               placeholder="Explicação da proposta do pacote e perfil de público..."
               className="mt-1 w-full rounded-lg border p-3 text-sm"
             />
           </label>
 
-          <label className="block text-xs font-bold text-ink-800">
-            Benefícios e Inclusões (uma por linha)
-            <span className="block text-[11px] font-normal text-ink-500">
-              Estes itens servem de cópia inicial quando selecionados no Construtor de Expedições.
-            </span>
-            <textarea
-              value={form.inclusions}
-              onChange={(e) => setForm({ ...form, inclusions: e.target.value })}
-              rows={8}
-              required
-              className="mt-1 w-full rounded-lg border p-3 font-mono text-xs"
-            />
-          </label>
+          {/* Quick-toggle tags for standard inclusions */}
+          <div className="border-t pt-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-ink-800">
+                Itens Padrão do Pacote (Clique para Ativar / Desativar)
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setInclusions(Array.from(STANDARD_INCLUSIONS_CATALOG.slice(0, 9)))}
+                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                >
+                  Padrão All-Inclusive
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setInclusions([])}
+                  className="text-[11px] font-bold text-ink-500 hover:underline"
+                >
+                  Limpar
+                </button>
+              </div>
+            </div>
+            <p className="mt-0.5 text-[11px] text-ink-500">
+              Clique nos itens rápidos abaixo para adicionar ou remover do pacote:
+            </p>
 
-          <label className="flex items-center gap-2 text-xs font-bold text-ink-800">
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {STANDARD_INCLUSIONS_CATALOG.map((tag) => {
+                const isIncluded = inclusions.includes(tag);
+                return (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => toggleInclusion(tag)}
+                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold transition ${
+                      isIncluded
+                        ? "border-brand-600 bg-brand-50 text-brand-900 shadow-xs ring-1 ring-brand-500/20"
+                        : "border-gray-200 bg-gray-50 text-ink-600 hover:border-gray-300 hover:bg-white"
+                    }`}
+                  >
+                    {isIncluded ? (
+                      <Check className="size-3 text-brand-600 stroke-[3]" />
+                    ) : (
+                      <Plus className="size-3 text-ink-400" />
+                    )}
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Active inclusions list & custom addition */}
+          <div className="rounded-xl border bg-gray-50/80 p-3.5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-black uppercase tracking-wider text-ink-700">
+                Benefícios Inclusos no Pacote ({inclusions.length})
+              </span>
+              {inclusions.length === 0 && (
+                <span className="text-xs font-bold text-amber-600">Nenhum benefício selecionado</span>
+              )}
+            </div>
+
+            {inclusions.length > 0 && (
+              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
+                {inclusions.map((inc, idx) => (
+                  <div
+                    key={`${inc}-${idx}`}
+                    className="flex items-center justify-between rounded-lg border bg-white px-3 py-1.5 text-xs text-ink-800 shadow-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="grid size-4 shrink-0 place-items-center rounded-full bg-brand-100 text-[10px] font-black text-brand-800">
+                        {idx + 1}
+                      </span>
+                      <span className="font-medium truncate">{inc}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeInclusion(inc)}
+                      className="ml-2 rounded p-1 text-ink-400 hover:bg-red-50 hover:text-red-600"
+                      title="Remover benefício"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Custom item addition input */}
+            <div className="mt-3 flex gap-2">
+              <input
+                type="text"
+                value={customInclusion}
+                onChange={(e) => setCustomInclusion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCustomInclusion();
+                  }
+                }}
+                placeholder="Adicionar item customizado (ex: Translado em van privativa)..."
+                className="h-9 flex-1 rounded-lg border bg-white px-3 text-xs"
+              />
+              <button
+                type="button"
+                onClick={addCustomInclusion}
+                className="flex items-center gap-1 rounded-lg bg-brand-700 px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-800"
+              >
+                <Plus className="size-3.5" />
+                Adicionar
+              </button>
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-xs font-bold text-ink-800 pt-2">
             <input
               type="checkbox"
-              checked={form.active}
-              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+              checked={active}
+              onChange={(e) => setActive(e.target.checked)}
               className="size-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
             />
             Pacote ativo para seleção no Construtor de Expedições
@@ -3440,46 +3937,74 @@ function BeveragePackageModal({
 }) {
   const [form, setForm] = useState({
     name: item?.name ?? "",
-    description: item?.description ?? "",
     active: item?.active ?? true,
   });
 
-  const [items, setItems] = useState<
-    Array<{
-      product_id: string | number;
-      standard_quantity_per_participant: number;
-      note: string;
-    }>
-  >(
-    item?.items?.map((it) => ({
-      product_id: it.product_id ?? it.product ?? "",
-      standard_quantity_per_participant: it.standard_quantity_per_participant ?? 1,
-      note: it.note ?? "",
-    })) ?? [
-      { product_id: products[0]?.id ?? "", standard_quantity_per_participant: 12, note: "Lata 350ml" },
-    ]
-  );
+  type ProductRow = {
+    productId: string | number;
+    name: string;
+    category?: string;
+    unit: string;
+    enabled: boolean;
+    quantity: number;
+    note: string;
+  };
+
+  const [rows, setRows] = useState<ProductRow[]>(() => {
+    const existingMap = new Map<string, { quantity: number; note: string }>();
+    if (item?.items) {
+      for (const it of item.items) {
+        const pId = String(it.product_id ?? it.product ?? "");
+        if (pId) {
+          existingMap.set(pId, {
+            quantity: it.standard_quantity_per_participant ?? 1,
+            note: it.note ?? "",
+          });
+        }
+      }
+    }
+
+    return products.map((prod) => {
+      const pId = String(prod.id);
+      const existing = existingMap.get(pId);
+      const isEnabled = existing !== undefined;
+      return {
+        productId: prod.id,
+        name: prod.name,
+        category: prod.category,
+        unit: prod.unit,
+        enabled: isEnabled,
+        quantity: existing?.quantity ?? 6,
+        note: existing?.note ?? "",
+      };
+    });
+  });
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  function addItem() {
-    const firstProd = products[0]?.id ?? "";
-    setItems((prev) => [
-      ...prev,
-      { product_id: firstProd, standard_quantity_per_participant: 6, note: "" },
-    ]);
+  const activeCount = rows.filter((r) => r.enabled).length;
+
+  function toggleProduct(productId: string | number) {
+    setRows((prev) =>
+      prev.map((r) => (r.productId === productId ? { ...r, enabled: !r.enabled } : r))
+    );
   }
 
-  function removeItem(index: number) {
-    setItems((prev) => prev.filter((_, i) => i !== index));
+  function updateQuantity(productId: string | number, quantity: number) {
+    setRows((prev) =>
+      prev.map((r) => (r.productId === productId ? { ...r, quantity } : r))
+    );
   }
 
-  function updateItem(
-    index: number,
-    patch: Partial<{ product_id: string | number; standard_quantity_per_participant: number; note: string }>
-  ) {
-    setItems((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  function updateNote(productId: string | number, note: string) {
+    setRows((prev) =>
+      prev.map((r) => (r.productId === productId ? { ...r, note } : r))
+    );
+  }
+
+  function setAll(enabled: boolean) {
+    setRows((prev) => prev.map((r) => ({ ...r, enabled })));
   }
 
   async function submit(event: FormEvent) {
@@ -3489,33 +4014,21 @@ function BeveragePackageModal({
       setError("O nome do cardápio é obrigatório.");
       return;
     }
-    if (items.length === 0) {
-      setError("Adicione pelo menos um produto ao cardápio.");
+    const enabledRows = rows.filter((r) => r.enabled);
+    if (enabledRows.length === 0) {
+      setError("Ative pelo menos uma bebida no cardápio.");
       return;
-    }
-
-    const seen = new Set();
-    for (const it of items) {
-      if (!it.product_id) {
-        setError("Selecione o produto em todas as linhas.");
-        return;
-      }
-      if (seen.has(String(it.product_id))) {
-        setError("Não é permitido repetir o mesmo produto no mesmo cardápio.");
-        return;
-      }
-      seen.add(String(it.product_id));
     }
 
     setLoading(true);
     try {
       const body = {
         name: form.name.trim(),
-        description: form.description.trim(),
+        description: "",
         active: form.active,
-        items_payload: items.map((it, idx) => ({
-          product_id: it.product_id,
-          standard_quantity_per_participant: Number(it.standard_quantity_per_participant) || 1,
+        items_payload: enabledRows.map((it, idx) => ({
+          product_id: it.productId,
+          standard_quantity_per_participant: Number(it.quantity) || 1,
           note: it.note.trim(),
           display_order: idx,
         })),
@@ -3556,19 +4069,8 @@ function BeveragePackageModal({
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Ex: Open Bar Premium (Stella & Corona + Bebidas Suaves)"
+              placeholder="Ex: Open Bar Premium (Cervejas Especiais + Refrigerantes e Água)"
               className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
-            />
-          </label>
-
-          <label className="block text-xs font-bold text-ink-800">
-            Descrição
-            <textarea
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              rows={2}
-              placeholder="Resumo do perfil das bebidas e marcas incluídas..."
-              className="mt-1 w-full rounded-lg border p-3 text-sm"
             />
           </label>
 
@@ -3583,78 +4085,88 @@ function BeveragePackageModal({
           </label>
 
           <div className="border-t pt-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between mb-3">
               <div>
-                <h4 className="text-sm font-black text-ink-900">Bebidas e Cotas Padrão</h4>
-                <p className="text-xs text-ink-500">Defina o produto, cota estimada por participante e detalhes.</p>
+                <h4 className="text-sm font-black text-ink-900">
+                  Bebidas do Cardápio ({activeCount} ativada{activeCount === 1 ? "" : "s"})
+                </h4>
+                <p className="text-xs text-ink-500">
+                  Ative ou desative cada bebida e defina a cota padrão por participante.
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={addItem}
-                className="flex items-center gap-1 rounded-lg border border-brand-600 px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50"
-              >
-                <Plus className="size-3" />
-                Adicionar bebida
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAll(true)}
+                  className="text-xs font-bold text-brand-600 hover:underline"
+                >
+                  Ativar todas
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setAll(false)}
+                  className="text-xs font-bold text-ink-500 hover:underline"
+                >
+                  Desativar todas
+                </button>
+              </div>
             </div>
 
-            <div className="mt-3 space-y-2">
-              {items.map((row, idx) => (
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+              {rows.map((row) => (
                 <div
-                  key={idx}
-                  className="grid grid-cols-[2fr_1fr_2fr_auto] items-center gap-2 rounded-lg border bg-gray-50 p-2 text-xs"
+                  key={row.productId}
+                  className={`flex flex-col gap-2 rounded-xl border p-3 transition sm:flex-row sm:items-center sm:justify-between ${
+                    row.enabled
+                      ? "border-brand-500 bg-brand-50/40"
+                      : "border-gray-200 bg-gray-50/60 opacity-60"
+                  }`}
                 >
-                  <label className="font-bold">
-                    Produto
-                    <select
-                      value={row.product_id}
-                      onChange={(e) => updateItem(idx, { product_id: e.target.value })}
-                      className="mt-1 h-9 w-full rounded-md border bg-white px-2 font-normal"
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleProduct(row.productId)}
+                      className={`flex h-7 w-24 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
+                        row.enabled
+                          ? "bg-brand-600 text-white shadow-xs"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
                     >
-                      <option value="">Selecione...</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.unit})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      {row.enabled ? "✓ Ativo" : "Desativado"}
+                    </button>
+                    <div>
+                      <span className="text-xs font-bold text-ink-900">{row.name}</span>
+                      <span className="ml-2 rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold text-ink-500 border">
+                        {row.unit}
+                      </span>
+                    </div>
+                  </div>
 
-                  <label className="font-bold">
-                    Qtd/Pessoa
-                    <input
-                      type="number"
-                      min="1"
-                      value={row.standard_quantity_per_participant}
-                      onChange={(e) =>
-                        updateItem(idx, { standard_quantity_per_participant: Number(e.target.value) })
-                      }
-                      className="mt-1 h-9 w-full rounded-md border bg-white px-2 font-normal"
-                    />
-                  </label>
-
-                  <label className="font-bold">
-                    Observação
-                    <input
-                      type="text"
-                      placeholder="Ex: Lata 350ml gelada"
-                      value={row.note}
-                      onChange={(e) => updateItem(idx, { note: e.target.value })}
-                      className="mt-1 h-9 w-full rounded-md border bg-white px-2 font-normal"
-                    />
-                  </label>
-
-                  <button
-                    type="button"
-                    onClick={() => removeItem(idx)}
-                    title="Remover linha"
-                    className="mt-4 rounded-md p-1.5 text-ink-400 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
+                  {row.enabled && (
+                    <div className="flex items-center gap-2 pl-2 sm:pl-0">
+                      <label className="flex items-center gap-1 text-xs font-bold text-ink-700">
+                        <span className="text-[11px] text-ink-500">Cota:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={row.quantity}
+                          onChange={(e) => updateQuantity(row.productId, Math.max(1, Number(e.target.value) || 1))}
+                          className="h-8 w-16 rounded border bg-white px-2 text-center text-xs font-bold text-brand-900"
+                        />
+                      </label>
+                      <input
+                        type="text"
+                        value={row.note}
+                        onChange={(e) => updateNote(row.productId, e.target.value)}
+                        placeholder="Obs (ex: Lata 350ml)"
+                        className="h-8 w-36 rounded border bg-white px-2 text-xs text-ink-700 sm:w-44"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
-              {!items.length && <Empty>Nenhuma bebida adicionada ao cardápio.</Empty>}
+              {!rows.length && <Empty>Nenhum produto cadastrado no catálogo.</Empty>}
             </div>
           </div>
         </div>
@@ -4078,6 +4590,76 @@ function GearPanel({ token, unauthorized }: { token: string; unauthorized: () =>
   );
 }
 
+const GEAR_PRESETS = [
+  {
+    label: "Kit Piraíba Pesada",
+    icon: "🎣",
+    name: "Kit Pesca Pesada Piraíba (Vara 80-100lb + Carretilha 50W)",
+    category: "HEAVY_ROD_REEL",
+    modality: "RENTAL" as const,
+    inventory_quantity: 6,
+    rental_price: "250.00",
+    sale_price: "0.00",
+    description: "Conjunto profissional de pesca pesada no Araguaia: Vara de carbono maciço 80-100lbs, carretilha de perfil alto com 300m de linha multifilamento 0.90mm e líder de aço 150lb.",
+    technical_specs: {
+      "vara": "80-100 lbs carbono maciço 6'0",
+      "carretilha": "Perfil Alto 50W / Alumínio usinado",
+      "linha": "Multifilamento 8 fios 0.90mm (130lb)",
+      "lider": "Aço encastoado flexível 150lb com girador e anzol circular 10/0"
+    }
+  },
+  {
+    label: "Kit Pirarara Médio",
+    icon: "🐟",
+    name: "Kit Pesca Média Pirarara (Vara 50-80lb + Carretilha Perfil Alto)",
+    category: "MEDIUM_ROD_REEL",
+    modality: "RENTAL" as const,
+    inventory_quantity: 8,
+    rental_price: "200.00",
+    sale_price: "0.00",
+    description: "Conjunto ágil e resistente para peixes de couro médios (Pirarara, Cachara, Jaú médio). Vara 50-80lb com carretilha abastecida com 250m de multifilamento 0.70mm.",
+    technical_specs: {
+      "vara": "50-80 lbs carbono tubular reforçado 6'0",
+      "carretilha": "Perfil Alto 400 com freio centrífugo",
+      "linha": "Multifilamento 0.70mm (80lb)",
+      "lider": "Fluorocarbono 0.90mm com anzol Wide Gap 8/0"
+    }
+  },
+  {
+    label: "Kit Tucunaré Azul",
+    icon: "🎯",
+    name: "Kit Iscas Artificiais & Carretilha Baitcasting (Tucunaré)",
+    category: "MEDIUM_ROD_REEL",
+    modality: "RENTAL" as const,
+    inventory_quantity: 10,
+    rental_price: "150.00",
+    sale_price: "0.00",
+    description: "Conjunto para pincho e arremesso em lagoas e praias do Araguaia para Tucunaré Azul e Aruanã.",
+    technical_specs: {
+      "vara": "17-25 lbs carbono IM8 5'8",
+      "carretilha": "Perfil Baixo recolhimento 7.1:1 com 10 rolamentos",
+      "linha": "Multifilamento 0.35mm (40lb)",
+      "lider": "Fluorocarbono 0.50mm"
+    }
+  },
+  {
+    label: "Camisa UV Oficial",
+    icon: "👕",
+    name: "Camisa Dry-Fit Manga Longa Proteção UV 50+ Expedição Piraíba",
+    category: "APPAREL",
+    modality: "SALE" as const,
+    inventory_quantity: 30,
+    rental_price: "0.00",
+    sale_price: "150.00",
+    description: "Camisa oficial de alta performance com proteção solar UV50+, tecido respirável que seca rápido e capuz integrado.",
+    technical_specs: {
+      "tecido": "100% Poliamida Dry-Fit antibacteriano",
+      "fator_uv": "FPU 50+ permanente",
+      "tamanhos": "P, M, G, GG, XG"
+    }
+  }
+];
+
 function GearModal({
   token,
   gear,
@@ -4103,6 +4685,20 @@ function GearModal({
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  function applyPreset(preset: typeof GEAR_PRESETS[number]) {
+    setForm((prev) => ({
+      ...prev,
+      name: preset.name,
+      category: preset.category,
+      modality: preset.modality,
+      inventory_quantity: preset.inventory_quantity,
+      rental_price: preset.rental_price,
+      sale_price: preset.sale_price,
+      description: preset.description,
+      technical_specs: JSON.stringify(preset.technical_specs, null, 2),
+    }));
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -4164,6 +4760,26 @@ function GearModal({
           <button type="button" onClick={close} className="rounded p-1 text-ink-500 hover:bg-gray-100">
             <X className="size-5" />
           </button>
+        </div>
+
+        {/* Modelos Prontos Preset Bar */}
+        <div className="mt-3 rounded-xl border border-brand-100 bg-brand-50/60 p-3">
+          <span className="block text-[11px] font-black uppercase tracking-wider text-brand-900">
+            ⚡ Modelos Prontos (Preenchimento em 1 Clique):
+          </span>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {GEAR_PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => applyPreset(preset)}
+                className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-white px-2.5 py-1 text-xs font-bold text-brand-900 shadow-xs hover:border-brand-500 hover:bg-brand-50 transition"
+              >
+                <span>{preset.icon}</span>
+                <span>{preset.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="mt-4 grid gap-4 sm:grid-cols-2">

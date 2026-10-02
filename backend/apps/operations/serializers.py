@@ -118,8 +118,11 @@ class OperationsLodgeSerializer(serializers.ModelSerializer):
     river_id = serializers.PrimaryKeyRelatedField(
         queryset=River.objects.all(), source="river", required=False, allow_null=True
     )
+    river_section = serializers.CharField(required=False, allow_blank=True, default="")
     amenity_ids = serializers.ListField(child=serializers.UUIDField(), required=False, write_only=True)
     amenities_detailed = serializers.SerializerMethodField()
+    target_species = OperationsSpeciesSerializer(many=True, read_only=True)
+    species_slugs = serializers.ListField(child=serializers.CharField(), required=False, write_only=True)
 
     class Meta:
         model = Lodge
@@ -137,6 +140,8 @@ class OperationsLodgeSerializer(serializers.ModelSerializer):
             "amenities",
             "amenity_ids",
             "amenities_detailed",
+            "target_species",
+            "species_slugs",
             "meeting_point",
             "directions",
             "cover_image_url",
@@ -161,16 +166,22 @@ class OperationsLodgeSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         amenity_ids = validated_data.pop("amenity_ids", None)
+        species_slugs = validated_data.pop("species_slugs", None)
         lodge = super().create(validated_data)
         if amenity_ids is not None:
             self._sync_amenities(lodge, amenity_ids)
+        if species_slugs is not None:
+            lodge.target_species.set(TargetSpecies.objects.filter(slug__in=species_slugs, active=True))
         return lodge
 
     def update(self, instance, validated_data):
         amenity_ids = validated_data.pop("amenity_ids", None)
+        species_slugs = validated_data.pop("species_slugs", None)
         lodge = super().update(instance, validated_data)
         if amenity_ids is not None:
             self._sync_amenities(lodge, amenity_ids)
+        if species_slugs is not None:
+            lodge.target_species.set(TargetSpecies.objects.filter(slug__in=species_slugs, active=True))
         return lodge
 
     def _sync_amenities(self, lodge, amenity_ids):
@@ -422,8 +433,11 @@ class OperationsExpeditionSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         species_slugs = validated_data.pop("species_slugs", None)
         instance = super().create(validated_data)
-        if species_slugs is not None:
+        if species_slugs is not None and len(species_slugs) > 0:
             self._sync_species(instance, species_slugs)
+        elif instance.lodge and instance.lodge.target_species.exists():
+            lodge_slugs = list(instance.lodge.target_species.values_list("slug", flat=True))
+            self._sync_species(instance, lodge_slugs)
         else:
             default_slugs = list(TargetSpecies.objects.filter(active=True).values_list("slug", flat=True))
             if default_slugs:

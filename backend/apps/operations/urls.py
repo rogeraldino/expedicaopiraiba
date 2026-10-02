@@ -18,6 +18,7 @@ urlpatterns = [
     path("rivers/<uuid:pk>/", RiverDetailView.as_view(), name="operations-river-detail"),
     path("rivers/<uuid:river_id>/species/", RiverSpeciesView.as_view(), name="operations-river-species"),
     path("amenities/", AmenityListView.as_view(), name="operations-amenities"),
+    path("amenities/<uuid:pk>/", AmenityDetailView.as_view(), name="operations-amenity-detail"),
     path("all-inclusive-packages/", AllInclusivePackageListCreateView.as_view(), name="operations-all-inclusive-packages"),
     path("all-inclusive-packages/<uuid:pk>/", AllInclusivePackageDetailView.as_view(), name="operations-all-inclusive-package-detail"),
     path("beverage-packages/", BeveragePackageListCreateView.as_view(), name="operations-beverage-packages"),
