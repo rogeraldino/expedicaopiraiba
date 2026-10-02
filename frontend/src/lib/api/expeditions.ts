@@ -57,7 +57,7 @@ const preview: Expedition[] = [
     duration_days: 4,
     available_slots: 12,
     price_per_person_cents: 560000,
-    summary: "4 dias de pescaria completos All Inclusive no Rio Araguaia na Pousada Solar das Águas.",
+    summary: "4 dias de pescaria completos no Rio Araguaia na Pousada Solar das Águas.",
     cover_image_url: "/expeditions/ponte-sao-felix.jpg",
     lodge: {
       id: "solar-das-aguas",
@@ -80,7 +80,7 @@ const preview: Expedition[] = [
     duration_days: 4,
     available_slots: 12,
     price_per_person_cents: 510000,
-    summary: "4 dias de pescaria de gigantes All Inclusive no Rio Araguaia na Pousada Canaã.",
+    summary: "4 dias de pescaria de gigantes no Rio Araguaia na Pousada Canaã.",
     cover_image_url: "/expeditions/bandeirantes-piraiba.jpg",
     lodge: {
       id: "pousada-canaa",

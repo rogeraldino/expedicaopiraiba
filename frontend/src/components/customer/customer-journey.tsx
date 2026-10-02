@@ -255,7 +255,7 @@ export function CustomerJourney({
           <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5 text-[11px]">
             {[
               ["payment", "Pagamento do Sinal", data.onboarding.steps.payment],
-              ["preferences", "Bebidas All Inclusive", data.onboarding.steps.preferences],
+              ["preferences", "Bebidas & Consumo", data.onboarding.steps.preferences],
               ["gear", "Tralha & Equipamentos", Boolean(person?.operational_notes)],
               ["dietary_restrictions", "Alimentação & Cuidados", data.onboarding.steps.dietary_restrictions],
               ["checklist", "Checklist do Pescador", data.onboarding.steps.checklist],
@@ -355,7 +355,7 @@ export function CustomerJourney({
         <div className="mt-6 flex gap-2 border-b border-ink-900/10 pb-3 overflow-x-auto">
           {[
             { id: "FICHA", label: "Ficha de Embarque", icon: UserCheck },
-            { id: "BEVERAGES", label: "Bebidas All Inclusive & Alimentação", icon: GlassWater },
+            { id: "BEVERAGES", label: "Bebidas & Alimentação", icon: GlassWater },
             { id: "GEAR", label: "Tralha de Pesca (Recomendações)", icon: Fish },
             { id: "CHECKLIST", label: "Checklist & Licença de Pesca", icon: ClipboardCheck },
             { id: "LOGISTICS", label: "Encontro & Embarque", icon: MapPin },
@@ -731,7 +731,7 @@ function ParticipantFichaSection({
               </button>
               <a
                 href={`https://wa.me/?text=${encodeURIComponent(
-                  `Olá ${person.full_name || ""}! Segue o seu link de convidado para a nossa pescaria na Expedição Piraíba. Preencha seus dados de embarque e selecione suas bebidas All Inclusive aqui: ${guestUrl}`
+                  `Olá ${person.full_name || ""}! Segue o seu link de convidado para a nossa pescaria na Expedição Piraíba. Preencha seus dados de embarque e selecione suas preferências de bebidas e alimentação aqui: ${guestUrl}`
                 )}`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -837,15 +837,14 @@ function Preferences({
   }
 
   return (
-    <Card title={`Bebidas All Inclusive & Alimentação (${person.full_name})`} icon={GlassWater}>
+    <Card title={`Bebidas & Alimentação (${person.full_name})`} icon={GlassWater}>
       <div className="rounded-xl border border-brand-500/20 bg-brand-50/60 p-4 text-xs text-brand-950">
         <p className="font-bold flex items-center gap-2 text-brand-900">
           <Sparkles className="size-4 text-brand-700" />
-          Open Bar All Inclusive 100% Gratuito
+          Cardápio de Bebidas & Preferências
         </p>
         <p className="mt-1 leading-relaxed text-ink-700">
-          Todas as cervejas premium, refrigerantes, água mineral e sucos estão incluídos na sua expedição. Marque as marcas e
-          variedades que você mais aprecia para que a equipe abasteça a lancha e o rancho na proporção perfeita.
+          Marque as opções e variedades que você e sua dupla mais apreciam para que nossa equipe de solo abasteça a lancha e o rancho na proporção perfeita.
         </p>
       </div>
 

@@ -4,6 +4,7 @@ import { ExpeditionSection } from "@/components/home/expedition-section";
 import { ExperienceSection } from "@/components/home/experience-section";
 import { StoriesSection } from "@/components/home/stories-section";
 import { Season2027 } from "@/components/home/season-2027";
+import { FaqSection } from "@/components/home/faq-section";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { getExpeditions } from "@/lib/api/expeditions";
@@ -21,6 +22,7 @@ export default async function Home() {
         <StoriesSection />
         <GalleryPreview />
         <Season2027 />
+        <FaqSection />
       </main>
       <SiteFooter />
     </div>

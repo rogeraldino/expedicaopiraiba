@@ -148,3 +148,27 @@ class ReservationEvent(models.Model):
     class Meta:
         ordering = ("created_at",)
         indexes = [models.Index(fields=("reservation", "created_at"))]
+
+
+class ReservationGearAddon(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    reservation = models.ForeignKey(Reservation, on_delete=models.CASCADE, related_name="gear_addons")
+    participant = models.ForeignKey(
+        ReservationParticipant, on_delete=models.SET_NULL, null=True, blank=True, related_name="gear_addons"
+    )
+    gear_product = models.ForeignKey(
+        "expeditions.FishingGearProduct", on_delete=models.PROTECT, related_name="addons"
+    )
+    modality = models.CharField(max_length=10)
+    quantity = models.PositiveSmallIntegerField(default=1)
+    unit_price_cents = models.PositiveIntegerField()
+    total_price_cents = models.PositiveIntegerField()
+    notes = models.CharField(max_length=200, blank=True)
+    delivered = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.gear_product.name} ({self.quantity}x) - Reserva {self.reservation.id}"

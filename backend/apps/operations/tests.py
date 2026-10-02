@@ -4,9 +4,26 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from django.utils import timezone
 
-from apps.customers.models import Customer
-from apps.expeditions.models import Expedition, ExpeditionProduct, Product
-from apps.reservations.models import ParticipantProductChoice, Reservation, ReservationParticipant
+from apps.customers.models import Customer, CustomerProfile
+from apps.customers.services import create_guest_participant_token
+from apps.expeditions.models import (
+    AllInclusivePackage,
+    Amenity,
+    BeveragePackage,
+    BeveragePackageItem,
+    Expedition,
+    ExpeditionProduct,
+    FishingGearProduct,
+    GearCategory,
+    Lodge,
+    Product,
+    River,
+    RiverSpecies,
+    TargetSpecies,
+    WaterBasin,
+)
+from apps.payments.models import Payment
+from apps.reservations.models import ParticipantProductChoice, Reservation, ReservationGearAddon, ReservationParticipant
 
 
 @override_settings(DEBUG=True, ADMIN_EMAIL="admin@example.com", ADMIN_PASSWORD="safe-test-password")
@@ -258,3 +275,626 @@ class OperationsApiTests(TestCase):
         self.assertIn("Nome Completo", content)
         # Verifica se o valor com = foi neutralizado com aspas/apóstrofo
         self.assertIn("'=CMD('calc')", content)
+
+    def test_river_crud_and_relational_protection(self):
+        auth = self.login()
+        # 1. Cria Rio
+        res = self.client.post("/api/operations/rivers/", {
+            "name": "Rio Teles Pires",
+            "basin": WaterBasin.AMAZONICA,
+            "states": ["MT", "PA"],
+            "description": "Famoso por grandes Jaús e Cachorras largas.",
+            "regulations": "Cota zero para espécies de couro e escama.",
+            "active": True,
+        }, format="json", **auth)
+        self.assertEqual(res.status_code, 201)
+        river_id = res.data["id"]
+        self.assertEqual(res.data["slug"], "rio-teles-pires")
+        self.assertEqual(res.data["basin_display"], "Bacia Amazônica")
+
+        # 2. Filtra por Bacia
+        basin_res = self.client.get(f"/api/operations/rivers/?basin={WaterBasin.AMAZONICA}", **auth)
+        self.assertEqual(basin_res.status_code, 200)
+        self.assertTrue(any(r["id"] == river_id for r in basin_res.data))
+
+        # 3. Cria Pousada vinculada ao Rio
+        lodge = Lodge.objects.create(
+            name="Pousada Teles Pires Lodge",
+            slug="teles-pires-lodge",
+            city="Alta Floresta",
+            state="MT",
+            river=River.objects.get(id=river_id),
+            river_section="Médio Teles Pires",
+        )
+
+        # 4. Tenta deletar rio com pousada vinculada -> deve falhar com 400
+        del_res = self.client.delete(f"/api/operations/rivers/{river_id}/", **auth)
+        self.assertEqual(del_res.status_code, 400)
+        self.assertIn("Não é possível excluir rio com pousadas associadas", del_res.data["detail"])
+
+        # 5. Remove a pousada e deleta o rio -> sucesso 204
+        lodge.delete()
+        del_success = self.client.delete(f"/api/operations/rivers/{river_id}/", **auth)
+        self.assertEqual(del_success.status_code, 204)
+        self.assertFalse(River.objects.filter(id=river_id).exists())
+
+    def test_river_species_association(self):
+        auth = self.login()
+        river = River.objects.create(
+            name="Rio Xingu",
+            basin=WaterBasin.AMAZONICA,
+            states=["PA"],
+        )
+        species = TargetSpecies.objects.create(
+            slug="tucunare-fogo",
+            common_name="Tucunaré Fogo",
+            scientific_name="Cichla mirianae",
+            category="ESCAMA",
+        )
+
+        # 1. Associa espécie ao rio
+        assoc_res = self.client.post(f"/api/operations/rivers/{river.id}/species/", {
+            "species_slug": "tucunare-fogo",
+            "is_trophy": True,
+            "is_native": True,
+            "best_season": "Setembro a Novembro",
+        }, format="json", **auth)
+        self.assertEqual(assoc_res.status_code, 201)
+        self.assertEqual(assoc_res.data["species_name"], "Tucunaré Fogo")
+        self.assertTrue(assoc_res.data["is_trophy"])
+
+        # 2. Lista espécies do rio
+        list_res = self.client.get(f"/api/operations/rivers/{river.id}/species/", **auth)
+        self.assertEqual(list_res.status_code, 200)
+        self.assertEqual(len(list_res.data), 1)
+        self.assertEqual(list_res.data[0]["best_season"], "Setembro a Novembro")
+
+        # 3. Remove espécie do rio
+        del_res = self.client.delete(f"/api/operations/rivers/{river.id}/species/?species_slug=tucunare-fogo", **auth)
+        self.assertEqual(del_res.status_code, 204)
+        self.assertEqual(RiverSpecies.objects.filter(river=river).count(), 0)
+
+    def test_amenities_list_and_lodge_sync(self):
+        auth = self.login()
+        # 1. Lista Comodidades
+        amenity_res = self.client.get("/api/operations/amenities/", **auth)
+        self.assertEqual(amenity_res.status_code, 200)
+        self.assertTrue(len(amenity_res.data) >= 1)
+
+        # Garante duas comodidades conhecidas
+        a1, _ = Amenity.objects.get_or_create(
+            name="Piscina Panorâmica",
+            defaults={"category": "LEISURE", "icon_key": "pool", "display_order": 1},
+        )
+        a2, _ = Amenity.objects.get_or_create(
+            name="Wi-Fi Starlink",
+            defaults={"category": "CONNECTIVITY", "icon_key": "wifi", "display_order": 2},
+        )
+
+        river, _ = River.objects.get_or_create(
+            name="Rio Araguaia",
+            defaults={"basin": WaterBasin.TOCANTINS_ARAGUAIA, "states": ["GO", "MT", "TO"]},
+        )
+
+        # 2. Cria Pousada com amenity_ids e river_id
+        create_res = self.client.post("/api/operations/lodges/", {
+            "name": "Pousada Modular Teste",
+            "city": "Luiz Alves",
+            "state": "GO",
+            "river_id": str(river.id),
+            "river_section": "Alto Araguaia",
+            "amenity_ids": [str(a1.id), str(a2.id)],
+            "boat_fleet_details": "6 barcos de 6 metros com motor 40HP 4 tempos",
+        }, format="json", **auth)
+        self.assertEqual(create_res.status_code, 201)
+        lodge_id = create_res.data["id"]
+        self.assertEqual(create_res.data["river"]["name"], "Rio Araguaia")
+        self.assertEqual(len(create_res.data["amenities_detailed"]), 2)
+        # Retrocompatibilidade: amenities deve conter a lista com os nomes
+        self.assertIn("Piscina Panorâmica", create_res.data["amenities"])
+        self.assertIn("Wi-Fi Starlink", create_res.data["amenities"])
+        self.assertEqual(create_res.data["boat_fleet_details"], "6 barcos de 6 metros com motor 40HP 4 tempos")
+
+        # 3. Atualiza Pousada alterando comodidades via PATCH
+        patch_res = self.client.patch(f"/api/operations/lodges/{lodge_id}/", {
+            "amenity_ids": [str(a1.id)],
+        }, format="json", **auth)
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(len(patch_res.data["amenities_detailed"]), 1)
+        self.assertEqual(patch_res.data["amenities_detailed"][0]["name"], "Piscina Panorâmica")
+
+    def test_all_inclusive_package_crud_and_conflict(self):
+        auth = self.login()
+        # 1. Cria AllInclusivePackage
+        create_res = self.client.post("/api/operations/all-inclusive-packages/", {
+            "name": "Pacote VIP Teste",
+            "description": "Descrição do pacote vip",
+            "inclusions": ["Hospedagem 100% climatizada", "Barco com piloteiro nativo", "Iscas vivas"],
+        }, format="json", **auth)
+        self.assertEqual(create_res.status_code, 201)
+        pkg_id = create_res.data["id"]
+        self.assertEqual(create_res.data["name"], "Pacote VIP Teste")
+        self.assertEqual(len(create_res.data["inclusions"]), 3)
+
+        # 2. Atualiza via PATCH
+        patch_res = self.client.patch(f"/api/operations/all-inclusive-packages/{pkg_id}/", {
+            "description": "Descrição atualizada",
+        }, format="json", **auth)
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.data["description"], "Descrição atualizada")
+
+        # 3. Vincula a uma expedição e tenta deletar (deve retornar 409 Conflict)
+        self.expedition.all_inclusive_package_id = pkg_id
+        self.expedition.save()
+
+        del_conflict = self.client.delete(f"/api/operations/all-inclusive-packages/{pkg_id}/", **auth)
+        self.assertEqual(del_conflict.status_code, 409)
+
+        # Desvincula e deleta com sucesso
+        self.expedition.all_inclusive_package = None
+        self.expedition.save()
+        del_ok = self.client.delete(f"/api/operations/all-inclusive-packages/{pkg_id}/", **auth)
+        self.assertEqual(del_ok.status_code, 204)
+
+    def test_beverage_package_crud_and_items_sync(self):
+        auth = self.login()
+        prod1, _ = Product.objects.get_or_create(
+            name="Cerveja Teste Stella", defaults={"category": "BEBIDA", "unit": "lata", "active": True}
+        )
+        prod2, _ = Product.objects.get_or_create(
+            name="Refrigerante Teste Cola", defaults={"category": "BEBIDA", "unit": "lata", "active": True}
+        )
+
+        # 1. Cria BeveragePackage com items_payload
+        create_res = self.client.post("/api/operations/beverage-packages/", {
+            "name": "Barco Premium Teste",
+            "description": "Pacote com cerveja e refri",
+            "items_payload": [
+                {"product_id": str(prod1.id), "standard_quantity_per_participant": 18, "display_order": 1, "note": "Gelada"},
+                {"product_id": str(prod2.id), "standard_quantity_per_participant": 12, "display_order": 2, "note": "Com gelo"},
+            ],
+        }, format="json", **auth)
+        self.assertEqual(create_res.status_code, 201)
+        bev_id = create_res.data["id"]
+        self.assertEqual(len(create_res.data["items"]), 2)
+
+        # 2. Testa item view para adicionar mais um produto
+        prod3, _ = Product.objects.get_or_create(
+            name="Água Teste Mineral", defaults={"category": "BEBIDA", "unit": "garrafa", "active": True}
+        )
+        item_res = self.client.post(f"/api/operations/beverage-packages/{bev_id}/items/", {
+            "product_id": str(prod3.id),
+            "standard_quantity_per_participant": 24,
+            "display_order": 3,
+            "note": "Sem gás",
+        }, format="json", **auth)
+        self.assertEqual(item_res.status_code, 201)
+
+        # 3. Vincula a uma expedição e verifica 409 no DELETE
+        self.expedition.beverage_package_id = bev_id
+        self.expedition.save()
+
+        del_conflict = self.client.delete(f"/api/operations/beverage-packages/{bev_id}/", **auth)
+        self.assertEqual(del_conflict.status_code, 409)
+
+        # Desvincula e deleta
+        self.expedition.beverage_package = None
+        self.expedition.save()
+        del_ok = self.client.delete(f"/api/operations/beverage-packages/{bev_id}/", **auth)
+        self.assertEqual(del_ok.status_code, 204)
+
+    def test_expedition_wizard_creation_with_packages_and_deposit_validation(self):
+        auth = self.login()
+        # 1. Validação de sinal de 20%: Preço 5.000,00 -> 20% é 1.000,00 (100.000 cents). Se sinal for 500,00 (50.000 cents), falha.
+        fail_res = self.client.post("/api/operations/expeditions/", {
+            "name": "Expedição Sinal Inválido",
+            "destination": "Araguaia",
+            "starts_at": "2026-11-01",
+            "ends_at": "2026-11-05",
+            "capacity": 10,
+            "price_per_person_cents": 500000,
+            "deposit_cents": 50000,  # 10% apenas -> deve falhar
+        }, format="json", **auth)
+        self.assertEqual(fail_res.status_code, 400)
+        self.assertIn("deposit_cents", fail_res.data)
+
+        # 2. Cria com sinal válido (>= 20%) e vinculando pacotes
+        pkg_ai, _ = AllInclusivePackage.objects.get_or_create(
+            name="Template All Inclusive Teste",
+            defaults={"inclusions": ["Inclusão 1", "Inclusão 2"]}
+        )
+        prod, _ = Product.objects.get_or_create(
+            name="Cerveja Wizard Teste", defaults={"category": "BEBIDA", "unit": "lata", "active": True}
+        )
+        pkg_bev, _ = BeveragePackage.objects.get_or_create(name="Template Bebidas Teste")
+        BeveragePackageItem.objects.get_or_create(
+            package=pkg_bev,
+            product=prod,
+            defaults={"standard_quantity_per_participant": 20, "display_order": 1}
+        )
+
+        ok_res = self.client.post("/api/operations/expeditions/", {
+            "name": "Expedição Wizard Sucesso",
+            "destination": "São Félix do Araguaia",
+            "starts_at": "2026-11-10",
+            "ends_at": "2026-11-14",
+            "capacity": 12,
+            "price_per_person_cents": 500000,
+            "deposit_cents": 100000,  # exatamente 20%
+            "all_inclusive_package_id": str(pkg_ai.id),
+            "beverage_package_id": str(pkg_bev.id),
+            "inclusions": ["Inclusão 1", "Inclusão 2", "Inclusão Personalizada"],
+        }, format="json", **auth)
+        self.assertEqual(ok_res.status_code, 201)
+        exp_id = ok_res.data["id"]
+        self.assertEqual(ok_res.data["all_inclusive_package"]["name"], "Template All Inclusive Teste")
+        self.assertEqual(ok_res.data["beverage_package"]["name"], "Template Bebidas Teste")
+        self.assertEqual(len(ok_res.data["inclusions"]), 3)
+
+        # 3. Verifica se sincronizou com ExpeditionProduct
+        created_exp = Expedition.objects.get(id=exp_id)
+        offers = created_exp.product_offers.filter(product=prod)
+        self.assertTrue(offers.exists())
+        self.assertEqual(offers.first().standard_quantity_per_participant, 20)
+
+    def test_fishing_gear_product_crud_and_filters(self):
+        auth = self.login()
+        # Create product
+        res = self.client.post("/api/operations/gear-products/", {
+            "name": "Carretilha Shimano Tranx 400 Piraíba",
+            "category": "HEAVY_ROD_REEL",
+            "modality": "BOTH",
+            "inventory_quantity": 5,
+            "rental_price_cents": 12000,
+            "sale_price_cents": 280000,
+            "technical_specs": {"drag": "10kg", "ratio": "5.8:1"},
+        }, format="json", **auth)
+        self.assertEqual(res.status_code, 201)
+        prod_id = res.data["id"]
+        self.assertEqual(res.data["category_display"], "Conjunto Pesado (Piraíba / Grandes Bagres)")
+        self.assertEqual(res.data["inventory_quantity"], 5)
+
+        # Filter by category
+        cat_res = self.client.get("/api/operations/gear-products/?category=HEAVY_ROD_REEL", **auth)
+        self.assertEqual(cat_res.status_code, 200)
+        self.assertTrue(any(p["id"] == prod_id for p in cat_res.data))
+
+        # Search by target fish
+        search_res = self.client.get("/api/operations/gear-products/?q=Piraíba", **auth)
+        self.assertEqual(search_res.status_code, 200)
+        self.assertTrue(any(p["id"] == prod_id for p in search_res.data))
+
+        # Update product
+        patch_res = self.client.patch(f"/api/operations/gear-products/{prod_id}/", {
+            "inventory_quantity": 8,
+            "description": "Excelente carretilha para piraíba.",
+        }, format="json", **auth)
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.data["inventory_quantity"], 8)
+        self.assertEqual(patch_res.data["description"], "Excelente carretilha para piraíba.")
+
+    def test_fishing_gear_product_delete_protection_with_active_reservations(self):
+        auth = self.login()
+        gear = FishingGearProduct.objects.create(
+            name="Vara Pesada Protegida 100lb",
+            category="HEAVY_ROD_REEL",
+            modality="RENTAL",
+            rental_price_cents=9000,
+            inventory_quantity=3,
+        )
+        customer = Customer.objects.create(cpf="11122233344", full_name="Carlos Pescador", email="carlos@example.com")
+        reservation = Reservation.objects.create(
+            customer=customer,
+            expedition=self.expedition,
+            participant_count=1,
+            unit_price_cents=249000,
+            total_price_cents=249000,
+            deposit_cents=50000,
+            status=Reservation.Status.CONFIRMED,
+        )
+        participant = ReservationParticipant.objects.create(reservation=reservation, full_name="Carlos Pescador")
+        ReservationGearAddon.objects.create(
+            reservation=reservation,
+            participant=participant,
+            gear_product=gear,
+            modality="RENTAL",
+            quantity=1,
+            unit_price_cents=9000,
+            total_price_cents=9000,
+        )
+
+        # Deleting should return 409 Conflict
+        del_res = self.client.delete(f"/api/operations/gear-products/{gear.id}/", **auth)
+        self.assertEqual(del_res.status_code, 409)
+        self.assertIn("reservas ativas", del_res.data["detail"])
+
+        # Deactivating should succeed
+        patch_res = self.client.patch(f"/api/operations/gear-products/{gear.id}/", {"active": False}, format="json", **auth)
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertFalse(patch_res.data["active"])
+
+    def test_reservation_gear_addon_stock_and_concurrency(self):
+        auth = self.login()
+        gear = FishingGearProduct.objects.create(
+            name="Kit Tralha Rara Limitada",
+            category="HEAVY_ROD_REEL",
+            modality="RENTAL",
+            rental_price_cents=15000,
+            inventory_quantity=2,
+        )
+        customer = Customer.objects.create(cpf="22233344455", full_name="Ana Pesca", email="ana@example.com")
+        reservation = Reservation.objects.create(
+            customer=customer,
+            expedition=self.expedition,
+            participant_count=1,
+            unit_price_cents=249000,
+            total_price_cents=249000,
+            deposit_cents=50000,
+            status=Reservation.Status.CONFIRMED,
+        )
+
+        # 1. Add 1 item -> Stock drops from 2 to 1
+        res1 = self.client.post(f"/api/operations/reservations/{reservation.id}/gear-addons/", {
+            "gear_product_id": str(gear.id),
+            "modality": "RENTAL",
+            "quantity": 1,
+            "rental_days": 4,
+        }, format="json", **auth)
+        self.assertEqual(res1.status_code, 201)
+        addon_id = res1.data["id"]
+        gear.refresh_from_db()
+        self.assertEqual(gear.inventory_quantity, 1)
+
+        # 2. Try to add 2 items -> Should fail with 400 (only 1 available)
+        res_fail = self.client.post(f"/api/operations/reservations/{reservation.id}/gear-addons/", {
+            "gear_product_id": str(gear.id),
+            "modality": "RENTAL",
+            "quantity": 2,
+        }, format="json", **auth)
+        self.assertEqual(res_fail.status_code, 400)
+        self.assertIn("Estoque insuficiente", res_fail.data["detail"])
+
+        # 3. Delete the addon -> Stock restored to 2
+        del_res = self.client.delete(f"/api/operations/reservations/{reservation.id}/gear-addons/{addon_id}/", **auth)
+        self.assertEqual(del_res.status_code, 204)
+        gear.refresh_from_db()
+        self.assertEqual(gear.inventory_quantity, 2)
+
+    def test_reservation_gear_addon_financial_recalculation_and_state_transition(self):
+        auth = self.login()
+        gear = FishingGearProduct.objects.create(
+            name="Camisa UV 50+",
+            category="APPAREL",
+            modality="SALE",
+            sale_price_cents=35000,
+            inventory_quantity=10,
+        )
+        customer = Customer.objects.create(cpf="33344455566", full_name="Marcos Silva", email="marcos@example.com")
+        reservation = Reservation.objects.create(
+            customer=customer,
+            expedition=self.expedition,
+            participant_count=1,
+            unit_price_cents=200000,
+            total_price_cents=200000,
+            deposit_cents=40000,
+            status=Reservation.Status.CONFIRMED,
+        )
+        # Pay the trip 100%
+        Payment.objects.create(
+            reservation=reservation,
+            amount_cents=200000,
+            status=Payment.Status.PAID,
+            provider="ADMIN",
+            method="PIX",
+            external_id="pay-test-full-100",
+        )
+        # Transition reservation to PAID
+        reservation.status = Reservation.Status.PAID
+        reservation.save()
+
+        self.assertEqual(reservation.status, Reservation.Status.PAID)
+        self.assertEqual(reservation.remaining_balance_cents, 0)
+
+        # Add gear addon (Camisa R$ 350,00)
+        add_res = self.client.post(f"/api/operations/reservations/{reservation.id}/gear-addons/", {
+            "gear_product_id": str(gear.id),
+            "modality": "SALE",
+            "quantity": 1,
+        }, format="json", **auth)
+        self.assertEqual(add_res.status_code, 201)
+        addon_id = add_res.data["id"]
+
+        reservation.refresh_from_db()
+        # Total should now be 2.350,00 (235000 cents)
+        self.assertEqual(reservation.total_price_cents, 235000)
+        # Remaining balance is now 350,00
+        self.assertEqual(reservation.remaining_balance_cents, 35000)
+        # Status MUST transition cleanly back to CONFIRMED!
+        self.assertEqual(reservation.status, Reservation.Status.CONFIRMED)
+
+        # Now remove the gear addon
+        del_res = self.client.delete(f"/api/operations/reservations/{reservation.id}/gear-addons/{addon_id}/", **auth)
+        self.assertEqual(del_res.status_code, 204)
+
+        reservation.refresh_from_db()
+        # Total returns to 2.000,00
+        self.assertEqual(reservation.total_price_cents, 200000)
+        self.assertEqual(reservation.remaining_balance_cents, 0)
+        # Status MUST transition back to PAID!
+        self.assertEqual(reservation.status, Reservation.Status.PAID)
+
+    def test_reservation_cancellation_restores_gear_stock(self):
+        auth = self.login()
+        gear = FishingGearProduct.objects.create(
+            name="Kit Anzóis e Encastoados",
+            category="TERMINAL_TACKLE",
+            modality="SALE",
+            sale_price_cents=12000,
+            inventory_quantity=10,
+        )
+        customer = Customer.objects.create(cpf="44455566677", full_name="Roberto Cancelamento", email="roberto@example.com")
+        reservation = Reservation.objects.create(
+            customer=customer,
+            expedition=self.expedition,
+            participant_count=1,
+            unit_price_cents=249000,
+            total_price_cents=249000,
+            deposit_cents=50000,
+            status=Reservation.Status.CONFIRMED,
+        )
+        # Add 2 items -> Stock drops to 8
+        self.client.post(f"/api/operations/reservations/{reservation.id}/gear-addons/", {
+            "gear_product_id": str(gear.id),
+            "modality": "SALE",
+            "quantity": 2,
+        }, format="json", **auth)
+        gear.refresh_from_db()
+        self.assertEqual(gear.inventory_quantity, 8)
+
+        # Cancel reservation
+        cancel_res = self.client.post(f"/api/operations/reservations/{reservation.id}/cancel/", {
+            "reason": "Desistência por motivos pessoais do cliente",
+        }, format="json", **auth)
+        self.assertEqual(cancel_res.status_code, 200)
+
+        # Stock should be restored to 10
+        gear.refresh_from_db()
+        self.assertEqual(gear.inventory_quantity, 10)
+
+    def test_crm_customer_list_metrics_and_detail_patch(self):
+        auth = self.login()
+        customer = Customer.objects.create(
+            cpf="55566677788",
+            full_name="Pescador CRM Teste",
+            email="crm_teste@example.com",
+            phone="62988887777",
+        )
+        res = Reservation.objects.create(
+            customer=customer,
+            expedition=self.expedition,
+            participant_count=2,
+            unit_price_cents=250000,
+            total_price_cents=500000,
+            deposit_cents=100000,
+            status=Reservation.Status.PAID,
+        )
+        Payment.objects.create(
+            reservation=res,
+            amount_cents=500000,
+            status=Payment.Status.PAID,
+            provider="ADMIN",
+            method="PIX",
+            external_id="crm-test-pay-1",
+        )
+
+        # List customers
+        list_res = self.client.get(f"/api/operations/customers/?q={customer.cpf}", **auth)
+        self.assertEqual(list_res.status_code, 200)
+        self.assertTrue(len(list_res.data) >= 1)
+        cust_data = next(c for c in list_res.data if c["id"] == str(customer.id))
+        self.assertEqual(cust_data["lifetime_value_cents"], 500000)
+        self.assertEqual(cust_data["total_reservations"], 1)
+
+        # Update profile with RGP license and internal notes
+        patch_res = self.client.patch(f"/api/operations/customers/{customer.id}/", {
+            "profile": {
+                "fishing_license_number": "RGP-GO-987654",
+                "fishing_license_expiry": "2027-12-31",
+                "internal_admin_notes": "Anotação sigilosa: prefere pescar na popa do barco.",
+                "city": "Goiânia",
+                "state": "GO",
+            }
+        }, format="json", **auth)
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.data["profile"]["fishing_license_number"], "RGP-GO-987654")
+        self.assertTrue(patch_res.data["profile"]["has_valid_license"])
+        self.assertEqual(patch_res.data["profile"]["internal_admin_notes"], "Anotação sigilosa: prefere pescar na popa do barco.")
+
+    def test_crm_internal_admin_notes_privacy_never_leaks_to_guest_or_public(self):
+        auth = self.login()
+        customer = Customer.objects.create(
+            cpf="66677788899",
+            full_name="Pescador Sigiloso",
+            email="sigilo@example.com",
+            phone="62977776666",
+        )
+        profile, _ = CustomerProfile.objects.get_or_create(
+            customer=customer,
+            defaults={"internal_admin_notes": "SEGREDO DE ESTADO OPERACIONAL: NÃO EXIBIR AO CLIENTE!"}
+        )
+        reservation = Reservation.objects.create(
+            customer=customer,
+            expedition=self.expedition,
+            participant_count=1,
+            unit_price_cents=249000,
+            total_price_cents=249000,
+            deposit_cents=50000,
+            status=Reservation.Status.CONFIRMED,
+        )
+        participant = ReservationParticipant.objects.create(reservation=reservation, full_name="Pescador Sigiloso")
+
+        # 1. Admin endpoint has the notes
+        admin_res = self.client.get(f"/api/operations/customers/{customer.id}/", **auth)
+        self.assertEqual(admin_res.status_code, 200)
+        self.assertEqual(admin_res.data["profile"]["internal_admin_notes"], "SEGREDO DE ESTADO OPERACIONAL: NÃO EXIBIR AO CLIENTE!")
+
+        # 2. Guest / Public participant onboarding endpoint should NEVER leak internal_admin_notes
+        token = create_guest_participant_token(participant)
+        guest_res = self.client.get(f"/api/me/guest/{token}/")
+        self.assertEqual(guest_res.status_code, 200)
+        guest_payload_str = str(guest_res.data)
+        self.assertNotIn("internal_admin_notes", guest_payload_str)
+        self.assertNotIn("SEGREDO DE ESTADO", guest_payload_str)
+
+    def test_expedition_manifest_includes_gear_addons_and_lodge_summary(self):
+        auth = self.login()
+        gear = FishingGearProduct.objects.create(
+            name="Conjunto Carretilha Pesada 100lb",
+            category="HEAVY_ROD_REEL",
+            modality="RENTAL",
+            rental_price_cents=15000,
+            inventory_quantity=5,
+        )
+        customer = Customer.objects.create(cpf="77788899900", full_name="Pescador Manifesto", email="manifesto@example.com")
+        reservation = Reservation.objects.create(
+            customer=customer,
+            expedition=self.expedition,
+            participant_count=1,
+            unit_price_cents=249000,
+            total_price_cents=249000,
+            deposit_cents=50000,
+            status=Reservation.Status.CONFIRMED,
+        )
+        participant = ReservationParticipant.objects.create(reservation=reservation, full_name="Pescador Manifesto")
+        ReservationGearAddon.objects.create(
+            reservation=reservation,
+            participant=participant,
+            gear_product=gear,
+            modality="RENTAL",
+            quantity=2,
+            unit_price_cents=60000,
+            total_price_cents=120000,
+            delivered=True,
+        )
+
+        # JSON manifest
+        manifest_res = self.client.get(f"/api/operations/expeditions/{self.expedition.id}/manifest/", **auth)
+        self.assertEqual(manifest_res.status_code, 200)
+        self.assertIn("gear_summary", manifest_res.data)
+        summary = manifest_res.data["gear_summary"]
+        self.assertTrue(len(summary) >= 1)
+        self.assertEqual(summary[0]["name"], "Conjunto Carretilha Pesada 100lb")
+        self.assertEqual(summary[0]["total_quantity"], 2)
+        self.assertEqual(summary[0]["delivered_quantity"], 2)
+
+        # Passenger gear list
+        passenger = manifest_res.data["passengers"][0]
+        self.assertIn("gear_addons", passenger)
+        self.assertEqual(passenger["gear_addons"][0]["gear_name"], "Conjunto Carretilha Pesada 100lb")
+
+        # CSV manifest
+        csv_res = self.client.get(f"/api/operations/expeditions/{self.expedition.id}/manifest.csv", **auth)
+        self.assertEqual(csv_res.status_code, 200)
+        csv_content = csv_res.content.decode("utf-8")
+        self.assertIn("Tralhas / Equipamentos", csv_content)
+        self.assertIn("2x Conjunto Carretilha Pesada 100lb (RENTAL)", csv_content)

@@ -13,6 +13,7 @@ const navigation = [
   ["Estrutura", "/#estrutura"],
   ["Galeria", "/#galeria"],
   ["Histórias", "/#depoimentos"],
+  ["Dúvidas", "/#faq"],
   ["Contato", "/#contato"],
 ] as const;
 

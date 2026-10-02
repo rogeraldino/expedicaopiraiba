@@ -122,9 +122,13 @@ export default async function CheckoutPage({ params }: { params: Promise<{ slug:
           </div>
 
           <div className="mt-5 rounded-xl bg-sand-50 p-3.5 text-xs text-ink-700 space-y-1 border border-sand-200">
-            <p className="font-bold text-brand-900">★ Pacote Tudo All Inclusive</p>
+            <p className="font-bold text-brand-900">
+              {slug.includes("casais") ? "★ Pacote Tudo All Inclusive" : "★ Pacote Completo de Pesca Esportiva"}
+            </p>
             <p className="text-[11px] leading-4 text-ink-600">
-              Inclui hospedagem completa, combustível livre, iscas, kit ceviche/sashimi, open bar (Heineken, Original, Amstel), gelo e guias.
+              {slug.includes("casais")
+                ? "Inclui hospedagem completa, combustível livre, iscas vivas e naturais, kit ceviche/sashimi, open bar (Heineken, Original, Stella Artois), gelo e guias."
+                : "Inclui hospedagem completa com refeições, combustível livre, iscas vivas e naturais, kit ceviche/sashimi, refrigerantes, água, gelo e guias especializados."}
             </p>
           </div>
         </aside>

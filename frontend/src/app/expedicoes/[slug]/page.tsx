@@ -30,8 +30,11 @@ type Lodge = {
   city: string;
   state: string;
   river_section?: string;
+  river_name?: string;
+  boat_fleet_details?: string;
   description?: string;
   amenities?: string[];
+  amenities_detailed?: { id: string; name: string; category: string; category_display: string; icon_key?: string; description?: string }[];
   meeting_point?: string;
   directions?: string;
   cover_image_url?: string;
@@ -70,7 +73,7 @@ const fallback: ExpeditionData = {
   available_slots: 12,
   price_per_person_cents: 560000,
   deposit_cents: 250000,
-  summary: "4 dias completos de pescaria All Inclusive no Rio Araguaia na Pousada Solar das Águas.",
+  summary: "4 dias completos de pescaria no Rio Araguaia na Pousada Solar das Águas.",
   cover_image_url: "/expeditions/ponte-sao-felix.jpg",
   lodge: {
     id: "solar-das-aguas",
@@ -79,7 +82,7 @@ const fallback: ExpeditionData = {
     city: "São Félix do Araguaia",
     state: "MT",
     river_section: "Médio Araguaia",
-    description: "Excelente infraestrutura na beira do Rio Araguaia, quartos suítes climatizados, piscina e cozinha regional de alto padrão.",
+    description: "Excelente infraestrutura na beira do Rio Araguaia, quartos suítes climatizados, piscina e culinária típica no capricho.",
     amenities: ["Suítes Climatizadas", "Piscina", "Wi-Fi", "Refeitório Climatizado", "Deck Flutuante"],
     meeting_point: "Pousada Solar das Águas — Recepção",
   },
@@ -136,7 +139,7 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
               Temporada Oficial 2026
             </span>
             <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-800">
-              Tudo All Inclusive
+              {isCasais ? "Tudo All Inclusive" : "Estrutura Completa"}
             </span>
           </div>
 
@@ -200,23 +203,27 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
         </div>
       </section>
 
-      {/* DETALHAMENTO DO PACOTE ALL INCLUSIVE */}
+      {/* DETALHAMENTO DO PACOTE */}
       <section className="container-page grid gap-5 pb-12 lg:grid-cols-2">
         <article className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-black uppercase text-brand-800">★ Pacote All Inclusive Completo</h2>
-          <p className="mt-1 text-xs text-ink-500">Sem custos adicionais de combustível, iscas ou bebidas durante a pescaria.</p>
+          <h2 className="text-lg font-black uppercase text-brand-800">
+            {isCasais ? "★ Pacote All Inclusive Completo" : "★ O Que Está Incluso no Pacote"}
+          </h2>
+          <p className="mt-1 text-xs text-ink-500">
+            {isCasais
+              ? "Sem custos adicionais de combustível, iscas ou bebidas durante a pescaria."
+              : "Hospedagem completa, barcos rápidos, combustível livre, iscas e guias inclusos."}
+          </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
             {(expedition.inclusions && expedition.inclusions.length > 0
               ? expedition.inclusions
               : [
                   "Hospedagem Completa na Pousada",
                   "Combustível e Óleo 100% Inclusos",
-                  "Open Bar (Cervejas e Refrigerantes)",
+                  "Iscas Vivas e Naturais Inclusas",
                   "Kit Sashimi, Ceviche e petiscos",
-                  "Iscas Nativas Vivas",
                   "Guias Nativos Especializados",
-                  "Torneio com Troféus e Banner da Equipe",
-                  "Seguro Viagem",
+                  "Torneio com Troféus Oficiais",
                   "Água mineral, Refrigerante e Gelo abundante",
                   "Internet Wi-Fi na Pousada",
                 ]
@@ -270,9 +277,16 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
             <div className="mt-2 space-y-2 text-sm text-ink-600 leading-relaxed">
               <p className="text-xs font-bold text-brand-700">
                 {expedition.lodge.city} — {expedition.lodge.state}
+                {expedition.lodge.river_name ? ` · ${expedition.lodge.river_name}` : ""}
                 {expedition.lodge.river_section ? ` (${expedition.lodge.river_section})` : ""}
               </p>
               {expedition.lodge.description && <p>{expedition.lodge.description}</p>}
+              {expedition.lodge.boat_fleet_details && (
+                <div className="rounded-lg border border-brand-200 bg-brand-50/70 p-2.5 text-xs text-brand-900">
+                  <strong className="font-bold">Estrutura Náutica: </strong>
+                  {expedition.lodge.boat_fleet_details}
+                </div>
+              )}
               {expedition.lodge.amenities && expedition.lodge.amenities.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   {expedition.lodge.amenities.map((amenity) => (
@@ -291,8 +305,8 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
           ) : (
             <p className="mt-2 text-sm text-ink-600 leading-relaxed">
               {expedition.slug.includes("bandeirantes")
-                ? "Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, piscina, área de convivência e gastronomia regional preparada por cozinheiras nativas."
-                : "Acomodações climatizadas com ar-condicionado, quartos suítes confortáveis, área de convivência e gastronomia regional preparada por cozinheiras nativas."}
+                ? "Acomodações climatizadas com ar-condicionado, quartos privativos confortáveis, área de convivência e comida caseira típica preparada por cozinheiras da região."
+                : "Acomodações climatizadas com ar-condicionado, quartos confortáveis, piscina, área de convivência e culinária regional preparada no capricho."}
             </p>
           )}
         </article>

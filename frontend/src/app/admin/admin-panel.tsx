@@ -3,17 +3,27 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BarChart3, CalendarDays, Check, Copy, Download, ExternalLink, FileText, Fish, House, ListChecks, LogOut, Menu, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, TicketCheck, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Beer, CalendarDays, Check, ChevronLeft, ChevronRight, Compass, Copy, Download, ExternalLink, FileText, Fish, House, Layers, ListChecks, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, Sparkles, TicketCheck, Trash2, Users, X } from "lucide-react";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
-type Section = "overview" | "reservations" | "expeditions" | "lodges" | "species" | "manifest" | "configuration" | "shopping";
-type Lodge = { id: string; name: string; slug: string; city: string; state: string; river_section?: string; description?: string; amenities?: string[]; meeting_point?: string; directions?: string; cover_image_url?: string; active: boolean };
+type Section = "overview" | "reservations" | "expeditions" | "lodges" | "rivers" | "species" | "packages" | "gear" | "customers" | "manifest" | "configuration" | "shopping";
+type Amenity = { id: string; name: string; category: string; category_display: string; icon_key?: string; description?: string; display_order: number; active: boolean };
+type RiverSpecies = { id: string; species: string; species_name: string; species_slug: string; scientific_name?: string; category?: string; is_native: boolean; is_trophy: boolean; best_season?: string };
+type River = { id: string; name: string; slug: string; basin: string; basin_display: string; states: string[]; description?: string; regulations?: string; active: boolean; species_count?: number; lodges_count?: number; created_at?: string; updated_at?: string };
+type Lodge = { id: string; name: string; slug: string; city: string; state: string; river_section?: string; river?: River | null; river_id?: string | null; description?: string; boat_fleet_details?: string; amenities?: string[]; amenities_detailed?: { id: string; name: string; category: string; category_display: string; icon_key?: string; description?: string }[]; meeting_point?: string; directions?: string; cover_image_url?: string; active: boolean };
 type Species = { id?: string; common_name: string; slug: string; scientific_name?: string; category: string; active?: boolean };
-type Expedition = { id: string; name: string; slug: string; destination: string; departure_location?: string; starts_at: string; ends_at: string; capacity: number; occupied_slots: number; available_slots: number; price_per_person_cents: number; deposit_cents: number; balance_due_days_before: number; status: string; summary: string; lodge?: Lodge | null; lodge_id?: string | null; cover_image_url?: string; target_species?: (Species & { is_primary?: boolean })[]; species_slugs?: string[]; inclusions?: string[] };
+type AllInclusivePackage = { id: string; name: string; slug: string; description: string; inclusions: string[]; active: boolean; expeditions_count?: number; created_at?: string; updated_at?: string };
+type BeveragePackageItem = { id?: string; product?: number | string; product_id?: number | string; product_name?: string; product_category?: string; product_unit?: string; standard_quantity_per_participant: number; display_order: number; note: string };
+type BeveragePackage = { id: string; name: string; slug: string; description: string; active: boolean; items: BeveragePackageItem[]; expeditions_count?: number; created_at?: string; updated_at?: string };
+type FishingGearProduct = { id: string; name: string; slug: string; category: string; category_display: string; modality: "RENTAL" | "SALE" | "BOTH"; modality_display: string; technical_specs: Record<string, string>; rental_price_cents: number; sale_price_cents: number; inventory_quantity: number; image_url: string; description: string; active: boolean; addons_count?: number; created_at?: string; updated_at?: string };
+type ReservationGearAddon = { id: string; reservation?: string; participant?: string | null; participant_name?: string | null; gear_product: string; gear_product_id?: string; gear_product_name: string; gear_product_category: string; gear_product_category_display: string; modality: "RENTAL" | "SALE"; quantity: number; unit_price_cents: number; total_price_cents: number; notes: string; delivered: boolean; created_at: string };
+type CustomerProfile = { id?: string; rg?: string; rg_issuer?: string; birth_date?: string | null; city?: string; state?: string; fishing_license_number?: string; fishing_license_expiry?: string | null; has_valid_license?: boolean; default_vest_size?: string; dietary_notes?: string; medical_notes?: string; emergency_contact_name?: string; emergency_contact_phone?: string; internal_admin_notes?: string; created_at?: string; updated_at?: string };
+type CustomerCRM = { id: string; cpf: string; full_name: string; email: string; phone: string; city: string; state: string; has_valid_license: boolean; total_reservations: number; lifetime_value_cents: number; last_expedition_name?: string; last_expedition_date?: string; created_at: string; profile?: CustomerProfile; reservations?: { id: string; expedition_name: string; starts_at: string; status: string; participant_count: number; total_price_cents: number; paid_amount_cents: number; remaining_balance_cents: number; gear_addons_count: number; created_at: string }[] };
+type Expedition = { id: string; name: string; slug: string; destination: string; departure_location?: string; starts_at: string; ends_at: string; capacity: number; occupied_slots: number; available_slots: number; price_per_person_cents: number; deposit_cents: number; balance_due_days_before: number; status: string; summary: string; lodge?: Lodge | null; lodge_id?: string | null; all_inclusive_package?: { id: string; name: string; slug: string } | null; all_inclusive_package_id?: string | null; beverage_package?: { id: string; name: string; slug: string } | null; beverage_package_id?: string | null; cover_image_url?: string; target_species?: (Species & { is_primary?: boolean })[]; species_slugs?: string[]; inclusions?: string[] };
 type Participant = { id: string; name: string; cpf?: string; phone: string; birth_date?: string | null; emergency_contact_name?: string; emergency_contact_phone?: string; operational_notes?: string; onboarding_status: string; preferences_confirmed?: boolean; dietary_confirmed?: boolean; checklist_completed?: boolean; selected_offers?: { id: string; name: string }[]; dietary_restrictions?: string[]; dietary_details?: string };
 type OperationalAlert = { id?: string; type?: string; level?: string; title?: string; message: string; reservation_id?: string; expedition_id?: string };
 type ExpeditionIndicator = { expedition_id?: string; id?: string; expedition_name?: string; name?: string; capacity: number; held_slots?: number; confirmed_slots?: number; occupied_slots?: number; available_slots: number; sold_cents?: number; received_cents?: number; outstanding_cents?: number; pending_preferences?: number; pending_checklists?: number; restrictions?: number };
-type Reservation = { id: string; status: string; participant_count: number; total_price_cents: number; payment_plan: string; paid_amount_cents: number; remaining_balance_cents: number; balance_due_at: string | null; held_until: string | null; created_at: string; alerts?: (string | OperationalAlert)[]; customer: { name: string; cpf: string; email: string; phone: string }; expedition: { id: string; name: string; slug?: string; starts_at: string }; participants: Participant[]; payments: { id: string; amount_cents: number; status: string; paid_at: string | null }[]; events: { id: string; event_type: string; reason: string; created_at: string }[] };
+type Reservation = { id: string; status: string; participant_count: number; total_price_cents: number; payment_plan: string; paid_amount_cents: number; remaining_balance_cents: number; balance_due_at: string | null; held_until: string | null; created_at: string; alerts?: (string | OperationalAlert)[]; customer: { name: string; cpf: string; email: string; phone: string }; expedition: { id: string; name: string; slug?: string; starts_at: string }; participants: Participant[]; gear_addons?: ReservationGearAddon[]; payments: { id: string; amount_cents: number; status: string; paid_at: string | null }[]; events: { id: string; event_type: string; reason: string; created_at: string }[] };
 type Overview = { revenue_cents: number; sold_cents: number; outstanding_cents: number; incomplete_participants: number; reservations: { total: number; confirmed: number; awaiting: number }; alerts?: OperationalAlert[]; expedition_indicators?: ExpeditionIndicator[]; expeditions?: ExpeditionIndicator[]; upcoming_expeditions: Expedition[]; recent_reservations: Reservation[] };
 type Product = { id: string; name: string; category?: string; unit: string; package_size?: number | null; aliases?: string[]; active?: boolean };
 type Offer = { id?: string; product_id: string; name?: string; standard_quantity_per_participant: number; display_order: number; note: string; active: boolean };
@@ -23,8 +33,8 @@ type Configuration = { meeting?: Meeting; meeting_instructions?: string; departu
 type ConsolidationDetail = { reservation_id?: string; customer_name?: string; participant_id?: string; participant_name: string };
 type ConsolidationRow = { offer_id: string; product: string; unit: string; people: number; standard_quantity_per_participant: number; total: number; package_size: number | null; full_packages: number | null; remainder: number | null; updated_at: string; details?: ConsolidationDetail[] };
 type Consolidation = { generated_at: string; items: ConsolidationRow[]; text?: string };
-type PassengerManifest = { id: string; name: string; cpf: string; phone: string; birth_date: string; emergency_contact_name: string; emergency_contact_phone: string; operational_notes: string; onboarding_status: string; dietary_restrictions: string[]; dietary_details: string; reservation_id: string; customer_name: string; customer_phone: string; reservation_status: string };
-type ManifestData = { expedition: { id: string; name: string; slug: string; destination: string; departure_location: string; lodge_name: string; starts_at: string; ends_at: string; capacity: number; total_passengers: number }; passengers: PassengerManifest[]; generated_at: string };
+type PassengerManifest = { id: string; name: string; cpf: string; phone: string; birth_date: string; emergency_contact_name: string; emergency_contact_phone: string; operational_notes: string; onboarding_status: string; dietary_restrictions: string[]; dietary_details: string; reservation_id: string; customer_name: string; customer_phone: string; reservation_status: string; gear_addons?: { id: string; gear_name: string; category: string; modality: string; quantity: number; delivered: boolean }[] };
+type ManifestData = { expedition: { id: string; name: string; slug: string; destination: string; departure_location: string; lodge_name: string; starts_at: string; ends_at: string; capacity: number; total_passengers: number }; passengers: PassengerManifest[]; gear_summary?: { gear_product_id: string; name: string; category: string; modality: string; total_quantity: number; delivered_quantity: number }[]; generated_at: string };
 
 const money = (value = 0) => (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const shortDate = (value?: string | null) => value ? new Date(value.length === 10 ? `${value}T12:00:00` : value).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
@@ -44,11 +54,11 @@ export function AdminPanel() {
   const logout = useCallback(() => { sessionStorage.removeItem("operations-token"); setToken(null); }, []);
   if (!ready) return <div className="min-h-screen bg-brand-900" />;
   if (!token) return <Login onLogin={value => { sessionStorage.setItem("operations-token", value); setToken(value); }} />;
-  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["species", "Catálogo de Peixes", Fish], ["manifest", "Manifesto", FileText], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
+  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["rivers", "Rios & Bacias", Compass], ["species", "Catálogo de Peixes", Fish], ["packages", "Pacotes & Cardápios", Layers], ["gear", "Tralhas & Loja", Package], ["customers", "CRM Pescadores", Users], ["manifest", "Manifesto", FileText], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
   return <div className="min-h-screen bg-[#f4f6f2] lg:grid lg:grid-cols-[260px_1fr]">
     <aside className={`fixed inset-y-0 left-0 z-40 w-[260px] bg-brand-900 text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${menu ? "translate-x-0" : "-translate-x-full"}`}><div className="flex h-full flex-col p-5"><div className="flex items-center gap-3 border-b border-white/10 pb-5"><Image src="/brand/logo-expedicao-piraiba.png" alt="" width={48} height={48} className="size-12 rounded-full" /><div><strong className="block text-sm">EXPEDIÇÃO PIRAÍBA</strong><span className="text-[10px] tracking-[.2em] text-white/60">PAINEL OPERACIONAL</span></div><button aria-label="Fechar menu" onClick={() => setMenu(false)} className="ml-auto lg:hidden"><X /></button></div><nav className="mt-6 space-y-2">{nav.map(([value,label,Icon]) => <button key={value} onClick={() => { setSection(value); setMenu(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold ${section === value ? "bg-white text-brand-900" : "text-white/75 hover:bg-white/10"}`}><Icon className="size-5" />{label}</button>)}</nav><Link href="/" className="mt-auto flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><Fish className="size-5" />Ver site</Link><button onClick={logout} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><LogOut className="size-5" />Sair</button></div></aside>
     {menu && <button aria-label="Fechar menu" className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMenu(false)} />}
-    <main className="min-w-0"><header className="flex min-h-16 items-center border-b bg-white px-5 lg:px-8"><button aria-label="Abrir menu" onClick={() => setMenu(true)} className="mr-4 lg:hidden"><Menu /></button><div><p className="text-xs font-bold uppercase tracking-widest text-brand-600">Área administrativa</p><h1 className="text-xl font-black">{nav.find(item => item[0] === section)?.[1]}</h1></div><div className="ml-auto flex items-center gap-2 text-sm text-ink-500"><ShieldCheck className="size-5 text-brand-600" /><span className="hidden sm:inline">Sessão protegida</span></div></header><div className="p-5 lg:p-8">{section === "overview" && <OverviewPanel token={token} unauthorized={logout} go={setSection} />}{section === "reservations" && <ReservationsPanel token={token} unauthorized={logout} />}{section === "expeditions" && <ExpeditionsPanel token={token} unauthorized={logout} />}{section === "lodges" && <LodgesPanel token={token} unauthorized={logout} />}{section === "species" && <SpeciesPanel token={token} unauthorized={logout} />}{section === "manifest" && <ManifestPanel token={token} unauthorized={logout} />}{section === "configuration" && <ConfigurationPanel token={token} unauthorized={logout} />}{section === "shopping" && <ShoppingPanel token={token} unauthorized={logout} />}</div></main>
+    <main className="min-w-0"><header className="flex min-h-16 items-center border-b bg-white px-5 lg:px-8"><button aria-label="Abrir menu" onClick={() => setMenu(true)} className="mr-4 lg:hidden"><Menu /></button><div><p className="text-xs font-bold uppercase tracking-widest text-brand-600">Área administrativa</p><h1 className="text-xl font-black">{nav.find(item => item[0] === section)?.[1]}</h1></div><div className="ml-auto flex items-center gap-2 text-sm text-ink-500"><ShieldCheck className="size-5 text-brand-600" /><span className="hidden sm:inline">Sessão protegida</span></div></header><div className="p-5 lg:p-8">{section === "overview" && <OverviewPanel token={token} unauthorized={logout} go={setSection} />}{section === "reservations" && <ReservationsPanel token={token} unauthorized={logout} />}{section === "expeditions" && <ExpeditionsPanel token={token} unauthorized={logout} />}{section === "lodges" && <LodgesPanel token={token} unauthorized={logout} />}{section === "rivers" && <RiversPanel token={token} unauthorized={logout} />}{section === "species" && <SpeciesPanel token={token} unauthorized={logout} />}{section === "packages" && <PackagesPanel token={token} unauthorized={logout} />}{section === "gear" && <GearPanel token={token} unauthorized={logout} />}{section === "customers" && <CustomersPanel token={token} unauthorized={logout} />}{section === "manifest" && <ManifestPanel token={token} unauthorized={logout} />}{section === "configuration" && <ConfigurationPanel token={token} unauthorized={logout} />}{section === "shopping" && <ShoppingPanel token={token} unauthorized={logout} />}</div></main>
   </div>;
 }
 
@@ -216,6 +226,31 @@ function ReservationDrawer({
   const [saving, setSaving] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
+  const [addingGear, setAddingGear] = useState(false);
+
+  async function handleToggleDelivered(addon: ReservationGearAddon) {
+    try {
+      await request(`reservations/${item.id}/gear-addons/${addon.id}/`, token, {
+        method: "PATCH",
+        body: JSON.stringify({ delivered: !addon.delivered }),
+      });
+      await changed();
+    } catch (err) {
+      window.alert(errorMessage(err));
+    }
+  }
+
+  async function handleRemoveAddon(addon: ReservationGearAddon) {
+    if (!window.confirm(`Deseja remover "${addon.gear_product_name}"? O estoque será devolvido e o saldo financeiro recalculado.`)) return;
+    try {
+      await request(`reservations/${item.id}/gear-addons/${addon.id}/`, token, {
+        method: "DELETE",
+      });
+      await changed();
+    } catch (err) {
+      window.alert(errorMessage(err));
+    }
+  }
 
   async function submit() {
     if (!reason.trim()) return setError("Informe o motivo para a auditoria.");
@@ -354,6 +389,68 @@ function ReservationDrawer({
             </div>
           ))}
         </Box>
+        <Box title="Tralhas & Equipamentos Alugados / Comprados">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-ink-500">
+              {item.gear_addons?.length ?? 0} item(ns) adicionado(s)
+            </span>
+            {!danger.includes(item.status) && (
+              <button
+                onClick={() => setAddingGear(true)}
+                className="rounded-lg border border-brand-600 bg-brand-50 px-2.5 py-1 text-xs font-bold text-brand-900 hover:bg-brand-100"
+              >
+                <Plus className="mr-1 inline size-3" />
+                Alugar / Vender Tralha
+              </button>
+            )}
+          </div>
+          {item.gear_addons?.map((addon) => (
+            <div key={addon.id} className="mt-2 rounded-lg border bg-gray-50/50 p-3 text-xs">
+              <div className="flex items-start justify-between">
+                <div>
+                  <strong className="text-ink-900">{addon.gear_product_name}</strong>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-900">
+                      {addon.modality === "RENTAL" ? "Locação" : "Venda"}
+                    </span>
+                    <span className="text-ink-500">
+                      {addon.quantity}x {money(addon.unit_price_cents)} = <strong>{money(addon.total_price_cents)}</strong>
+                    </span>
+                  </div>
+                  {addon.participant_name && (
+                    <span className="block text-[11px] text-ink-500 mt-1">
+                      Destinado a: <strong>{addon.participant_name}</strong>
+                    </span>
+                  )}
+                  {addon.notes && <p className="text-[11px] text-ink-400 mt-0.5 italic">{addon.notes}</p>}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => void handleToggleDelivered(addon)}
+                    title={addon.delivered ? "Marcar como pendente" : "Marcar como entregue"}
+                    className={`rounded px-2 py-1 text-[10px] font-bold ${
+                      addon.delivered ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {addon.delivered ? "Entregue" : "Pendente"}
+                  </button>
+                  {!danger.includes(item.status) && (
+                    <button
+                      onClick={() => void handleRemoveAddon(addon)}
+                      title="Remover tralha (devolve estoque e recalcula saldo)"
+                      className="rounded p-1 text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+          {!item.gear_addons?.length && (
+            <p className="text-xs text-ink-400 py-1">Nenhum equipamento alugado ou comprado para esta reserva.</p>
+          )}
+        </Box>
         <Box title="Histórico">
           {item.events.map((event) => (
             <div key={event.id} className="mt-2 border-l-2 border-brand-500 pl-3 text-xs">
@@ -418,6 +515,18 @@ function ReservationDrawer({
           changed={async () => {
             await changed();
             setEditingParticipant(null);
+          }}
+        />
+      )}
+
+      {addingGear && (
+        <AddGearAddonModal
+          token={token}
+          reservation={item}
+          close={() => setAddingGear(false)}
+          added={async () => {
+            await changed();
+            setAddingGear(false);
           }}
         />
       )}
@@ -853,6 +962,22 @@ function ExpeditionsPanel({ token, unauthorized }: { token: string; unauthorized
                     <Pencil className="size-4" />
                   </button>
                 </div>
+                {(item.all_inclusive_package || item.beverage_package) && (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {item.all_inclusive_package && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                        <Layers className="size-3" />
+                        {item.all_inclusive_package.name}
+                      </span>
+                    )}
+                    {item.beverage_package && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                        <Beer className="size-3" />
+                        {item.beverage_package.name}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {item.target_species && item.target_species.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1">
                     {item.target_species.map((sp) => (
@@ -880,7 +1005,7 @@ function ExpeditionsPanel({ token, unauthorized }: { token: string; unauthorized
         )}
       </div>
       {editing && (
-        <ExpeditionModal
+        <ExpeditionWizardModal
           token={token}
           item={editing === "new" ? undefined : editing}
           close={() => setEditing(null)}
@@ -894,7 +1019,7 @@ function ExpeditionsPanel({ token, unauthorized }: { token: string; unauthorized
   );
 }
 
-function ExpeditionModal({
+function ExpeditionWizardModal({
   token,
   item,
   close,
@@ -905,8 +1030,13 @@ function ExpeditionModal({
   close: () => void;
   saved: () => Promise<void>;
 }) {
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+
+  const rivers = useData<River[]>("rivers/", token, () => {});
   const lodges = useData<Lodge[]>("lodges/", token, () => {});
   const speciesList = useData<Species[]>("species/", token, () => {});
+  const allInclusivePackages = useData<AllInclusivePackage[]>("all-inclusive-packages/", token, () => {});
+  const beveragePackages = useData<BeveragePackage[]>("beverage-packages/", token, () => {});
 
   const [form, setForm] = useState({
     name: item?.name ?? "",
@@ -920,14 +1050,16 @@ function ExpeditionModal({
     balance_due_days_before: String(item?.balance_due_days_before ?? 30),
     status: item?.status ?? "DRAFT",
     summary: item?.summary ?? "",
+    river_id: item?.lodge?.river?.id ?? item?.lodge?.river_id ?? "",
     lodge_id: item?.lodge?.id ?? item?.lodge_id ?? "",
+    all_inclusive_package_id: item?.all_inclusive_package?.id ?? item?.all_inclusive_package_id ?? "",
+    beverage_package_id: item?.beverage_package?.id ?? item?.beverage_package_id ?? "",
     cover_image_url: item?.cover_image_url ?? "",
     inclusions: (item?.inclusions ?? [
       "Hospedagem Completa na Pousada",
       "Combustível e Óleo 100% Inclusos",
-      "Open Bar (Cervejas e Refrigerantes)",
-      "Kit Sashimi, Ceviche e petiscos",
-      "Iscas Nativas Vivas",
+      "Kit Sashimi, Ceviche e petiscos no rio",
+      "Iscas Vivas Nativas",
       "Guias Nativos Especializados",
       "Torneio com Troféus e Banner da Equipe",
       "Seguro Viagem",
@@ -940,177 +1072,912 @@ function ExpeditionModal({
     item?.target_species?.map((s) => s.slug) ?? item?.species_slugs ?? []
   );
 
-  useEffect(() => {
-    if (!item && selectedSpecies.length === 0 && speciesList.data && speciesList.data.length > 0) {
-      setSelectedSpecies(speciesList.data.map((s) => s.slug));
-    }
-  }, [item, speciesList.data]);
+  const [primarySpecies, setPrimarySpecies] = useState<string>(
+    item?.target_species?.find((s) => s.is_primary)?.slug ??
+    item?.target_species?.[0]?.slug ??
+    ""
+  );
+
+  const [riverNotice, setRiverNotice] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [showAllSpecies, setShowAllSpecies] = useState(false);
+
+  // River species for selected river
+  const riverSpecies = useData<RiverSpecies[]>(
+    form.river_id ? `rivers/${form.river_id}/species/` : null,
+    token,
+    () => {}
+  );
+
+  // Auto-populate initial river if lodge is pre-set
+  useEffect(() => {
+    if (form.lodge_id && !form.river_id && lodges.data) {
+      const foundLodge = lodges.data.find((l) => l.id === form.lodge_id);
+      const rId = foundLodge?.river?.id ?? foundLodge?.river_id;
+      if (rId) setForm((prev) => ({ ...prev, river_id: rId }));
+    }
+  }, [form.lodge_id, form.river_id, lodges.data]);
+
+  const onRiverChange = (newRiverId: string) => {
+    setRiverNotice("");
+    if (form.lodge_id && newRiverId) {
+      const currentLodge = lodges.data?.find((l) => l.id === form.lodge_id);
+      const currentLodgeRiverId = currentLodge?.river?.id ?? currentLodge?.river_id;
+      if (currentLodgeRiverId && currentLodgeRiverId !== newRiverId) {
+        setForm((prev) => ({ ...prev, river_id: newRiverId, lodge_id: "" }));
+        setRiverNotice(
+          `A pousada "${currentLodge?.name}" pertence a outro rio e foi desmarcada para evitar inconsistência geográfica.`
+        );
+        return;
+      }
+    }
+    setForm((prev) => ({ ...prev, river_id: newRiverId }));
+  };
 
   const onLodgeChange = (lodgeId: string) => {
     const chosen = lodges.data?.find((l) => l.id === lodgeId);
+    setForm((prev) => {
+      const chosenRiverId = chosen?.river?.id ?? chosen?.river_id ?? prev.river_id;
+      return {
+        ...prev,
+        lodge_id: lodgeId,
+        river_id: chosenRiverId || prev.river_id,
+        departure_location: prev.departure_location || (chosen ? `${chosen.city}/${chosen.state}` : ""),
+        destination: chosen ? `${chosen.city}/${chosen.state} (${chosen.name})` : prev.destination,
+        cover_image_url: prev.cover_image_url || (chosen?.cover_image_url ?? ""),
+      };
+    });
+  };
+
+  // Pre-select river species if new expedition and no species yet selected
+  useEffect(() => {
+    if (!item && selectedSpecies.length === 0 && riverSpecies.data && riverSpecies.data.length > 0) {
+      const slugs = riverSpecies.data.map((s) => s.species_slug);
+      setSelectedSpecies(slugs);
+      const trophy = riverSpecies.data.find((s) => s.is_trophy);
+      if (trophy) setPrimarySpecies(trophy.species_slug);
+      else if (slugs[0]) setPrimarySpecies(slugs[0]);
+    }
+  }, [item, riverSpecies.data]);
+
+  const toggleSpecies = (slug: string) => {
+    setSelectedSpecies((prev) => {
+      if (prev.includes(slug)) {
+        const next = prev.filter((s) => s !== slug);
+        if (primarySpecies === slug) {
+          setPrimarySpecies(next[0] ?? "");
+        }
+        return next;
+      } else {
+        const next = [...prev, slug];
+        if (!primarySpecies) setPrimarySpecies(slug);
+        return next;
+      }
+    });
+  };
+
+  const onAllInclusiveChange = (packageId: string) => {
+    const chosen = allInclusivePackages.data?.find((p) => p.id === packageId);
     setForm((prev) => ({
       ...prev,
-      lodge_id: lodgeId,
-      departure_location: prev.departure_location || (chosen ? `${chosen.city}/${chosen.state}` : ""),
-      destination: chosen ? `${chosen.city}/${chosen.state} (${chosen.name})` : prev.destination,
+      all_inclusive_package_id: packageId,
+      inclusions: chosen?.inclusions && chosen.inclusions.length > 0
+        ? chosen.inclusions.join("\n")
+        : prev.inclusions,
     }));
   };
 
-  const toggleSpecies = (slug: string) => {
-    setSelectedSpecies((prev) =>
-      prev.includes(slug) ? prev.filter((s) => s !== slug) : [...prev, slug]
-    );
+  const reloadPackageInclusions = () => {
+    const chosen = allInclusivePackages.data?.find((p) => p.id === form.all_inclusive_package_id);
+    if (chosen?.inclusions) {
+      setForm((prev) => ({ ...prev, inclusions: chosen.inclusions.join("\n") }));
+    }
   };
+
+  const priceNum = Number(form.price) || 0;
+  const depositNum = Number(form.deposit) || 0;
+  const minDepositNum = Math.ceil(priceNum * 0.20);
+  const isDepositValid = priceNum === 0 || (depositNum >= minDepositNum && depositNum <= priceNum);
+
+  const durationDays = useMemo(() => {
+    if (!form.starts_at || !form.ends_at) return null;
+    const start = new Date(`${form.starts_at}T12:00:00`);
+    const end = new Date(`${form.ends_at}T12:00:00`);
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    return diffDays > 0 ? diffDays : null;
+  }, [form.starts_at, form.ends_at]);
+
+  const availableLodges = useMemo(() => {
+    if (!lodges.data) return [];
+    if (!form.river_id) return lodges.data;
+    return lodges.data.filter(
+      (l) => (l.river?.id ?? l.river_id) === form.river_id
+    );
+  }, [lodges.data, form.river_id]);
+
+  const selectedLodge = lodges.data?.find((l) => l.id === form.lodge_id);
+  const selectedRiver = rivers.data?.find((r) => r.id === form.river_id);
+  const selectedBeveragePkg = beveragePackages.data?.find((p) => p.id === form.beverage_package_id);
+  const selectedAllInclusivePkg = allInclusivePackages.data?.find((p) => p.id === form.all_inclusive_package_id);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setError("");
+
+    if (!form.name.trim()) {
+      setError("O nome da expedição é obrigatório.");
+      setStep(4);
+      return;
+    }
+    if (!form.destination.trim()) {
+      setError("O destino da expedição é obrigatório.");
+      setStep(1);
+      return;
+    }
+    if (!form.starts_at || !form.ends_at) {
+      setError("As datas de início e término são obrigatórias.");
+      setStep(4);
+      return;
+    }
+    if (new Date(form.ends_at) < new Date(form.starts_at)) {
+      setError("A data final deve ser posterior ou igual à inicial.");
+      setStep(4);
+      return;
+    }
+
+    const priceCents = Math.round(Number(form.price) * 100);
+    const depositCents = Math.round(Number(form.deposit) * 100);
+    const minDepositCents = Math.ceil(priceCents * 0.20);
+
+    if (priceCents > 0 && depositCents < minDepositCents) {
+      setError(`O sinal mínimo deve ser de pelo menos 20% do valor por pessoa (${money(minDepositCents)}).`);
+      setStep(4);
+      return;
+    }
+    if (depositCents > priceCents) {
+      setError("O sinal não pode ser superior ao valor por pessoa.");
+      setStep(4);
+      return;
+    }
+
+    setLoading(true);
     try {
+      const orderedSpecies = primarySpecies && selectedSpecies.includes(primarySpecies)
+        ? [primarySpecies, ...selectedSpecies.filter((s) => s !== primarySpecies)]
+        : selectedSpecies;
+
       const body = {
-        ...form,
-        capacity: Number(form.capacity),
-        price_per_person_cents: Math.round(Number(form.price) * 100),
-        deposit_cents: Math.round(Number(form.deposit) * 100),
-        balance_due_days_before: Number(form.balance_due_days_before),
+        name: form.name.trim(),
+        destination: form.destination.trim(),
+        departure_location: form.departure_location.trim(),
+        starts_at: form.starts_at,
+        ends_at: form.ends_at,
+        capacity: Number(form.capacity) || 12,
+        price_per_person_cents: priceCents,
+        deposit_cents: depositCents,
+        balance_due_days_before: Number(form.balance_due_days_before) || 30,
+        status: form.status,
+        summary: form.summary.trim(),
+        cover_image_url: form.cover_image_url.trim(),
         lodge_id: form.lodge_id || null,
-        species_slugs: selectedSpecies,
+        all_inclusive_package_id: form.all_inclusive_package_id || null,
+        beverage_package_id: form.beverage_package_id || null,
+        species_slugs: orderedSpecies,
         inclusions: form.inclusions
           .split("\n")
           .map((s) => s.trim())
           .filter(Boolean),
       };
+
       await request(item ? `expeditions/${item.id}/` : "expeditions/", token, {
         method: item ? "PATCH" : "POST",
         body: JSON.stringify(body),
       });
       await saved();
-    } catch (value) {
-      setError(errorMessage(value));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
     }
   }
 
-  const input = (name: keyof typeof form, label: string, type = "text") => (
-    <Field label={label} type={type} value={form[name]} set={(value) => setForm({ ...form, [name]: value })} />
-  );
+  const steps = [
+    { num: 1, title: "Destino & Pousada", Icon: Compass },
+    { num: 2, title: "Espécies do Rio", Icon: Fish },
+    { num: 3, title: "Pacotes & Cardápio", Icon: Layers },
+    { num: 4, title: "Comercial & Vagas", Icon: CalendarDays },
+  ] as const;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
-      <form onSubmit={submit} className="my-5 w-full max-w-2xl rounded-2xl bg-white p-6">
-        <div className="flex justify-between">
-          <h2 className="text-2xl font-black">{item ? "Editar expedição" : "Nova expedição"}</h2>
-          <button type="button" onClick={close}>
-            <X />
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4">
+      <form onSubmit={submit} className="my-5 flex w-full max-w-3xl flex-col rounded-2xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-6 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="size-5 text-brand-600" />
+              <h2 className="text-xl font-black">
+                {item ? `Editar Expedição: ${item.name}` : "Construtor de Nova Expedição"}
+              </h2>
+            </div>
+            <p className="text-xs text-ink-500">
+              Fluxo guiado em 4 etapas · Padrão operacional normativo
+            </p>
+          </div>
+          <button type="button" onClick={close} className="rounded-lg p-1 text-ink-400 hover:bg-gray-100">
+            <X className="size-5" />
           </button>
         </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          {input("name", "Nome")}
-          <label className="text-xs font-bold">
-            Pousada parceira
-            <select
-              value={form.lodge_id}
-              onChange={(e) => onLodgeChange(e.target.value)}
-              className="mt-1 h-10 w-full rounded-lg border px-3"
-            >
-              <option value="">Nenhuma / Personalizada</option>
-              {lodges.data?.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.city}/{l.state})
-                </option>
-              ))}
-            </select>
-          </label>
-          {input("destination", "Destino")}
-          {input("departure_location", "Local de saída")}
-          {input("capacity", "Capacidade", "number")}
-          {input("starts_at", "Data inicial", "date")}
-          {input("ends_at", "Data final", "date")}
-          {input("price", "Valor por pessoa", "number")}
-          {input("deposit", "Sinal", "number")}
-          {input("balance_due_days_before", "Vencimento do saldo (dias)", "number")}
-          <label className="text-xs font-bold">
-            Status
-            <select
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="mt-1 h-10 w-full rounded-lg border px-3"
-            >
-              {Object.entries(labels)
-                .slice(0, 7)
-                .map(([key, value]) => (
-                  <option key={key} value={key}>
-                    {value}
-                  </option>
-                ))}
-            </select>
-          </label>
-          {input("cover_image_url", "URL da Imagem de Capa")}
-          <label className="text-xs font-bold sm:col-span-2">
-            Resumo
-            <textarea
-              value={form.summary}
-              onChange={(e) => setForm({ ...form, summary: e.target.value })}
-              className="mt-1 min-h-20 w-full rounded-lg border p-3"
-            />
-          </label>
-          <div className="sm:col-span-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold">Espécies presentes nesta expedição</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedSpecies(speciesList.data?.map((s) => s.slug) ?? [])}
-                  className="text-[11px] font-bold text-brand-600 hover:underline"
-                >
-                  Selecionar todas (Padrão Araguaia)
-                </button>
-                <span className="text-gray-300">|</span>
-                <button
-                  type="button"
-                  onClick={() => setSelectedSpecies([])}
-                  className="text-[11px] font-bold text-ink-500 hover:underline"
-                >
-                  Limpar
-                </button>
-              </div>
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {speciesList.data?.map((s) => (
-                <label
-                  key={s.slug}
-                  className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
-                    selectedSpecies.includes(s.slug)
-                      ? "border-brand-600 bg-brand-50 text-brand-800 shadow-sm"
-                      : "border-ink-900/10 text-ink-600 hover:bg-gray-50"
+
+        {/* Stepper Tabs */}
+        <div className="grid grid-cols-2 border-b bg-gray-50/75 p-2 sm:grid-cols-4 sm:gap-2">
+          {steps.map(({ num, title, Icon }) => {
+            const isActive = step === num;
+            const isDone = step > num;
+            return (
+              <button
+                key={num}
+                type="button"
+                onClick={() => setStep(num as 1 | 2 | 3 | 4)}
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition ${
+                  isActive
+                    ? "bg-white text-brand-900 shadow-sm ring-1 ring-black/5"
+                    : isDone
+                    ? "text-brand-700 hover:bg-white/50"
+                    : "text-ink-400 hover:bg-white/50"
+                }`}
+              >
+                <div
+                  className={`grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-black ${
+                    isActive
+                      ? "bg-brand-600 text-white"
+                      : isDone
+                      ? "bg-brand-100 text-brand-800"
+                      : "bg-gray-200 text-gray-600"
                   }`}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedSpecies.includes(s.slug)}
-                    onChange={() => toggleSpecies(s.slug)}
-                    className="sr-only"
-                  />
-                  <Fish className="size-3" />
-                  {s.common_name}
-                </label>
-              ))}
-            </div>
-          </div>
-          <label className="text-xs font-bold sm:col-span-2">
-            Inclusões All Inclusive (uma por linha)
-            <textarea
-              value={form.inclusions}
-              onChange={(e) => setForm({ ...form, inclusions: e.target.value })}
-              rows={4}
-              className="mt-1 w-full rounded-lg border p-3 font-mono text-xs"
-            />
-          </label>
+                  {isDone ? <Check className="size-3.5" /> : num}
+                </div>
+                <div className="min-w-0 text-left">
+                  <span className="block truncate">{title}</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
-        {error && <p className="mt-3 text-red-700">{error}</p>}
-        <button className="mt-5 rounded-lg bg-brand-600 px-5 py-3 font-bold text-white">Salvar</button>
+
+        {/* Step Body */}
+        <div className="max-h-[calc(85vh-200px)] overflow-y-auto p-6">
+          {riverNotice && (
+            <div className="mb-4 flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+              <span>{riverNotice}</span>
+              <button type="button" onClick={() => setRiverNotice("")} className="ml-2 text-ink-400 hover:text-ink-700">
+                <X className="size-4" />
+              </button>
+            </div>
+          )}
+
+          {/* STEP 1: Destino & Pousada */}
+          {step === 1 && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
+                <h3 className="text-sm font-black text-brand-900">Etapa 1: Definição Geográfica & Hospedagem</h3>
+                <p className="mt-1 text-xs text-brand-700">
+                  Selecione o rio e a pousada parceira. As informações de destino, ponto de encontro e frotas de barcos serão pré-preenchidas automaticamente.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-xs font-bold text-ink-800">
+                  Rio da Bacia
+                  <select
+                    value={form.river_id}
+                    onChange={(e) => onRiverChange(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium"
+                  >
+                    <option value="">Selecione um rio (filtra pousadas)...</option>
+                    {rivers.data?.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.basin_display})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="text-xs font-bold text-ink-800">
+                  Pousada Parceira
+                  <select
+                    value={form.lodge_id}
+                    onChange={(e) => onLodgeChange(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium"
+                  >
+                    <option value="">Nenhuma / Personalizada</option>
+                    {availableLodges.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name} — {l.city}/{l.state}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {/* Lodge details preview */}
+              {selectedLodge && (
+                <div className="rounded-xl border bg-gray-50/80 p-4 text-xs">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <strong className="text-sm font-black text-ink-900">{selectedLodge.name}</strong>
+                      <span className="ml-2 text-ink-500">
+                        {selectedLodge.city}/{selectedLodge.state}
+                        {selectedLodge.river_section ? ` · Trecho ${selectedLodge.river_section}` : ""}
+                      </span>
+                    </div>
+                    {selectedLodge.river && (
+                      <span className="rounded-full bg-brand-100 px-2.5 py-0.5 font-bold text-brand-800">
+                        {selectedLodge.river.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedLodge.boat_fleet_details && (
+                    <div className="mt-2.5">
+                      <span className="font-bold text-ink-700">Estrutura de Barcos & Motores:</span>
+                      <p className="mt-0.5 text-ink-600">{selectedLodge.boat_fleet_details}</p>
+                    </div>
+                  )}
+
+                  {selectedLodge.meeting_point && (
+                    <div className="mt-2">
+                      <span className="font-bold text-ink-700">Ponto de Encontro Padrão:</span>
+                      <p className="mt-0.5 text-ink-600">{selectedLodge.meeting_point}</p>
+                    </div>
+                  )}
+
+                  {selectedLodge.amenities_detailed && selectedLodge.amenities_detailed.length > 0 && (
+                    <div className="mt-3">
+                      <span className="font-bold text-ink-700">Comodidades da Pousada:</span>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {selectedLodge.amenities_detailed.map((am) => (
+                          <span
+                            key={am.id}
+                            className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-ink-700 ring-1 ring-ink-900/10"
+                          >
+                            {am.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Destino Oficial"
+                  value={form.destination}
+                  set={(v) => setForm({ ...form, destination: v })}
+                />
+                <Field
+                  label="Local de Saída / Encontro"
+                  value={form.departure_location}
+                  set={(v) => setForm({ ...form, departure_location: v })}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: Espécies do Rio */}
+          {step === 2 && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
+                <h3 className="text-sm font-black text-brand-900">Etapa 2: Espécies-Alvo do Rio</h3>
+                <p className="mt-1 text-xs text-brand-700">
+                  {selectedRiver
+                    ? `Catálogo do Rio ${selectedRiver.name}. Selecione as espécies presentes e defina a estrela principal da expedição.`
+                    : "Selecione as espécies que serão o foco desta pescaria. É recomendável definir ao menos um peixe de troféu."}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
+                <div className="text-xs text-ink-600">
+                  <strong>{selectedSpecies.length}</strong> espécie(s) marcada(s)
+                  {primarySpecies && (
+                    <span className="ml-2 font-bold text-brand-700">
+                      (Principal: {speciesList.data?.find((s) => s.slug === primarySpecies)?.common_name || primarySpecies})
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {riverSpecies.data && riverSpecies.data.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const riverSlugs = riverSpecies.data!.map((s) => s.species_slug);
+                        setSelectedSpecies(riverSlugs);
+                        const trophy = riverSpecies.data!.find((s) => s.is_trophy);
+                        if (trophy) setPrimarySpecies(trophy.species_slug);
+                        else if (riverSlugs[0]) setPrimarySpecies(riverSlugs[0]);
+                      }}
+                      className="text-xs font-bold text-brand-600 hover:underline"
+                    >
+                      Selecionar recomendadas do rio
+                    </button>
+                  )}
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const allSlugs = speciesList.data?.map((s) => s.slug) ?? [];
+                      setSelectedSpecies(allSlugs);
+                      if (!primarySpecies && allSlugs[0]) setPrimarySpecies(allSlugs[0]);
+                    }}
+                    className="text-xs font-bold text-ink-600 hover:underline"
+                  >
+                    Marcar todas
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSpecies([]);
+                      setPrimarySpecies("");
+                    }}
+                    className="text-xs font-bold text-ink-400 hover:underline"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              </div>
+
+              {/* River specific species */}
+              {riverSpecies.data && riverSpecies.data.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-ink-500">
+                    Espécies Registradas no Rio {selectedRiver?.name}
+                  </h4>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    {riverSpecies.data.map((rsp) => {
+                      const isSelected = selectedSpecies.includes(rsp.species_slug);
+                      const isPrimary = primarySpecies === rsp.species_slug;
+                      return (
+                        <div
+                          key={rsp.id}
+                          className={`flex items-center justify-between rounded-xl border p-3 transition ${
+                            isSelected
+                              ? "border-brand-500 bg-brand-50/40"
+                              : "border-gray-200 bg-white opacity-70 hover:opacity-100"
+                          }`}
+                        >
+                          <label className="flex flex-1 cursor-pointer items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSpecies(rsp.species_slug)}
+                              className="size-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                            />
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <strong className="text-xs text-ink-900">{rsp.species_name}</strong>
+                                {rsp.is_trophy && (
+                                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-900">
+                                    🏆 Troféu
+                                  </span>
+                                )}
+                              </div>
+                              <span className="block text-[10px] text-ink-500">
+                                {rsp.category === "COURO" ? "Peixe de Couro" : "Peixe de Escama"}
+                                {rsp.best_season ? ` · Temporada: ${rsp.best_season}` : ""}
+                              </span>
+                            </div>
+                          </label>
+
+                          {isSelected && (
+                            <button
+                              type="button"
+                              onClick={() => setPrimarySpecies(rsp.species_slug)}
+                              className={`rounded-lg px-2 py-1 text-[10px] font-bold transition ${
+                                isPrimary
+                                  ? "bg-brand-600 text-white shadow-sm"
+                                  : "border bg-white text-ink-600 hover:bg-gray-100"
+                              }`}
+                            >
+                              {isPrimary ? "★ Principal" : "Tornar Principal"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* General catalogue option */}
+              <div className="border-t pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAllSpecies(!showAllSpecies)}
+                  className="flex items-center gap-1 text-xs font-bold text-brand-600 hover:underline"
+                >
+                  {showAllSpecies ? "− Ocultar catálogo geral completo" : "+ Adicionar espécies de outros rios / catálogo geral"}
+                </button>
+
+                {showAllSpecies && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {speciesList.data?.map((s) => {
+                      const isSelected = selectedSpecies.includes(s.slug);
+                      const isPrimary = primarySpecies === s.slug;
+                      return (
+                        <div
+                          key={s.slug}
+                          className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold transition ${
+                            isSelected
+                              ? "border-brand-600 bg-brand-50 text-brand-800 shadow-sm"
+                              : "border-ink-900/10 text-ink-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleSpecies(s.slug)}
+                            className="size-3.5 rounded border-gray-300 text-brand-600"
+                          />
+                          <span>{s.common_name}</span>
+                          {isSelected && (
+                            <button
+                              type="button"
+                              onClick={() => setPrimarySpecies(s.slug)}
+                              title={isPrimary ? "Espécie principal da expedição" : "Definir como principal"}
+                              className={`ml-1 text-[10px] ${isPrimary ? "text-amber-600 font-black" : "text-gray-400 hover:text-brand-600"}`}
+                            >
+                              {isPrimary ? "★" : "☆"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Pacotes & Cardápio */}
+          {step === 3 && (
+            <div className="space-y-5">
+              <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
+                <h3 className="text-sm font-black text-brand-900">Etapa 3: Pacotes Reutilizáveis & Bebidas</h3>
+                <p className="mt-1 text-xs text-brand-700">
+                  Associe moldes de All Inclusive e Cardápio de Bebidas. O All Inclusive carrega uma cópia das inclusões para personalização exclusiva desta expedição.
+                </p>
+              </div>
+
+              {/* All Inclusive Section */}
+              <div className="rounded-xl border p-4">
+                <div className="flex items-center gap-2">
+                  <Layers className="size-4 text-brand-600" />
+                  <h4 className="text-sm font-black text-ink-900">Pacote All Inclusive Base</h4>
+                </div>
+
+                <div className="mt-3">
+                  <select
+                    value={form.all_inclusive_package_id}
+                    onChange={(e) => onAllInclusiveChange(e.target.value)}
+                    className="h-10 w-full rounded-lg border bg-white px-3 text-sm font-bold text-ink-800"
+                  >
+                    <option value="">Nenhum pacote All Inclusive vinculado (Personalizado)</option>
+                    {allInclusivePackages.data?.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.inclusions?.length ?? 0} benefícios)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedAllInclusivePkg && (
+                  <div className="mt-3 rounded-lg bg-gray-50 p-3 text-xs">
+                    <p className="text-ink-600">{selectedAllInclusivePkg.description}</p>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="font-bold text-ink-500">
+                        {selectedAllInclusivePkg.inclusions?.length ?? 0} benefícios no molde
+                      </span>
+                      <button
+                        type="button"
+                        onClick={reloadPackageInclusions}
+                        className="text-xs font-bold text-brand-600 hover:underline"
+                      >
+                        Restaurar inclusões do molde
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <label className="mt-3 block text-xs font-bold text-ink-800">
+                  Inclusões Oficiais desta Expedição (uma por linha)
+                  <span className="block text-[11px] font-normal text-ink-500">
+                    Modificações abaixo aplicam-se apenas a esta expedição (snapshot durável).
+                  </span>
+                  <textarea
+                    value={form.inclusions}
+                    onChange={(e) => setForm({ ...form, inclusions: e.target.value })}
+                    rows={5}
+                    className="mt-1 w-full rounded-lg border p-3 font-mono text-xs"
+                  />
+                </label>
+              </div>
+
+              {/* Beverage Package Section */}
+              <div className="rounded-xl border p-4">
+                <div className="flex items-center gap-2">
+                  <Beer className="size-4 text-amber-600" />
+                  <h4 className="text-sm font-black text-ink-900">Cardápio de Bebidas Operacional</h4>
+                </div>
+
+                <div className="mt-3">
+                  <select
+                    value={form.beverage_package_id}
+                    onChange={(e) => setForm({ ...form, beverage_package_id: e.target.value })}
+                    className="h-10 w-full rounded-lg border bg-white px-3 text-sm font-bold text-ink-800"
+                  >
+                    <option value="">Nenhum cardápio de bebidas vinculado</option>
+                    {beveragePackages.data?.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.items?.length ?? 0} bebidas)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedBeveragePkg && (
+                  <div className="mt-3 space-y-2 rounded-lg bg-gray-50 p-3 text-xs">
+                    <p className="text-ink-600">{selectedBeveragePkg.description}</p>
+                    <p className="font-bold text-ink-700">Cotas sincronizadas por participante:</p>
+                    <div className="grid gap-1.5 sm:grid-cols-2">
+                      {selectedBeveragePkg.items?.map((it, idx) => (
+                        <div key={it.id ?? idx} className="flex justify-between rounded bg-white p-2 shadow-xs">
+                          <div>
+                            <strong className="text-ink-900">{it.product_name}</strong>
+                            {it.note && <span className="ml-1 text-[10px] text-ink-500">({it.note})</span>}
+                          </div>
+                          <span className="font-bold text-brand-800">
+                            {it.standard_quantity_per_participant} {it.product_unit}/pes.
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[11px] text-ink-500">
+                      ℹ Ao salvar a expedição, estes produtos serão espelhados para a lista de itens da expedição.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* STEP 4: Comercial & Vagas */}
+          {step === 4 && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-brand-100 bg-brand-50/50 p-4">
+                <h3 className="text-sm font-black text-brand-900">Etapa 4: Parâmetros Comerciais & Publicação</h3>
+                <p className="mt-1 text-xs text-brand-700">
+                  Defina datas, capacidade e valores. Pela Constituição do projeto, o sinal mínimo obrigatório é de 20% do valor total por pessoa.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Nome da Expedição"
+                  value={form.name}
+                  set={(v) => setForm({ ...form, name: v })}
+                />
+
+                <label className="text-xs font-bold text-ink-800">
+                  Status Operacional
+                  <select
+                    value={form.status}
+                    onChange={(e) => setForm({ ...form, status: e.target.value })}
+                    className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium"
+                  >
+                    {Object.entries(labels)
+                      .slice(0, 7)
+                      .map(([key, val]) => (
+                        <option key={key} value={key}>
+                          {val}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <div>
+                  <Field
+                    label="Data de Início"
+                    type="date"
+                    value={form.starts_at}
+                    set={(v) => setForm({ ...form, starts_at: v })}
+                  />
+                </div>
+
+                <div>
+                  <Field
+                    label="Data de Término"
+                    type="date"
+                    value={form.ends_at}
+                    set={(v) => setForm({ ...form, ends_at: v })}
+                  />
+                  {durationDays && (
+                    <span className="mt-1 block text-right text-[11px] font-bold text-brand-700">
+                      Duração estimada: {durationDays} dias / {durationDays - 1} noites
+                    </span>
+                  )}
+                </div>
+
+                <Field
+                  label="Capacidade Total de Pescadores (Vagas)"
+                  type="number"
+                  value={form.capacity}
+                  set={(v) => setForm({ ...form, capacity: v })}
+                />
+
+                <Field
+                  label="Vencimento do Saldo (Dias antes da viagem)"
+                  type="number"
+                  value={form.balance_due_days_before}
+                  set={(v) => setForm({ ...form, balance_due_days_before: v })}
+                />
+
+                <div>
+                  <Field
+                    label="Valor por Pessoa (R$)"
+                    type="number"
+                    value={form.price}
+                    set={(v) => setForm({ ...form, price: v })}
+                  />
+                  {priceNum > 0 && (
+                    <span className="mt-1 block text-right text-[11px] text-ink-500">
+                      Mínimo de sinal exigido (20%): <strong>{money(minDepositNum * 100)}</strong>
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <Field
+                    label="Valor do Sinal (R$)"
+                    type="number"
+                    value={form.deposit}
+                    set={(v) => setForm({ ...form, deposit: v })}
+                  />
+                  {depositNum > 0 && priceNum > 0 && (
+                    <span className="mt-1 block text-right text-[11px] font-bold text-ink-600">
+                      Equivale a {((depositNum / priceNum) * 100).toFixed(1)}% do valor total
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* 20% Deposit Validation Alert */}
+              {!isDepositValid && priceNum > 0 && (
+                <div className="flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-bold text-red-700">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="size-5 shrink-0" />
+                    <span>
+                      Sinal abaixo do mínimo constitucional (20%). O valor mínimo exigido é de {money(minDepositNum * 100)}.
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, deposit: String(minDepositNum) })}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-red-700"
+                  >
+                    Definir 20% ({money(minDepositNum * 100)})
+                  </button>
+                </div>
+              )}
+
+              <Field
+                label="URL da Imagem de Capa"
+                value={form.cover_image_url}
+                set={(v) => setForm({ ...form, cover_image_url: v })}
+              />
+
+              <label className="block text-xs font-bold text-ink-800">
+                Resumo Executivo da Expedição
+                <textarea
+                  value={form.summary}
+                  onChange={(e) => setForm({ ...form, summary: e.target.value })}
+                  rows={3}
+                  className="mt-1 w-full rounded-lg border p-3 text-xs"
+                />
+              </label>
+
+              {/* Wizard Executive Summary */}
+              <div className="rounded-xl border bg-gray-50 p-4 text-xs">
+                <h4 className="font-black uppercase tracking-wider text-ink-600">Resumo da Configuração</h4>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <span className="text-ink-500">Destino:</span>{" "}
+                    <strong>{form.destination || "Não definido"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-ink-500">Pousada:</span>{" "}
+                    <strong>{selectedLodge?.name || "Não selecionada"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-ink-500">Espécies:</span>{" "}
+                    <strong>
+                      {selectedSpecies.length} selecionadas
+                      {primarySpecies ? ` (Principal: ${primarySpecies})` : ""}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-ink-500">Pacote All Inclusive:</span>{" "}
+                    <strong>{selectedAllInclusivePkg?.name || "Personalizado"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-ink-500">Cardápio Bebidas:</span>{" "}
+                    <strong>{selectedBeveragePkg?.name || "Não definido"}</strong>
+                  </div>
+                  <div>
+                    <span className="text-ink-500">Comercial:</span>{" "}
+                    <strong>
+                      {form.capacity} vagas a {money(priceNum * 100)} (Sinal: {money(depositNum * 100)})
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {error && <p className="px-6 py-2 text-xs font-bold text-red-700">{error}</p>}
+
+        {/* Stepper Footer Controls */}
+        <div className="flex items-center justify-between border-t px-6 py-4">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg border px-4 py-2 text-sm font-bold text-ink-700 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+
+          <div className="flex items-center gap-2">
+            {step > 1 && (
+              <button
+                type="button"
+                onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3 | 4)}
+                className="flex items-center gap-1 rounded-lg border px-4 py-2 text-sm font-bold text-ink-700 hover:bg-gray-50"
+              >
+                <ChevronLeft className="size-4" />
+                Voltar
+              </button>
+            )}
+
+            {step < 4 ? (
+              <button
+                type="button"
+                onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3 | 4)}
+                className="flex items-center gap-1 rounded-lg bg-brand-900 px-5 py-2 text-sm font-bold text-white hover:bg-brand-800"
+              >
+                Avançar
+                <ChevronRight className="size-4" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={loading}
+                className="rounded-lg bg-brand-600 px-6 py-2 text-sm font-bold text-white shadow-sm hover:bg-brand-700 disabled:opacity-50"
+              >
+                {loading ? "Salvando..." : item ? "Salvar alterações" : "Criar expedição"}
+              </button>
+            )}
+          </div>
+        </div>
       </form>
     </div>
   );
 }
+
 
 function LodgesPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
   const list = useData<Lodge[]>("lodges/", token, unauthorized);
@@ -1120,11 +1987,11 @@ function LodgesPanel({ token, unauthorized }: { token: string; unauthorized: () 
     <div>
       <Header
         title="Pousadas e Estruturas"
-        subtitle="Gerencie pousadas parceiras, comodidades, localização e ponto de encontro."
+        subtitle="Gerencie pousadas parceiras, frota náutica, comodidades e ponto de encontro."
         action={
           <button
             onClick={() => setEditing("new")}
-            className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white"
+            className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-brand-700"
           >
             <Plus className="mr-2 inline size-4" />
             Nova pousada
@@ -1136,8 +2003,8 @@ function LodgesPanel({ token, unauthorized }: { token: string; unauthorized: () 
         {list.data && (
           <div className="grid gap-4 xl:grid-cols-2">
             {list.data.map((item) => (
-              <article key={item.id} className="rounded-xl bg-white p-5">
-                <div className="flex justify-between">
+              <article key={item.id} className="rounded-xl bg-white p-5 shadow-sm border border-ink-900/5">
+                <div className="flex justify-between items-start">
                   <div>
                     <span
                       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
@@ -1149,15 +2016,22 @@ function LodgesPanel({ token, unauthorized }: { token: string; unauthorized: () 
                     <h3 className="mt-2 text-xl font-black">{item.name}</h3>
                     <p className="text-sm font-bold text-brand-700">
                       {item.city} — {item.state}
-                      {item.river_section ? ` · ${item.river_section}` : ""}
+                      {item.river?.name ? ` · ${item.river.name}` : ""}
+                      {item.river_section ? ` (${item.river_section})` : ""}
                     </p>
                   </div>
-                  <button onClick={() => setEditing(item)} className="rounded-lg border p-2">
+                  <button onClick={() => setEditing(item)} className="rounded-lg border p-2 hover:bg-gray-50">
                     <Pencil className="size-4" />
                   </button>
                 </div>
                 {item.description && (
                   <p className="mt-3 text-xs text-ink-600 line-clamp-2">{item.description}</p>
+                )}
+                {item.boat_fleet_details && (
+                  <div className="mt-3 rounded-lg border border-brand-200 bg-brand-50/70 p-2.5 text-xs text-brand-900">
+                    <strong className="font-bold">Estrutura Náutica: </strong>
+                    {item.boat_fleet_details}
+                  </div>
                 )}
                 {item.amenities && item.amenities.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1204,30 +2078,77 @@ function LodgeModal({
   close: () => void;
   saved: () => Promise<void>;
 }) {
+  const rivers = useData<River[]>("rivers/", token, () => {});
+  const amenities = useData<Amenity[]>("amenities/", token, () => {});
+
   const [form, setForm] = useState({
     name: item?.name ?? "",
     slug: item?.slug ?? "",
     city: item?.city ?? "",
     state: item?.state ?? "MT",
+    river_id: item?.river?.id ?? item?.river_id ?? "",
     river_section: item?.river_section ?? "Médio Araguaia",
+    boat_fleet_details: item?.boat_fleet_details ?? "",
     description: item?.description ?? "",
-    amenities: (item?.amenities ?? []).join(", "),
     meeting_point: item?.meeting_point ?? "",
     directions: item?.directions ?? "",
     cover_image_url: item?.cover_image_url ?? "",
     active: item?.active ?? true,
   });
+
+  const [selectedAmenityIds, setSelectedAmenityIds] = useState<string[]>(() => {
+    if (item?.amenities_detailed && item.amenities_detailed.length > 0) {
+      return item.amenities_detailed.map((a) => a.id);
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    if (amenities.data && item?.amenities && selectedAmenityIds.length === 0) {
+      const legacyNames = new Set(item.amenities.map((n) => n.trim().toLowerCase()));
+      const matched = amenities.data
+        .filter((a) => legacyNames.has(a.name.trim().toLowerCase()))
+        .map((a) => a.id);
+      if (matched.length > 0) {
+        setSelectedAmenityIds(matched);
+      }
+    }
+  }, [amenities.data, item?.amenities, selectedAmenityIds.length]);
+
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function toggleAmenity(id: string) {
+    setSelectedAmenityIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  }
+
+  const groupedAmenities = useMemo(() => {
+    if (!amenities.data) return {};
+    const groups: Record<string, Amenity[]> = {};
+    for (const a of amenities.data) {
+      const cat = a.category_display || a.category;
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(a);
+    }
+    return groups;
+  }, [amenities.data]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setSaving(true);
+    setError("");
     try {
+      const selectedNames = selectedAmenityIds
+        .map((id) => amenities.data?.find((a) => a.id === id)?.name)
+        .filter(Boolean) as string[];
+
       const body = {
         ...form,
-        amenities: form.amenities
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        river_id: form.river_id || null,
+        amenity_ids: selectedAmenityIds,
+        amenities: selectedNames.length > 0 ? selectedNames : item?.amenities ?? [],
       };
       await request(item ? `lodges/${item.id}/` : "lodges/", token, {
         method: item ? "PATCH" : "POST",
@@ -1236,6 +2157,8 @@ function LodgeModal({
       await saved();
     } catch (value) {
       setError(errorMessage(value));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1249,54 +2172,148 @@ function LodgeModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
-      <form onSubmit={submit} className="my-5 w-full max-w-2xl rounded-2xl bg-white p-6">
-        <div className="flex justify-between">
-          <h2 className="text-2xl font-black">{item ? "Editar pousada" : "Nova pousada"}</h2>
-          <button type="button" onClick={close}>
+      <form onSubmit={submit} className="my-5 w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex justify-between border-b pb-4">
+          <div>
+            <h2 className="text-2xl font-black">{item ? "Editar pousada" : "Nova pousada"}</h2>
+            <p className="text-xs text-ink-500">Defina localização, rio de atuação, frota de barcos e comodidades.</p>
+          </div>
+          <button type="button" onClick={close} className="rounded p-1 hover:bg-gray-100">
             <X />
           </button>
         </div>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2 max-h-[70vh] overflow-y-auto pr-2">
           {input("name", "Nome da pousada")}
           {input("slug", "Identificador (slug)")}
+
+          <label className="text-xs font-bold">
+            Rio de Atuação
+            <select
+              value={form.river_id}
+              onChange={(e) => setForm({ ...form, river_id: e.target.value })}
+              className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium text-ink-800"
+            >
+              <option value="">Selecione um rio</option>
+              {rivers.data?.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name} ({r.basin_display})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {input("river_section", "Trecho do rio (Ex: Médio Araguaia)")}
           {input("city", "Cidade")}
           {input("state", "Estado (UF)")}
-          {input("river_section", "Trecho do rio")}
-          {input("cover_image_url", "URL da imagem de capa")}
+          <div className="sm:col-span-2">
+            {input("cover_image_url", "URL da imagem de capa")}
+          </div>
+
           <label className="text-xs font-bold sm:col-span-2">
-            Comodidades (separadas por vírgula)
-            <input
-              value={form.amenities}
-              onChange={(e) => setForm({ ...form, amenities: e.target.value })}
-              placeholder="Ex: Suítes Climatizadas, Piscina, Wi-Fi, Deck Flutuante"
-              className="mt-1 h-10 w-full rounded-lg border px-3"
+            Estrutura da Frota de Barcos (motores, trim, rádio, comodidade a bordo)
+            <textarea
+              value={form.boat_fleet_details}
+              onChange={(e) => setForm({ ...form, boat_fleet_details: e.target.value })}
+              placeholder="Ex: Barcos plataformados de 6m com motor Mercury 40/50HP c/ Trim elétrico, rádio VHF, cadeiras giratórias acolchoadas e caixas térmicas."
+              className="mt-1 min-h-16 w-full rounded-lg border p-3 text-xs"
             />
           </label>
-          <label className="text-xs font-bold sm:col-span-2">
-            Ponto de encontro
+
+          {/* COMODIDADES CATEGORIZADAS */}
+          <div className="sm:col-span-2 border-t pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-ink-900 uppercase tracking-wider">
+                Comodidades Estruturadas ({selectedAmenityIds.length} selecionadas)
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAmenityIds(amenities.data?.map((a) => a.id) ?? [])}
+                  className="text-[11px] font-bold text-brand-600 hover:underline"
+                >
+                  Selecionar todas
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAmenityIds([])}
+                  className="text-[11px] font-bold text-ink-500 hover:underline"
+                >
+                  Limpar
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {Object.entries(groupedAmenities).map(([categoryName, items]) => (
+                <div key={categoryName} className="rounded-xl border border-ink-900/10 bg-[#fafbfa] p-3">
+                  <h4 className="text-xs font-black text-brand-900 uppercase tracking-wide mb-2.5">
+                    {categoryName}
+                  </h4>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {items.map((a) => {
+                      const checked = selectedAmenityIds.includes(a.id);
+                      return (
+                        <label
+                          key={a.id}
+                          className={`flex cursor-pointer items-start gap-2.5 rounded-lg border p-2.5 text-xs transition ${
+                            checked
+                              ? "border-brand-600 bg-brand-50/70 text-brand-950 font-bold"
+                              : "border-ink-900/10 bg-white text-ink-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleAmenity(a.id)}
+                            className="mt-0.5 rounded text-brand-600"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <span className="block leading-tight">{a.name}</span>
+                            {a.description && (
+                              <p className="mt-0.5 text-[11px] font-normal text-ink-500 line-clamp-1">
+                                {a.description}
+                              </p>
+                            )}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <label className="text-xs font-bold sm:col-span-2 border-t pt-4">
+            Ponto de encontro oficial
             <input
               value={form.meeting_point}
               onChange={(e) => setForm({ ...form, meeting_point: e.target.value })}
-              placeholder="Ex: Pousada Solar das Águas — Recepção"
+              placeholder="Ex: São Félix do Araguaia / MT — Recepção da pousada às 16h"
               className="mt-1 h-10 w-full rounded-lg border px-3"
             />
           </label>
+
           <label className="text-xs font-bold sm:col-span-2">
-            Descrição da pousada
+            Descrição geral da pousada
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="mt-1 min-h-20 w-full rounded-lg border p-3"
+              className="mt-1 min-h-20 w-full rounded-lg border p-3 text-xs"
             />
           </label>
+
           <label className="text-xs font-bold sm:col-span-2">
-            Como chegar (direções)
+            Como chegar (instruções de acesso e rotas)
             <textarea
               value={form.directions}
               onChange={(e) => setForm({ ...form, directions: e.target.value })}
-              className="mt-1 min-h-16 w-full rounded-lg border p-3"
+              className="mt-1 min-h-16 w-full rounded-lg border p-3 text-xs"
             />
           </label>
+
           <label className="flex items-center gap-2 text-xs font-bold sm:col-span-2">
             <input
               type="checkbox"
@@ -1306,9 +2323,491 @@ function LodgeModal({
             Pousada ativa no sistema
           </label>
         </div>
-        {error && <p className="mt-3 text-red-700">{error}</p>}
-        <button className="mt-5 rounded-lg bg-brand-600 px-5 py-3 font-bold text-white">Salvar</button>
+
+        {error && <p className="mt-3 text-sm font-bold text-red-700">{error}</p>}
+        <div className="mt-5 flex justify-end gap-3 border-t pt-4">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg border px-4 py-2.5 text-sm font-bold hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            disabled={saving}
+            type="submit"
+            className="rounded-lg bg-brand-600 px-5 py-2.5 font-bold text-white hover:bg-brand-700 shadow"
+          >
+            {saving ? "Salvando..." : "Salvar Pousada"}
+          </button>
+        </div>
       </form>
+    </div>
+  );
+}
+
+const BASIN_OPTIONS = [
+  ["TOCANTINS_ARAGUAIA", "Bacia Tocantins-Araguaia"],
+  ["AMAZONICA", "Bacia Amazônica"],
+  ["PRATA", "Bacia do Prata / Pantanal"],
+  ["SAO_FRANCISCO", "Bacia do São Francisco"],
+] as const;
+
+function RiversPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
+  const list = useData<River[]>("rivers/", token, unauthorized);
+  const [editing, setEditing] = useState<River | "new" | null>(null);
+  const [managingSpecies, setManagingSpecies] = useState<River | null>(null);
+
+  return (
+    <div>
+      <Header
+        title="Rios e Bacias Hidrográficas"
+        subtitle="Gerencie os rios onde ocorrem as expedições, regulamentações ambientais e peixes esportivos de cada ecossistema."
+        action={
+          <button
+            onClick={() => setEditing("new")}
+            className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow hover:bg-brand-700"
+          >
+            <Plus className="mr-2 inline size-4" />
+            Novo rio
+          </button>
+        }
+      />
+      <div className="mt-6">
+        <State loading={list.loading} error={list.error} />
+        {list.data && (
+          <div className="grid gap-4 xl:grid-cols-2">
+            {list.data.map((river) => (
+              <article key={river.id} className="rounded-xl bg-white p-5 shadow-sm border border-ink-900/5">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${
+                          river.active ? "bg-brand-100 text-brand-800" : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {river.active ? "Ativo" : "Inativo"}
+                      </span>
+                      <span className="rounded-full bg-sand-200/70 px-2.5 py-1 text-xs font-bold text-sand-900">
+                        {river.basin_display}
+                      </span>
+                    </div>
+                    <h3 className="mt-2 text-xl font-black">{river.name}</h3>
+                    <p className="text-xs font-bold text-ink-500">
+                      Estados: {river.states?.join(", ") || "—"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setManagingSpecies(river)}
+                      className="rounded-lg border px-3 py-1.5 text-xs font-bold text-brand-700 hover:bg-brand-50 flex items-center gap-1.5"
+                    >
+                      <Fish className="size-4" />
+                      Peixes ({river.species_count ?? 0})
+                    </button>
+                    <button
+                      onClick={() => setEditing(river)}
+                      className="rounded-lg border p-2 hover:bg-gray-50"
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                  </div>
+                </div>
+                {river.description && (
+                  <p className="mt-3 text-xs text-ink-600 line-clamp-2">{river.description}</p>
+                )}
+                {river.regulations && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/70 p-2.5 text-xs text-amber-900">
+                    <strong className="font-bold">Regulamentação: </strong>
+                    {river.regulations}
+                  </div>
+                )}
+                <div className="mt-3 flex items-center gap-4 border-t pt-2.5 text-xs text-ink-500">
+                  <span>
+                    <strong>{river.lodges_count ?? 0}</strong> pousada(s) operando
+                  </span>
+                  <span>·</span>
+                  <span>
+                    <strong>{river.species_count ?? 0}</strong> espécie(s) catalogada(s)
+                  </span>
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <RiverModal
+          token={token}
+          item={editing === "new" ? undefined : editing}
+          close={() => setEditing(null)}
+          saved={async () => {
+            setEditing(null);
+            await list.load();
+          }}
+        />
+      )}
+
+      {managingSpecies && (
+        <RiverSpeciesModal
+          token={token}
+          river={managingSpecies}
+          close={() => setManagingSpecies(null)}
+          changed={async () => {
+            await list.load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function RiverModal({
+  token,
+  item,
+  close,
+  saved,
+}: {
+  token: string;
+  item?: River;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    name: item?.name ?? "",
+    slug: item?.slug ?? "",
+    basin: item?.basin ?? "TOCANTINS_ARAGUAIA",
+    states: (item?.states ?? []).join(", "),
+    description: item?.description ?? "",
+    regulations: item?.regulations ?? "",
+    active: item?.active ?? true,
+  });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const statesArray = form.states
+        .split(",")
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean);
+
+      const body = {
+        ...form,
+        states: statesArray,
+      };
+
+      await request(item ? `rivers/${item.id}/` : "rivers/", token, {
+        method: item ? "PATCH" : "POST",
+        body: JSON.stringify(body),
+      });
+      await saved();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const input = (name: keyof typeof form, label: string) => (
+    <Field
+      label={label}
+      value={form[name] as string}
+      set={(value) => setForm({ ...form, [name]: value })}
+    />
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
+      <form onSubmit={submit} className="my-5 w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex justify-between border-b pb-4">
+          <div>
+            <h2 className="text-2xl font-black">{item ? "Editar Rio" : "Novo Rio"}</h2>
+            <p className="text-xs text-ink-500">Defina o nome, bacia hidrográfica, estados e regras de pesca.</p>
+          </div>
+          <button type="button" onClick={close} className="rounded p-1 hover:bg-gray-100">
+            <X />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          {input("name", "Nome do Rio (Ex: Rio Araguaia)")}
+          {input("slug", "Identificador / Slug (opcional)")}
+
+          <label className="block text-xs font-bold">
+            Bacia Hidrográfica
+            <select
+              value={form.basin}
+              onChange={(e) => setForm({ ...form, basin: e.target.value })}
+              className="mt-1 h-10 w-full rounded-lg border bg-white px-3 font-medium"
+            >
+              {BASIN_OPTIONS.map(([val, label]) => (
+                <option key={val} value={val}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block text-xs font-bold">
+            Estados por onde passa (separados por vírgula)
+            <input
+              type="text"
+              value={form.states}
+              onChange={(e) => setForm({ ...form, states: e.target.value })}
+              placeholder="Ex: MT, GO, TO"
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-xs"
+            />
+          </label>
+
+          <label className="block text-xs font-bold">
+            Descrição do Ecossistema e Características
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Ex: Berço das grandes piraíbas, águas limpas na seca com praias de areia branca..."
+              className="mt-1 min-h-20 w-full rounded-lg border p-3 text-xs"
+            />
+          </label>
+
+          <label className="block text-xs font-bold">
+            Regulamentações e Leis Ambientais
+            <textarea
+              value={form.regulations}
+              onChange={(e) => setForm({ ...form, regulations: e.target.value })}
+              placeholder="Ex: Cota zero para transporte de peixes. Licença MPA obrigatória."
+              className="mt-1 min-h-16 w-full rounded-lg border p-3 text-xs"
+            />
+          </label>
+
+          <label className="flex items-center gap-2 text-xs font-bold">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+            />
+            Rio ativo para expedições
+          </label>
+        </div>
+
+        {error && <p className="mt-3 text-sm font-bold text-red-700">{error}</p>}
+        <div className="mt-5 flex justify-end gap-3 border-t pt-4">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg border px-4 py-2 text-sm font-bold hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            disabled={saving}
+            type="submit"
+            className="rounded-lg bg-brand-600 px-5 py-2 font-bold text-white shadow hover:bg-brand-700"
+          >
+            {saving ? "Salvando..." : "Salvar Rio"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function RiverSpeciesModal({
+  token,
+  river,
+  close,
+  changed,
+}: {
+  token: string;
+  river: River;
+  close: () => void;
+  changed: () => Promise<void>;
+}) {
+  const currentList = useData<RiverSpecies[]>(`rivers/${river.id}/species/`, token, () => {});
+  const catalog = useData<Species[]>("species/", token, () => {});
+
+  const [selectedSlug, setSelectedSlug] = useState("");
+  const [isTrophy, setIsTrophy] = useState(false);
+  const [bestSeason, setBestSeason] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function addSpecies(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedSlug) return setError("Selecione uma espécie para associar.");
+    setSubmitting(true);
+    setError("");
+    try {
+      await request(`rivers/${river.id}/species/`, token, {
+        method: "POST",
+        body: JSON.stringify({
+          species_slug: selectedSlug,
+          is_trophy: isTrophy,
+          is_native: true,
+          best_season: bestSeason.trim(),
+        }),
+      });
+      setSelectedSlug("");
+      setIsTrophy(false);
+      setBestSeason("");
+      await currentList.load();
+      await changed();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function removeSpecies(slug: string) {
+    if (!window.confirm("Remover esta espécie deste rio?")) return;
+    try {
+      await request(`rivers/${river.id}/species/?species_slug=${slug}`, token, {
+        method: "DELETE",
+      });
+      await currentList.load();
+      await changed();
+    } catch (err) {
+      window.alert(errorMessage(err));
+    }
+  }
+
+  const existingSlugs = new Set(currentList.data?.map((s) => s.species_slug) ?? []);
+  const availableToSelect = (catalog.data ?? []).filter((s) => !existingSlugs.has(s.slug));
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
+      <div className="my-5 w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex justify-between border-b pb-4">
+          <div>
+            <h2 className="text-2xl font-black">Peixes do {river.name}</h2>
+            <p className="text-xs text-ink-500">
+              Catálogo de espécies esportivas, troféus e melhor temporada no rio.
+            </p>
+          </div>
+          <button type="button" onClick={close} className="rounded p-1 hover:bg-gray-100">
+            <X />
+          </button>
+        </div>
+
+        {/* FORMULÁRIO DE ASSOCIAÇÃO */}
+        <form onSubmit={addSpecies} className="mt-4 rounded-xl border border-brand-200 bg-brand-50/50 p-4">
+          <h3 className="text-xs font-black uppercase text-brand-900 mb-2">Vincular nova espécie ao rio</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-xs font-bold">
+              Espécie do catálogo
+              <select
+                value={selectedSlug}
+                onChange={(e) => setSelectedSlug(e.target.value)}
+                className="mt-1 h-9 w-full rounded border bg-white px-2 text-xs"
+              >
+                <option value="">Selecione um peixe...</option>
+                {availableToSelect.map((s) => (
+                  <option key={s.slug} value={s.slug}>
+                    {s.common_name} ({s.category})
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="block text-xs font-bold">
+              Melhor época / temporada
+              <input
+                type="text"
+                value={bestSeason}
+                onChange={(e) => setBestSeason(e.target.value)}
+                placeholder="Ex: Junho a Outubro (seca)"
+                className="mt-1 h-9 w-full rounded border px-2 text-xs"
+              />
+            </label>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isTrophy}
+                onChange={(e) => setIsTrophy(e.target.checked)}
+                className="rounded text-brand-600"
+              />
+              Espécie Troféu (Destaque da Bacia)
+            </label>
+
+            <button
+              disabled={submitting}
+              type="submit"
+              className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold text-white hover:bg-brand-700"
+            >
+              {submitting ? "Adicionando..." : "+ Vincular ao Rio"}
+            </button>
+          </div>
+          {error && <p className="mt-2 text-xs font-bold text-red-700">{error}</p>}
+        </form>
+
+        {/* LISTA DE ESPÉCIES ATUALMENTE VINCULADAS */}
+        <div className="mt-5">
+          <h3 className="text-xs font-black uppercase text-ink-900 mb-3">
+            Espécies vinculadas ({currentList.data?.length ?? 0})
+          </h3>
+          <State loading={currentList.loading} error={currentList.error} />
+          {currentList.data && currentList.data.length === 0 && (
+            <p className="text-center text-xs text-ink-500 py-6">Nenhuma espécie vinculada a este rio ainda.</p>
+          )}
+          {currentList.data && currentList.data.length > 0 && (
+            <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+              {currentList.data.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between rounded-lg border border-ink-900/10 bg-white p-3 shadow-xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <strong className="text-sm font-bold text-ink-900">{item.species_name}</strong>
+                      {item.is_trophy && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800">
+                          ★ TROFÉU
+                        </span>
+                      )}
+                      <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700">
+                        {item.category}
+                      </span>
+                    </div>
+                    {item.scientific_name && (
+                      <p className="text-[11px] italic text-ink-500">{item.scientific_name}</p>
+                    )}
+                    {item.best_season && (
+                      <p className="text-[11px] text-brand-700 font-medium mt-0.5">
+                        Temporada: {item.best_season}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => removeSpecies(item.species_slug)}
+                    className="rounded p-1.5 text-red-600 hover:bg-red-50 text-xs font-bold"
+                  >
+                    Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-5 flex justify-end border-t pt-4">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg bg-ink-900 px-5 py-2 text-sm font-bold text-white hover:bg-ink-800"
+          >
+            Concluir
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1488,6 +2987,697 @@ function SpeciesModal({
   );
 }
 
+function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
+  const [tab, setTab] = useState<"all_inclusive" | "beverage">("all_inclusive");
+  const allInclusiveList = useData<AllInclusivePackage[]>("all-inclusive-packages/", token, unauthorized);
+  const beverageList = useData<BeveragePackage[]>("beverage-packages/", token, unauthorized);
+  const productsList = useData<Product[]>("products/", token, unauthorized);
+
+  const [editingAllInclusive, setEditingAllInclusive] = useState<AllInclusivePackage | "new" | null>(null);
+  const [editingBeverage, setEditingBeverage] = useState<BeveragePackage | "new" | null>(null);
+  const [deleteError, setDeleteError] = useState("");
+
+  async function handleDeleteAllInclusive(pkg: AllInclusivePackage) {
+    if (!window.confirm(`Tem certeza que deseja excluir o pacote "${pkg.name}"?`)) return;
+    setDeleteError("");
+    try {
+      await request(`all-inclusive-packages/${pkg.id}/`, token, { method: "DELETE" });
+      await allInclusiveList.load();
+    } catch (err) {
+      setDeleteError(errorMessage(err));
+    }
+  }
+
+  async function handleDeleteBeverage(pkg: BeveragePackage) {
+    if (!window.confirm(`Tem certeza que deseja excluir o cardápio "${pkg.name}"?`)) return;
+    setDeleteError("");
+    try {
+      await request(`beverage-packages/${pkg.id}/`, token, { method: "DELETE" });
+      await beverageList.load();
+    } catch (err) {
+      setDeleteError(errorMessage(err));
+    }
+  }
+
+  return (
+    <div>
+      <Header
+        title="Pacotes & Cardápios"
+        subtitle="Gerencie moldes reutilizáveis de All Inclusive e cardápios de bebidas para as expedições."
+        action={
+          tab === "all_inclusive" ? (
+            <button
+              onClick={() => {
+                setDeleteError("");
+                setEditingAllInclusive("new");
+              }}
+              className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
+            >
+              <Plus className="mr-2 inline size-4" />
+              Novo pacote All Inclusive
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setDeleteError("");
+                setEditingBeverage("new");
+              }}
+              className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
+            >
+              <Plus className="mr-2 inline size-4" />
+              Novo cardápio de bebidas
+            </button>
+          )
+        }
+      />
+
+      {/* Tabs */}
+      <div className="mt-5 flex gap-2 border-b pb-3">
+        <button
+          onClick={() => {
+            setTab("all_inclusive");
+            setDeleteError("");
+          }}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold transition ${
+            tab === "all_inclusive"
+              ? "bg-brand-900 text-white shadow-sm"
+              : "bg-white text-ink-600 hover:bg-gray-100"
+          }`}
+        >
+          <Layers className="size-4" />
+          Pacotes All Inclusive ({allInclusiveList.data?.length ?? 0})
+        </button>
+        <button
+          onClick={() => {
+            setTab("beverage");
+            setDeleteError("");
+          }}
+          className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-bold transition ${
+            tab === "beverage"
+              ? "bg-brand-900 text-white shadow-sm"
+              : "bg-white text-ink-600 hover:bg-gray-100"
+          }`}
+        >
+          <Beer className="size-4" />
+          Cardápios de Bebidas ({beverageList.data?.length ?? 0})
+        </button>
+      </div>
+
+      {deleteError && (
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="size-5 shrink-0" />
+            <span>{deleteError}</span>
+          </div>
+          <button onClick={() => setDeleteError("")} className="text-xs text-red-500 hover:underline">
+            Fechar
+          </button>
+        </div>
+      )}
+
+      {/* All Inclusive Tab Content */}
+      {tab === "all_inclusive" && (
+        <div className="mt-6">
+          <State loading={allInclusiveList.loading} error={allInclusiveList.error} />
+          {allInclusiveList.data && (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {allInclusiveList.data.map((pkg) => (
+                <article key={pkg.id} className="flex flex-col justify-between rounded-xl bg-white p-5 shadow-sm">
+                  <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              pkg.active ? "bg-brand-100 text-brand-800" : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {pkg.active ? "Ativo" : "Inativo"}
+                          </span>
+                          {pkg.expeditions_count !== undefined && (
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-800">
+                              {pkg.expeditions_count} expedição(ões) vinculada(s)
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="mt-2 text-lg font-black text-ink-900">{pkg.name}</h3>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setEditingAllInclusive(pkg)}
+                          title="Editar pacote"
+                          className="rounded-lg border p-2 hover:bg-gray-50"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          onClick={() => void handleDeleteAllInclusive(pkg)}
+                          title="Excluir pacote"
+                          className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {pkg.description && (
+                      <p className="mt-2 text-sm text-ink-600">{pkg.description}</p>
+                    )}
+
+                    <div className="mt-4 border-t pt-3">
+                      <p className="text-xs font-bold text-ink-500">
+                        Benefícios e Inclusões ({pkg.inclusions?.length ?? 0}):
+                      </p>
+                      <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto text-xs text-ink-700">
+                        {pkg.inclusions?.map((inc, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <Check className="mt-0.5 size-3 shrink-0 text-brand-600" />
+                            <span>{inc}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {!allInclusiveList.data.length && <Empty>Nenhum pacote All Inclusive cadastrado.</Empty>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Beverage Tab Content */}
+      {tab === "beverage" && (
+        <div className="mt-6">
+          <State loading={beverageList.loading} error={beverageList.error} />
+          {beverageList.data && (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {beverageList.data.map((pkg) => (
+                <article key={pkg.id} className="flex flex-col justify-between rounded-xl bg-white p-5 shadow-sm">
+                  <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              pkg.active ? "bg-brand-100 text-brand-800" : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
+                            {pkg.active ? "Ativo" : "Inativo"}
+                          </span>
+                          {pkg.expeditions_count !== undefined && (
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                              {pkg.expeditions_count} expedição(ões) vinculada(s)
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="mt-2 text-lg font-black text-ink-900">{pkg.name}</h3>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setEditingBeverage(pkg)}
+                          title="Editar cardápio"
+                          className="rounded-lg border p-2 hover:bg-gray-50"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          onClick={() => void handleDeleteBeverage(pkg)}
+                          title="Excluir cardápio"
+                          className="rounded-lg border border-red-200 p-2 text-red-600 hover:bg-red-50"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {pkg.description && (
+                      <p className="mt-2 text-sm text-ink-600">{pkg.description}</p>
+                    )}
+
+                    <div className="mt-4 border-t pt-3">
+                      <p className="text-xs font-bold text-ink-500">
+                        Itens & Cotas por Participante ({pkg.items?.length ?? 0}):
+                      </p>
+                      <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto">
+                        {pkg.items?.map((it, i) => (
+                          <div
+                            key={it.id ?? i}
+                            className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-1.5 text-xs"
+                          >
+                            <div>
+                              <strong className="text-ink-900">
+                                {it.product_name || `Produto #${it.product || it.product_id}`}
+                              </strong>
+                              {it.note && <span className="ml-2 text-ink-500">({it.note})</span>}
+                            </div>
+                            <span className="font-bold text-brand-800">
+                              {it.standard_quantity_per_participant} {it.product_unit || "un"}/pessoa
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {!beverageList.data.length && <Empty>Nenhum cardápio de bebidas cadastrado.</Empty>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Modals */}
+      {editingAllInclusive && (
+        <AllInclusivePackageModal
+          token={token}
+          item={editingAllInclusive === "new" ? undefined : editingAllInclusive}
+          close={() => setEditingAllInclusive(null)}
+          saved={async () => {
+            setEditingAllInclusive(null);
+            await allInclusiveList.load();
+          }}
+        />
+      )}
+
+      {editingBeverage && (
+        <BeveragePackageModal
+          token={token}
+          item={editingBeverage === "new" ? undefined : editingBeverage}
+          products={productsList.data ?? []}
+          close={() => setEditingBeverage(null)}
+          saved={async () => {
+            setEditingBeverage(null);
+            await beverageList.load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function AllInclusivePackageModal({
+  token,
+  item,
+  close,
+  saved,
+}: {
+  token: string;
+  item?: AllInclusivePackage;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    name: item?.name ?? "",
+    description: item?.description ?? "",
+    active: item?.active ?? true,
+    inclusions: (item?.inclusions ?? [
+      "Hospedagem Completa na Pousada",
+      "Combustível e Óleo 100% Inclusos",
+      "Kit Sashimi, Ceviche e petiscos no rio",
+      "Iscas Vivas Nativas",
+      "Guias Nativos Especializados",
+      "Torneio com Troféus e Banner da Equipe",
+      "Seguro Viagem",
+      "Água mineral, Refrigerante e Gelo abundante",
+      "Internet Wi-Fi na Pousada",
+    ]).join("\n"),
+  });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (!form.name.trim()) {
+      setError("O nome do pacote é obrigatório.");
+      return;
+    }
+    const cleanInclusions = form.inclusions
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (cleanInclusions.length === 0) {
+      setError("Insira ao menos um item de benefício/inclusão.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const body = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        active: form.active,
+        inclusions: cleanInclusions,
+      };
+      await request(item ? `all-inclusive-packages/${item.id}/` : "all-inclusive-packages/", token, {
+        method: item ? "PATCH" : "POST",
+        body: JSON.stringify(body),
+      });
+      await saved();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
+      <form onSubmit={submit} className="my-5 w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between border-b pb-4">
+          <div className="flex items-center gap-2">
+            <Layers className="size-5 text-brand-600" />
+            <h2 className="text-xl font-black">
+              {item ? "Editar pacote All Inclusive" : "Novo pacote All Inclusive"}
+            </h2>
+          </div>
+          <button type="button" onClick={close} className="rounded-lg p-1 text-ink-400 hover:bg-gray-100">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <label className="block text-xs font-bold text-ink-800">
+            Nome do Pacote
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Ex: All Inclusive Casais VIP (Tudo Incluso)"
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+            />
+          </label>
+
+          <label className="block text-xs font-bold text-ink-800">
+            Descrição do Molde
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+              placeholder="Explicação da proposta do pacote e perfil de público..."
+              className="mt-1 w-full rounded-lg border p-3 text-sm"
+            />
+          </label>
+
+          <label className="block text-xs font-bold text-ink-800">
+            Benefícios e Inclusões (uma por linha)
+            <span className="block text-[11px] font-normal text-ink-500">
+              Estes itens servem de cópia inicial quando selecionados no Construtor de Expedições.
+            </span>
+            <textarea
+              value={form.inclusions}
+              onChange={(e) => setForm({ ...form, inclusions: e.target.value })}
+              rows={8}
+              required
+              className="mt-1 w-full rounded-lg border p-3 font-mono text-xs"
+            />
+          </label>
+
+          <label className="flex items-center gap-2 text-xs font-bold text-ink-800">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+              className="size-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+            />
+            Pacote ativo para seleção no Construtor de Expedições
+          </label>
+        </div>
+
+        {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-3 border-t pt-4">
+          <button type="button" onClick={close} className="rounded-lg border px-4 py-2 text-sm font-bold">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold text-white shadow hover:bg-brand-700 disabled:opacity-50"
+          >
+            {loading ? "Salvando..." : item ? "Salvar alterações" : "Criar pacote"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function BeveragePackageModal({
+  token,
+  item,
+  products,
+  close,
+  saved,
+}: {
+  token: string;
+  item?: BeveragePackage;
+  products: Product[];
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    name: item?.name ?? "",
+    description: item?.description ?? "",
+    active: item?.active ?? true,
+  });
+
+  const [items, setItems] = useState<
+    Array<{
+      product_id: string | number;
+      standard_quantity_per_participant: number;
+      note: string;
+    }>
+  >(
+    item?.items?.map((it) => ({
+      product_id: it.product_id ?? it.product ?? "",
+      standard_quantity_per_participant: it.standard_quantity_per_participant ?? 1,
+      note: it.note ?? "",
+    })) ?? [
+      { product_id: products[0]?.id ?? "", standard_quantity_per_participant: 12, note: "Lata 350ml" },
+    ]
+  );
+
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  function addItem() {
+    const firstProd = products[0]?.id ?? "";
+    setItems((prev) => [
+      ...prev,
+      { product_id: firstProd, standard_quantity_per_participant: 6, note: "" },
+    ]);
+  }
+
+  function removeItem(index: number) {
+    setItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateItem(
+    index: number,
+    patch: Partial<{ product_id: string | number; standard_quantity_per_participant: number; note: string }>
+  ) {
+    setItems((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (!form.name.trim()) {
+      setError("O nome do cardápio é obrigatório.");
+      return;
+    }
+    if (items.length === 0) {
+      setError("Adicione pelo menos um produto ao cardápio.");
+      return;
+    }
+
+    const seen = new Set();
+    for (const it of items) {
+      if (!it.product_id) {
+        setError("Selecione o produto em todas as linhas.");
+        return;
+      }
+      if (seen.has(String(it.product_id))) {
+        setError("Não é permitido repetir o mesmo produto no mesmo cardápio.");
+        return;
+      }
+      seen.add(String(it.product_id));
+    }
+
+    setLoading(true);
+    try {
+      const body = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        active: form.active,
+        items_payload: items.map((it, idx) => ({
+          product_id: it.product_id,
+          standard_quantity_per_participant: Number(it.standard_quantity_per_participant) || 1,
+          note: it.note.trim(),
+          display_order: idx,
+        })),
+      };
+
+      await request(item ? `beverage-packages/${item.id}/` : "beverage-packages/", token, {
+        method: item ? "PATCH" : "POST",
+        body: JSON.stringify(body),
+      });
+      await saved();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
+      <form onSubmit={submit} className="my-5 w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between border-b pb-4">
+          <div className="flex items-center gap-2">
+            <Beer className="size-5 text-amber-600" />
+            <h2 className="text-xl font-black">
+              {item ? "Editar cardápio de bebidas" : "Novo cardápio de bebidas"}
+            </h2>
+          </div>
+          <button type="button" onClick={close} className="rounded-lg p-1 text-ink-400 hover:bg-gray-100">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <label className="block text-xs font-bold text-ink-800">
+            Nome do Cardápio
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Ex: Open Bar Premium (Stella & Corona + Bebidas Suaves)"
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+            />
+          </label>
+
+          <label className="block text-xs font-bold text-ink-800">
+            Descrição
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+              placeholder="Resumo do perfil das bebidas e marcas incluídas..."
+              className="mt-1 w-full rounded-lg border p-3 text-sm"
+            />
+          </label>
+
+          <label className="flex items-center gap-2 text-xs font-bold text-ink-800">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+              className="size-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+            />
+            Cardápio ativo para seleção no Construtor
+          </label>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-black text-ink-900">Bebidas e Cotas Padrão</h4>
+                <p className="text-xs text-ink-500">Defina o produto, cota estimada por participante e detalhes.</p>
+              </div>
+              <button
+                type="button"
+                onClick={addItem}
+                className="flex items-center gap-1 rounded-lg border border-brand-600 px-3 py-1.5 text-xs font-bold text-brand-600 hover:bg-brand-50"
+              >
+                <Plus className="size-3" />
+                Adicionar bebida
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {items.map((row, idx) => (
+                <div
+                  key={idx}
+                  className="grid grid-cols-[2fr_1fr_2fr_auto] items-center gap-2 rounded-lg border bg-gray-50 p-2 text-xs"
+                >
+                  <label className="font-bold">
+                    Produto
+                    <select
+                      value={row.product_id}
+                      onChange={(e) => updateItem(idx, { product_id: e.target.value })}
+                      className="mt-1 h-9 w-full rounded-md border bg-white px-2 font-normal"
+                    >
+                      <option value="">Selecione...</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.unit})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="font-bold">
+                    Qtd/Pessoa
+                    <input
+                      type="number"
+                      min="1"
+                      value={row.standard_quantity_per_participant}
+                      onChange={(e) =>
+                        updateItem(idx, { standard_quantity_per_participant: Number(e.target.value) })
+                      }
+                      className="mt-1 h-9 w-full rounded-md border bg-white px-2 font-normal"
+                    />
+                  </label>
+
+                  <label className="font-bold">
+                    Observação
+                    <input
+                      type="text"
+                      placeholder="Ex: Lata 350ml gelada"
+                      value={row.note}
+                      onChange={(e) => updateItem(idx, { note: e.target.value })}
+                      className="mt-1 h-9 w-full rounded-md border bg-white px-2 font-normal"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => removeItem(idx)}
+                    title="Remover linha"
+                    className="mt-4 rounded-md p-1.5 text-ink-400 hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              ))}
+              {!items.length && <Empty>Nenhuma bebida adicionada ao cardápio.</Empty>}
+            </div>
+          </div>
+        </div>
+
+        {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-xs font-bold text-red-700">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-3 border-t pt-4">
+          <button type="button" onClick={close} className="rounded-lg border px-4 py-2 text-sm font-bold">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold text-white shadow hover:bg-brand-700 disabled:opacity-50"
+          >
+            {loading ? "Salvando..." : item ? "Salvar alterações" : "Criar cardápio"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function ConfigurationPanel({ token, unauthorized }: { token:string; unauthorized:()=>void }) { const expeditions=useData<Expedition[]>("expeditions/",token,unauthorized); const [selected,setSelected]=useState(""); const selectedId=selected||expeditions.data?.[0]?.id||""; const config=useData<Configuration>(selectedId?`expeditions/${selectedId}/configuration/`:null,token,unauthorized); return <div><Header title="Configuração operacional" subtitle="Defina encontro, bebidas oferecidas e checklist." /><div className="mt-5"><ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data??[]} all={false}/></div><div className="mt-6"><State loading={config.loading} error={config.error}/>{config.data&&<ConfigEditor key={selectedId} expedition={expeditions.data?.find(value=>value.id===selectedId)} config={config.data} token={token} reload={config.load}/>}</div></div>; }
 function ConfigEditor({ expedition,config,token,reload }: { expedition?:Expedition; config:Configuration; token:string; reload:()=>Promise<void> }) { const [departure,setDeparture]=useState(config.departure_location??""); const [instructions,setInstructions]=useState(config.meeting_instructions??""); const [products,setProducts]=useState(config.products??[]); const [offers,setOffers]=useState(config.offers??[]); const [checklist,setChecklist]=useState(config.checklist_items??config.checklist??[]); const [message,setMessage]=useState(""); const locked=["IN_PROGRESS","COMPLETED"].includes(expedition?.status??""); async function save(){if(!expedition)return;try{await request(`expeditions/${expedition.id}/configuration/`,token,{method:"PUT",body:JSON.stringify({departure_location:departure,meeting_instructions:instructions,products,offers,checklist_items:checklist})});setMessage("Configuração salva.");await reload();}catch(value){setMessage(errorMessage(value));}} function updatePackage(productId:string,size:number){setProducts(products.map(product=>product.id===productId?{...product,package_size:size||null}:product))} return <div className="space-y-6">{locked&&<p className="rounded-lg bg-amber-50 p-4 font-bold">Configuração bloqueada após o início da expedição.</p>}<Box title="Encontro"><div className="grid gap-3 sm:grid-cols-2"><Field label="Local de saída" value={departure} set={setDeparture}/><Field label="Orientações de encontro" value={instructions} set={setInstructions}/></div></Box><section className="rounded-xl bg-white p-5"><div className="flex justify-between"><div><h3 className="font-black">Oferta de bebidas</h3><p className="text-sm text-ink-500">O viajante escolhe opções, sem informar unidades.</p></div><button disabled={locked} onClick={()=>setOffers([...offers,{product_id:"",standard_quantity_per_participant:1,display_order:offers.length+1,note:"",active:true}])} className="rounded-lg border px-3 text-sm font-bold"><Plus className="mr-1 inline size-4"/>Oferta</button></div>{offers.map((offer,index)=><div key={offer.id??index} className="mt-3 grid gap-3 rounded-lg border p-3 lg:grid-cols-[2fr_1fr_1fr_2fr_auto]"><label className="text-xs font-bold">Bebida<select value={offer.product_id} onChange={e=>setOffers(offers.map((value,i)=>i===index?{...value,product_id:e.target.value}:value))} className="mt-1 h-10 w-full rounded-lg border"><option value="">Selecione</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} ({product.unit})</option>)}</select></label><NumberField label="Padrão/pessoa" value={offer.standard_quantity_per_participant} set={number=>setOffers(offers.map((value,i)=>i===index?{...value,standard_quantity_per_participant:number}:value))}/><NumberField label="Por embalagem" value={products.find(product=>product.id===offer.product_id)?.package_size??0} set={number=>updatePackage(offer.product_id,number)}/><Field label="Observação" value={offer.note} set={note=>setOffers(offers.map((value,i)=>i===index?{...value,note}:value))}/><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={offer.active} onChange={e=>setOffers(offers.map((value,i)=>i===index?{...value,active:e.target.checked}:value))}/>Ativa</label></div>)}{!offers.length&&<Empty>Nenhuma bebida oferecida.</Empty>}</section><section className="rounded-xl bg-white p-5"><div className="flex justify-between"><h3 className="font-black">Checklist</h3><button disabled={locked} onClick={()=>setChecklist([...checklist,{title:"",description:"",required:true,active:true,display_order:checklist.length+1}])} className="rounded-lg border px-3 text-sm font-bold"><Plus className="mr-1 inline size-4"/>Item</button></div>{checklist.map((item,index)=><div key={item.id??index} className="mt-3 grid gap-3 rounded-lg border p-3 lg:grid-cols-[2fr_3fr_auto_auto]"><Field label="Título" value={item.title} set={title=>setChecklist(checklist.map((value,i)=>i===index?{...value,title}:value))}/><Field label="Orientação" value={item.description} set={description=>setChecklist(checklist.map((value,i)=>i===index?{...value,description}:value))}/><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={item.required} onChange={e=>setChecklist(checklist.map((value,i)=>i===index?{...value,required:e.target.checked}:value))}/>Obrigatório</label><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={item.active} onChange={e=>setChecklist(checklist.map((value,i)=>i===index?{...value,active:e.target.checked}:value))}/>Ativo</label></div>)}{!checklist.length&&<Empty>Nenhum item configurado.</Empty>}</section>{message&&<p className="rounded-lg bg-brand-50 p-3 font-bold">{message}</p>}<button disabled={locked} onClick={()=>void save()} className="rounded-lg bg-brand-600 px-5 py-3 font-bold text-white disabled:opacity-50">Salvar configuração</button></div>; }
 function Field({label,value,set,type="text"}:{label:string;value:string;set:(value:string)=>void;type?:string}){return <label className="text-xs font-bold">{label}<input type={type} value={value??""} onChange={e=>set(e.target.value)} className="mt-1 h-10 w-full rounded-lg border px-3"/></label>}
@@ -1567,6 +3757,29 @@ function ManifestPanel({ token, unauthorized }: { token: string; unauthorized: (
                 </div>
               </div>
             </div>
+
+            {manifest.data.gear_summary && manifest.data.gear_summary.length > 0 && (
+              <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50/50 p-4">
+                <h4 className="text-xs font-black uppercase tracking-wider text-brand-900">
+                  Resumo de Tralhas & Equipamentos para a Pousada / Piloteiros:
+                </h4>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {manifest.data.gear_summary.map((g) => (
+                    <div
+                      key={g.gear_product_id + g.modality}
+                      className="rounded-lg bg-white px-3 py-1.5 text-xs shadow-xs border"
+                    >
+                      <strong className="text-ink-900">{g.total_quantity}x {g.name}</strong>
+                      <span className="ml-1.5 text-[10px] font-bold text-brand-700">({g.modality})</span>
+                      <span className="ml-2 text-[10px] text-ink-500">
+                        ({g.delivered_quantity}/{g.total_quantity} entregues)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-6 overflow-x-auto">
               <table className="w-full min-w-[850px] text-left text-sm">
                 <thead className="bg-brand-900 text-xs uppercase text-white">
@@ -1576,6 +3789,7 @@ function ManifestPanel({ token, unauthorized }: { token: string; unauthorized: (
                     <th>CPF / Contato</th>
                     <th>Emergência</th>
                     <th>Restrições / Saúde</th>
+                    <th>Tralhas & Loja</th>
                     <th>Ficha</th>
                   </tr>
                 </thead>
@@ -1617,6 +3831,23 @@ function ManifestPanel({ token, unauthorized }: { token: string; unauthorized: (
                         )}
                       </td>
                       <td>
+                        {p.gear_addons?.length ? (
+                          <div className="flex flex-col gap-1">
+                            {p.gear_addons.map((g) => (
+                              <span
+                                key={g.id}
+                                className="inline-flex items-center gap-1 rounded bg-brand-50 px-2 py-0.5 text-[11px] font-bold text-brand-900 border border-brand-200"
+                              >
+                                {g.quantity}x {g.gear_name} ({g.modality})
+                                {g.delivered && <Check className="size-3 text-emerald-600 inline" />}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-ink-400">—</span>
+                        )}
+                      </td>
+                      <td>
                         <Pill ok={p.onboarding_status === "COMPLETED"}>
                           {p.onboarding_status === "COMPLETED" ? "Completa" : "Pendente"}
                         </Pill>
@@ -1637,3 +3868,1180 @@ function ManifestPanel({ token, unauthorized }: { token: string; unauthorized: (
 }
 
 function ShoppingPanel({token,unauthorized}:{token:string;unauthorized:()=>void}){const expeditions=useData<Expedition[]>("expeditions/",token,unauthorized);const[selected,setSelected]=useState("");const selectedId=selected||expeditions.data?.[0]?.id||"";const[copied,setCopied]=useState(false);const result=useData<Consolidation>(selectedId?`expeditions/${selectedId}/consolidation/`:null,token,unauthorized);const text=useMemo(()=>result.data?.text??result.data?.items.map(row=>`${row.product}: ${row.total} ${row.unit}${row.package_size?` (${row.full_packages??0} embalagem(ns) + ${row.remainder??0} ${row.unit})`:""}`).join("\n")??"",[result.data]);async function download(format:"csv"|"txt"){try{const content=await request<string>(`expeditions/${selectedId}/consolidation.${format}`,token);const url=URL.createObjectURL(new Blob([content],{type:"text/plain;charset=utf-8"}));const anchor=document.createElement("a");anchor.href=url;anchor.download=`lista-compras-${selectedId}.${format}`;anchor.click();URL.revokeObjectURL(url)}catch(value){window.alert(errorMessage(value))}}async function copy(){await navigator.clipboard.writeText(text);setCopied(true);window.setTimeout(()=>setCopied(false),1500)}return <div><Header title="Lista de compras" subtitle="Consolidação por escolhas e padrão vigente das reservas garantidas." action={<div className="flex gap-2"><button onClick={()=>void copy()} className="rounded-lg border bg-white px-3 py-2 text-sm font-bold"><Copy className="mr-1 inline size-4"/>{copied?"Copiado":"Copiar"}</button><button onClick={()=>void download("csv")} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white"><Download className="mr-1 inline size-4"/>CSV</button><button onClick={()=>void download("txt")} className="rounded-lg bg-brand-900 px-3 py-2 text-sm font-bold text-white"><Download className="mr-1 inline size-4"/>Texto</button></div>}/><div className="mt-5"><ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data??[]} all={false}/></div><div className="mt-6"><State loading={result.loading} error={result.error}/>{result.data&&<div className="overflow-x-auto rounded-xl bg-white"><p className="p-4 text-xs">Snapshot: {new Date(result.data.generated_at).toLocaleString("pt-BR")}</p><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-brand-900 text-xs uppercase text-white"><tr><th className="px-5 py-4">Produto</th><th>Pessoas</th><th>Padrão</th><th>Total</th><th>Embalagens</th><th>Sobra</th><th>Atualização</th></tr></thead><tbody className="divide-y">{result.data.items.map(row=><tr key={row.offer_id}><td className="px-5 py-4"><strong>{row.product}</strong>{row.details?.length ? <details className="mt-2"><summary className="cursor-pointer text-xs font-bold text-brand-700">Ver {row.details.length} participante(s)</summary><ul className="mt-2 space-y-1 text-xs text-ink-500">{row.details.map((detail,index)=><li key={detail.participant_id??`${detail.reservation_id}-${index}`}>{detail.participant_name}{detail.customer_name ? ` · reserva de ${detail.customer_name}` : ""}</li>)}</ul></details> : null}</td><td>{row.people}</td><td>{row.standard_quantity_per_participant} {row.unit}</td><td className="font-black text-brand-800">{row.total} {row.unit}</td><td>{row.package_size?`${row.full_packages??0} × ${row.package_size}`:"—"}</td><td>{row.package_size?`${row.remainder??0} ${row.unit}`:"—"}</td><td>{shortDate(row.updated_at)}</td></tr>)}</tbody></table>{!result.data.items.length&&<Empty>Nenhuma escolha elegível.</Empty>}</div>}</div></div>}
+
+function GearPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("");
+  const [modality, setModality] = useState("");
+  const [editingGear, setEditingGear] = useState<Partial<FishingGearProduct> | null>(null);
+  const path = `gear-products/?q=${encodeURIComponent(query)}&category=${category}&modality=${modality}`;
+  const list = useData<FishingGearProduct[]>(path, token, unauthorized);
+
+  async function handleDelete(item: FishingGearProduct) {
+    if (!window.confirm(`Tem certeza que deseja excluir "${item.name}"?`)) return;
+    try {
+      await request(`gear-products/${item.id}/`, token, { method: "DELETE" });
+      await list.load();
+    } catch (err) {
+      window.alert(errorMessage(err));
+    }
+  }
+
+  const items = list.data ?? [];
+  const totalStock = items.reduce((acc, g) => acc + (g.inventory_quantity || 0), 0);
+  const rentalCount = items.filter((g) => g.modality === "RENTAL" || g.modality === "BOTH").length;
+  const saleCount = items.filter((g) => g.modality === "SALE" || g.modality === "BOTH").length;
+
+  return (
+    <div>
+      <Header
+        title="Tralhas & Loja de Equipamentos"
+        subtitle="Controle de estoque, preços de locação e venda para as expedições."
+        action={
+          <button
+            onClick={() =>
+              setEditingGear({
+                active: true,
+                modality: "RENTAL",
+                inventory_quantity: 1,
+                rental_price_cents: 0,
+                sale_price_cents: 0,
+                category: "HEAVY_ROD_REEL",
+              })
+            }
+            className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
+          >
+            <Plus className="mr-2 inline size-4" />
+            Novo Equipamento
+          </button>
+        }
+      />
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article className="rounded-xl bg-white p-5 shadow-xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-500">Catálogo de Itens</span>
+          <strong className="mt-2 block text-2xl font-black text-brand-900">{items.length}</strong>
+        </article>
+        <article className="rounded-xl bg-white p-5 shadow-xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-500">Estoque Total</span>
+          <strong className="mt-2 block text-2xl font-black text-brand-900">{totalStock} unid.</strong>
+        </article>
+        <article className="rounded-xl bg-white p-5 shadow-xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-500">Para Locação</span>
+          <strong className="mt-2 block text-2xl font-black text-blue-700">{rentalCount} produtos</strong>
+        </article>
+        <article className="rounded-xl bg-white p-5 shadow-xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-500">Para Venda</span>
+          <strong className="mt-2 block text-2xl font-black text-emerald-700">{saleCount} produtos</strong>
+        </article>
+      </section>
+
+      <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+        <label className="flex min-h-11 items-center gap-2 rounded-lg border bg-white px-3 shadow-xs">
+          <Search className="size-4 text-ink-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por nome, categoria ou especificações..."
+            className="w-full bg-transparent text-sm font-bold outline-none"
+          />
+        </label>
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="min-h-11 rounded-lg border bg-white px-3 text-sm font-bold shadow-xs"
+        >
+          <option value="">Todas as categorias</option>
+          <option value="HEAVY_ROD_REEL">Conjunto Pesado (Piraíba/Jaú)</option>
+          <option value="MEDIUM_ROD_REEL">Conjunto Médio (Pirarara/Tucunaré)</option>
+          <option value="TERMINAL_TACKLE">Tralhas Terminais & Acessórios</option>
+          <option value="APPAREL">Vestuário & Proteção UV</option>
+          <option value="SPECIALTY_BAIT">Iscas Especiais & Essências</option>
+        </select>
+        <select
+          value={modality}
+          onChange={(e) => setModality(e.target.value)}
+          className="min-h-11 rounded-lg border bg-white px-3 text-sm font-bold shadow-xs"
+        >
+          <option value="">Todas as modalidades</option>
+          <option value="RENTAL">Apenas Locação</option>
+          <option value="SALE">Apenas Venda</option>
+          <option value="BOTH">Ambos (Locação e Venda)</option>
+        </select>
+      </div>
+
+      <div className="mt-6">
+        <State loading={list.loading} error={list.error} />
+        {list.data && (
+          <div className="overflow-x-auto rounded-xl bg-white shadow-xs">
+            <table className="w-full min-w-[850px] text-left text-sm">
+              <thead className="bg-brand-900 text-xs uppercase text-white">
+                <tr>
+                  <th className="px-5 py-4">Equipamento</th>
+                  <th>Categoria</th>
+                  <th>Modalidade</th>
+                  <th>Estoque</th>
+                  <th>Locação</th>
+                  <th>Venda</th>
+                  <th>Status</th>
+                  <th className="px-5 py-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {items.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50/50">
+                    <td className="px-5 py-4">
+                      <strong>{item.name}</strong>
+                      {item.description && (
+                        <p className="mt-0.5 line-clamp-1 text-xs text-ink-500">{item.description}</p>
+                      )}
+                    </td>
+                    <td>
+                      <span className="rounded bg-brand-50 px-2 py-0.5 text-xs font-bold text-brand-900 border border-brand-200">
+                        {item.category_display || item.category}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-800">
+                        {item.modality_display || item.modality}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold ${
+                          item.inventory_quantity === 0
+                            ? "bg-red-100 text-red-800"
+                            : item.inventory_quantity <= 3
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
+                        {item.inventory_quantity} {item.inventory_quantity === 1 ? "unid." : "unids."}
+                      </span>
+                    </td>
+                    <td>
+                      {item.modality === "SALE" ? (
+                        <span className="text-xs text-ink-400">—</span>
+                      ) : (
+                        <strong className="text-brand-900">{money(item.rental_price_cents)}</strong>
+                      )}
+                    </td>
+                    <td>
+                      {item.modality === "RENTAL" ? (
+                        <span className="text-xs text-ink-400">—</span>
+                      ) : (
+                        <strong className="text-emerald-900">{money(item.sale_price_cents)}</strong>
+                      )}
+                    </td>
+                    <td>
+                      <Pill ok={item.active}>{item.active ? "Ativo" : "Inativo"}</Pill>
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() => setEditingGear(item)}
+                          className="rounded-lg border px-3 py-1.5 text-xs font-bold hover:bg-gray-50"
+                        >
+                          <Pencil className="mr-1 inline size-3" />
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => void handleDelete(item)}
+                          className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="mr-1 inline size-3" />
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!items.length && <Empty>Nenhum equipamento cadastrado.</Empty>}
+          </div>
+        )}
+      </div>
+
+      {editingGear && (
+        <GearModal
+          token={token}
+          gear={editingGear}
+          close={() => setEditingGear(null)}
+          saved={async () => {
+            await list.load();
+            setEditingGear(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function GearModal({
+  token,
+  gear,
+  close,
+  saved,
+}: {
+  token: string;
+  gear: Partial<FishingGearProduct>;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const [form, setForm] = useState({
+    name: gear.name ?? "",
+    category: gear.category ?? "HEAVY_ROD_REEL",
+    modality: gear.modality ?? "RENTAL",
+    inventory_quantity: gear.inventory_quantity ?? 1,
+    rental_price: gear.rental_price_cents ? (gear.rental_price_cents / 100).toFixed(2) : "0.00",
+    sale_price: gear.sale_price_cents ? (gear.sale_price_cents / 100).toFixed(2) : "0.00",
+    description: gear.description ?? "",
+    image_url: gear.image_url ?? "",
+    active: gear.active ?? true,
+    technical_specs: gear.technical_specs ? JSON.stringify(gear.technical_specs, null, 2) : "{}",
+  });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!form.name.trim()) return setError("O nome do equipamento é obrigatório.");
+    let parsedSpecs = {};
+    if (form.technical_specs.trim()) {
+      try {
+        parsedSpecs = JSON.parse(form.technical_specs);
+      } catch {
+        return setError("Especificações técnicas devem ser um JSON válido (ex: {\"vara\": \"80lbs\", \"carretilha\": \"Perfil Alto\"}).");
+      }
+    }
+    const rentalCents = Math.round(Number(form.rental_price.replace(",", ".")) * 100);
+    const saleCents = Math.round(Number(form.sale_price.replace(",", ".")) * 100);
+    if (isNaN(rentalCents) || rentalCents < 0) return setError("Preço de locação inválido.");
+    if (isNaN(saleCents) || saleCents < 0) return setError("Preço de venda inválido.");
+
+    setSaving(true);
+    setError("");
+    try {
+      const payload = {
+        name: form.name.trim(),
+        category: form.category,
+        modality: form.modality,
+        inventory_quantity: Math.max(0, Number(form.inventory_quantity) || 0),
+        rental_price_cents: rentalCents,
+        sale_price_cents: saleCents,
+        description: form.description.trim(),
+        image_url: form.image_url.trim(),
+        active: form.active,
+        technical_specs: parsedSpecs,
+      };
+      if (gear.id) {
+        await request(`gear-products/${gear.id}/`, token, {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+      } else {
+        await request("gear-products/", token, {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+      }
+      await saved();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <form onSubmit={submit} className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b pb-3">
+          <h3 className="text-lg font-black text-brand-950">
+            {gear.id ? "Editar Equipamento" : "Novo Equipamento de Pesca"}
+          </h3>
+          <button type="button" onClick={close} className="rounded p-1 text-ink-500 hover:bg-gray-100">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="text-xs font-bold sm:col-span-2">
+            Nome do Equipamento *
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Ex: Conjunto Pesado 80-100lbs (Piraíba)"
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
+            />
+          </label>
+
+          <label className="text-xs font-bold">
+            Categoria *
+            <select
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
+            >
+              <option value="HEAVY_ROD_REEL">Conjunto Pesado (Piraíba/Jaú)</option>
+              <option value="MEDIUM_ROD_REEL">Conjunto Médio (Pirarara/Tucunaré)</option>
+              <option value="TERMINAL_TACKLE">Tralhas Terminais & Acessórios</option>
+              <option value="APPAREL">Vestuário & Proteção UV</option>
+              <option value="SPECIALTY_BAIT">Iscas Especiais & Essências</option>
+            </select>
+          </label>
+
+          <label className="text-xs font-bold">
+            Modalidade Comercial *
+            <select
+              value={form.modality}
+              onChange={(e) => setForm({ ...form, modality: e.target.value as "RENTAL" | "SALE" | "BOTH" })}
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
+            >
+              <option value="RENTAL">Apenas Locação</option>
+              <option value="SALE">Apenas Venda</option>
+              <option value="BOTH">Ambos (Locação e Venda)</option>
+            </select>
+          </label>
+
+          <label className="text-xs font-bold">
+            Estoque Disponível (unidades) *
+            <input
+              type="number"
+              min={0}
+              required
+              value={form.inventory_quantity}
+              onChange={(e) => setForm({ ...form, inventory_quantity: Number(e.target.value) })}
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
+            />
+          </label>
+
+          <label className="text-xs font-bold">
+            Preço de Locação (R$) {form.modality === "SALE" && "(Desativado)"}
+            <input
+              type="text"
+              disabled={form.modality === "SALE"}
+              value={form.rental_price}
+              onChange={(e) => setForm({ ...form, rental_price: e.target.value })}
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold disabled:bg-gray-100"
+            />
+          </label>
+
+          <label className="text-xs font-bold">
+            Preço de Venda (R$) {form.modality === "RENTAL" && "(Desativado)"}
+            <input
+              type="text"
+              disabled={form.modality === "RENTAL"}
+              value={form.sale_price}
+              onChange={(e) => setForm({ ...form, sale_price: e.target.value })}
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold disabled:bg-gray-100"
+            />
+          </label>
+
+          <label className="text-xs font-bold">
+            URL da Imagem (opcional)
+            <input
+              type="url"
+              value={form.image_url}
+              onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+              placeholder="https://..."
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+            />
+          </label>
+
+          <label className="text-xs font-bold sm:col-span-2">
+            Descrição do Produto
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              placeholder="Ex: Vara especial de 80 lbs, carretilha com 300m de linha multifilamento 0.70mm e líder fluorocarbono."
+              className="mt-1 min-h-16 w-full rounded-lg border p-3 text-xs"
+            />
+          </label>
+
+          <label className="text-xs font-bold sm:col-span-2">
+            Especificações Técnicas (JSON chave-valor)
+            <textarea
+              value={form.technical_specs}
+              onChange={(e) => setForm({ ...form, technical_specs: e.target.value })}
+              placeholder='{"vara": "80lbs carbono maciço", "carretilha": "Perfil alto 400", "linha": "0.70mm"}'
+              className="mt-1 min-h-16 w-full rounded-lg border p-3 font-mono text-xs"
+            />
+          </label>
+
+          <label className="flex items-center gap-2 text-xs font-bold sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={form.active}
+              onChange={(e) => setForm({ ...form, active: e.target.checked })}
+              className="size-4 rounded text-brand-600"
+            />
+            Equipamento ativo no catálogo
+          </label>
+        </div>
+
+        {error && <p className="mt-3 text-sm font-bold text-red-700">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-3 border-t pt-4">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg border px-4 py-2 text-sm font-bold text-ink-700 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {saving ? "Salvando..." : "Salvar Equipamento"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function CustomersPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
+  const [query, setQuery] = useState("");
+  const [hasLicense, setHasLicense] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const path = `customers/?q=${encodeURIComponent(query)}&has_valid_license=${hasLicense}`;
+  const list = useData<CustomerCRM[]>(path, token, unauthorized);
+
+  const items = list.data ?? [];
+  const validLicenseCount = items.filter((c) => c.has_valid_license).length;
+  const totalLtv = items.reduce((acc, c) => acc + (c.lifetime_value_cents || 0), 0);
+  const avgLtv = items.length ? Math.round(totalLtv / items.length) : 0;
+
+  return (
+    <div>
+      <Header
+        title="CRM de Pescadores & Clientes"
+        subtitle="Histórico consolidado, licença RGP, Lifetime Value (LTV) e anotações operacionais."
+      />
+
+      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <article className="rounded-xl bg-white p-5 shadow-xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-500">Pescadores Cadastrados</span>
+          <strong className="mt-2 block text-2xl font-black text-brand-900">{items.length}</strong>
+        </article>
+        <article className="rounded-xl bg-white p-5 shadow-xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-500">Licença RGP Válida</span>
+          <strong className="mt-2 block text-2xl font-black text-emerald-700">
+            {validLicenseCount}{" "}
+            <span className="text-sm font-normal text-ink-400">
+              ({items.length ? Math.round((validLicenseCount / items.length) * 100) : 0}%)
+            </span>
+          </strong>
+        </article>
+        <article className="rounded-xl bg-white p-5 shadow-xs">
+          <span className="text-xs font-bold uppercase tracking-wider text-ink-500">LTV Médio</span>
+          <strong className="mt-2 block text-2xl font-black text-brand-800">{money(avgLtv)}</strong>
+        </article>
+      </section>
+
+      <div className="mt-6 grid gap-3 lg:grid-cols-[1fr_auto]">
+        <label className="flex min-h-11 items-center gap-2 rounded-lg border bg-white px-3 shadow-xs">
+          <Search className="size-4 text-ink-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por nome, CPF, e-mail, telefone ou cidade..."
+            className="w-full bg-transparent text-sm font-bold outline-none"
+          />
+        </label>
+        <select
+          value={hasLicense}
+          onChange={(e) => setHasLicense(e.target.value)}
+          className="min-h-11 rounded-lg border bg-white px-3 text-sm font-bold shadow-xs"
+        >
+          <option value="">Todas as licenças</option>
+          <option value="true">Apenas RGP Válida</option>
+          <option value="false">RGP Pendente / Expirada</option>
+        </select>
+      </div>
+
+      <div className="mt-6">
+        <State loading={list.loading} error={list.error} />
+        {list.data && (
+          <div className="overflow-x-auto rounded-xl bg-white shadow-xs">
+            <table className="w-full min-w-[850px] text-left text-sm">
+              <thead className="bg-brand-900 text-xs uppercase text-white">
+                <tr>
+                  <th className="px-5 py-4">Pescador</th>
+                  <th>Contato</th>
+                  <th>Origem</th>
+                  <th>Licença RGP</th>
+                  <th>Reservas</th>
+                  <th>LTV (Total Pago)</th>
+                  <th className="px-5 py-4 text-right">Ficha</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {items.map((c) => (
+                  <tr key={c.id} className="hover:bg-gray-50/50">
+                    <td className="px-5 py-4">
+                      <strong>{c.full_name}</strong>
+                      <span className="block text-xs text-ink-500">CPF {c.cpf}</span>
+                    </td>
+                    <td>
+                      <span className="block text-xs font-bold text-ink-800">{c.phone}</span>
+                      <span className="block text-xs text-ink-500">{c.email}</span>
+                    </td>
+                    <td>
+                      <span className="text-xs">
+                        {c.city && c.state ? `${c.city} - ${c.state}` : c.city || c.state || "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-bold ${
+                          c.has_valid_license
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        {c.has_valid_license ? "RGP Válida" : "Pendente / Vencida"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="text-xs font-bold text-brand-900">
+                        {c.total_reservations} {c.total_reservations === 1 ? "expedição" : "expedições"}
+                      </span>
+                    </td>
+                    <td>
+                      <strong className="text-brand-900">{money(c.lifetime_value_cents)}</strong>
+                    </td>
+                    <td className="px-5 py-4 text-right">
+                      <button
+                        onClick={() => setSelectedCustomerId(c.id)}
+                        className="rounded-lg border px-3 py-1.5 text-xs font-bold text-brand-700 hover:bg-brand-50"
+                      >
+                        Ver Perfil CRM
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!items.length && <Empty>Nenhum cliente cadastrado.</Empty>}
+          </div>
+        )}
+      </div>
+
+      {selectedCustomerId && (
+        <CustomerModal
+          token={token}
+          customerId={selectedCustomerId}
+          close={() => setSelectedCustomerId(null)}
+          saved={async () => {
+            await list.load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CustomerModal({
+  token,
+  customerId,
+  close,
+  saved,
+}: {
+  token: string;
+  customerId: string;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const result = useData<CustomerCRM>(`customers/${customerId}/`, token, () => {});
+  const customer = result.data;
+
+  const [form, setForm] = useState({
+    full_name: "",
+    email: "",
+    phone: "",
+    rg: "",
+    rg_issuer: "",
+    birth_date: "",
+    city: "",
+    state: "",
+    fishing_license_number: "",
+    fishing_license_expiry: "",
+    default_vest_size: "",
+    dietary_notes: "",
+    medical_notes: "",
+    emergency_contact_name: "",
+    emergency_contact_phone: "",
+    internal_admin_notes: "",
+  });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (customer) {
+      const p = customer.profile ?? {};
+      setForm({
+        full_name: customer.full_name ?? "",
+        email: customer.email ?? "",
+        phone: customer.phone ?? "",
+        rg: p.rg ?? "",
+        rg_issuer: p.rg_issuer ?? "",
+        birth_date: p.birth_date ?? "",
+        city: p.city ?? customer.city ?? "",
+        state: p.state ?? customer.state ?? "",
+        fishing_license_number: p.fishing_license_number ?? "",
+        fishing_license_expiry: p.fishing_license_expiry ?? "",
+        default_vest_size: p.default_vest_size ?? "",
+        dietary_notes: p.dietary_notes ?? "",
+        medical_notes: p.medical_notes ?? "",
+        emergency_contact_name: p.emergency_contact_name ?? "",
+        emergency_contact_phone: p.emergency_contact_phone ?? "",
+        internal_admin_notes: p.internal_admin_notes ?? "",
+      });
+    }
+  }, [customer]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      await request(`customers/${customerId}/`, token, {
+        method: "PATCH",
+        body: JSON.stringify({
+          full_name: form.full_name.trim(),
+          email: form.email.trim(),
+          phone: form.phone.trim(),
+          profile: {
+            rg: form.rg.trim(),
+            rg_issuer: form.rg_issuer.trim(),
+            birth_date: form.birth_date || null,
+            city: form.city.trim(),
+            state: form.state.trim().toUpperCase(),
+            fishing_license_number: form.fishing_license_number.trim(),
+            fishing_license_expiry: form.fishing_license_expiry || null,
+            default_vest_size: form.default_vest_size.trim().toUpperCase(),
+            dietary_notes: form.dietary_notes.trim(),
+            medical_notes: form.medical_notes.trim(),
+            emergency_contact_name: form.emergency_contact_name.trim(),
+            emergency_contact_phone: form.emergency_contact_phone.trim(),
+            internal_admin_notes: form.internal_admin_notes.trim(),
+          },
+        }),
+      });
+      await saved();
+      close();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (result.loading) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="w-full max-w-2xl rounded-2xl bg-white p-8 text-center text-sm font-bold text-ink-600">
+          Carregando ficha do pescador...
+        </div>
+      </div>
+    );
+  }
+
+  if (!customer) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <form
+        onSubmit={submit}
+        className="w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl"
+      >
+        <div className="flex items-start justify-between border-b pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-black text-brand-950">{customer.full_name}</h2>
+              <span
+                className={`rounded px-2 py-0.5 text-xs font-bold ${
+                  customer.has_valid_license ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                }`}
+              >
+                {customer.has_valid_license ? "RGP Válida" : "RGP Pendente"}
+              </span>
+            </div>
+            <p className="text-xs text-ink-500 mt-1">
+              CPF {customer.cpf} · {customer.email} · {customer.phone}
+            </p>
+          </div>
+          <button type="button" onClick={close} className="rounded p-1 text-ink-500 hover:bg-gray-100">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        {/* LTV & Metrics strip */}
+        <div className="mt-4 grid grid-cols-3 gap-3 rounded-xl bg-brand-50/60 p-3 border border-brand-100 text-center">
+          <div>
+            <span className="block text-[11px] font-bold uppercase text-brand-700">Expedições</span>
+            <strong className="text-lg font-black text-brand-950">{customer.total_reservations}</strong>
+          </div>
+          <div>
+            <span className="block text-[11px] font-bold uppercase text-brand-700">Lifetime Value</span>
+            <strong className="text-lg font-black text-brand-950">{money(customer.lifetime_value_cents)}</strong>
+          </div>
+          <div>
+            <span className="block text-[11px] font-bold uppercase text-brand-700">Última Viagem</span>
+            <span className="block text-xs font-bold text-brand-900 mt-1">
+              {customer.last_expedition_name ? customer.last_expedition_name : "Nenhuma"}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-6">
+          {/* Seção 1: Documentos & RGP */}
+          <div className="rounded-xl border p-4">
+            <h4 className="font-bold text-sm text-brand-900 flex items-center gap-2">
+              <FileText className="size-4" />
+              Documentação & Licença de Pesca Amadora (RGP)
+            </h4>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="text-xs font-bold">
+                RG
+                <input
+                  type="text"
+                  value={form.rg}
+                  onChange={(e) => setForm({ ...form, rg: e.target.value })}
+                  placeholder="Número do RG"
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Órgão Emissor / UF
+                <input
+                  type="text"
+                  value={form.rg_issuer}
+                  onChange={(e) => setForm({ ...form, rg_issuer: e.target.value })}
+                  placeholder="Ex: SSP/SP"
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Data de Nascimento
+                <input
+                  type="date"
+                  value={form.birth_date}
+                  onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Cidade de Residência
+                <input
+                  type="text"
+                  value={form.city}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                  placeholder="Cidade"
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Estado (UF)
+                <input
+                  type="text"
+                  maxLength={2}
+                  value={form.state}
+                  onChange={(e) => setForm({ ...form, state: e.target.value.toUpperCase() })}
+                  placeholder="SP"
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs uppercase"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Tamanho do Colete
+                <select
+                  value={form.default_vest_size}
+                  onChange={(e) => setForm({ ...form, default_vest_size: e.target.value })}
+                  className="mt-1 h-9 w-full rounded-lg border px-2 text-xs"
+                >
+                  <option value="">Não informado</option>
+                  <option value="P">P</option>
+                  <option value="M">M</option>
+                  <option value="G">G</option>
+                  <option value="GG">GG</option>
+                  <option value="XG">XG</option>
+                  <option value="XXG">XXG</option>
+                </select>
+              </label>
+              <label className="text-xs font-bold sm:col-span-2">
+                Número da Licença RGP (Federal ou Estadual)
+                <input
+                  type="text"
+                  value={form.fishing_license_number}
+                  onChange={(e) => setForm({ ...form, fishing_license_number: e.target.value })}
+                  placeholder="Ex: 12345678-9"
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs font-mono"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Validade da Licença RGP
+                <input
+                  type="date"
+                  value={form.fishing_license_expiry}
+                  onChange={(e) => setForm({ ...form, fishing_license_expiry: e.target.value })}
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Seção 2: Saúde, Alimentação & Emergência */}
+          <div className="rounded-xl border p-4">
+            <h4 className="font-bold text-sm text-brand-900 flex items-center gap-2">
+              <AlertTriangle className="size-4" />
+              Saúde, Preferências & Emergência
+            </h4>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="text-xs font-bold">
+                Restrições Alimentares / Notas Dietéticas
+                <textarea
+                  value={form.dietary_notes}
+                  onChange={(e) => setForm({ ...form, dietary_notes: e.target.value })}
+                  placeholder="Ex: Não consome frutos do mar, intolerância à lactose."
+                  className="mt-1 min-h-16 w-full rounded-lg border p-2 text-xs"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Condições Médicas / Alergias
+                <textarea
+                  value={form.medical_notes}
+                  onChange={(e) => setForm({ ...form, medical_notes: e.target.value })}
+                  placeholder="Ex: Alérgico a picada de abelha (leva epinefrina), hipertenso."
+                  className="mt-1 min-h-16 w-full rounded-lg border p-2 text-xs"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Contato de Emergência (Nome)
+                <input
+                  type="text"
+                  value={form.emergency_contact_name}
+                  onChange={(e) => setForm({ ...form, emergency_contact_name: e.target.value })}
+                  placeholder="Ex: Maria da Silva (Esposa)"
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"
+                />
+              </label>
+              <label className="text-xs font-bold">
+                Contato de Emergência (Telefone)
+                <input
+                  type="text"
+                  value={form.emergency_contact_phone}
+                  onChange={(e) => setForm({ ...form, emergency_contact_phone: e.target.value })}
+                  placeholder="Ex: (11) 98765-4321"
+                  className="mt-1 h-9 w-full rounded-lg border px-3 text-xs"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Seção 3: Histórico de Reservas */}
+          {customer.reservations && customer.reservations.length > 0 && (
+            <div className="rounded-xl border p-4">
+              <h4 className="font-bold text-sm text-brand-900 flex items-center gap-2">
+                <TicketCheck className="size-4" />
+                Histórico de Reservas ({customer.reservations.length})
+              </h4>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-gray-100 text-ink-700">
+                    <tr>
+                      <th className="p-2">Expedição</th>
+                      <th className="p-2">Data</th>
+                      <th className="p-2">Vagas</th>
+                      <th className="p-2">Tralhas</th>
+                      <th className="p-2">Total</th>
+                      <th className="p-2">Pago</th>
+                      <th className="p-2">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {customer.reservations.map((res) => (
+                      <tr key={res.id}>
+                        <td className="p-2 font-bold">{res.expedition_name}</td>
+                        <td className="p-2">{shortDate(res.starts_at)}</td>
+                        <td className="p-2">{res.participant_count}</td>
+                        <td className="p-2">{res.gear_addons_count} itens</td>
+                        <td className="p-2 font-bold">{money(res.total_price_cents)}</td>
+                        <td className="p-2 font-bold text-brand-800">{money(res.paid_amount_cents)}</td>
+                        <td className="p-2">
+                          <Status value={res.status} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Seção 4: Anotações Internas Restritas */}
+          <div className="rounded-xl border-2 border-amber-300 bg-amber-50/40 p-4">
+            <div className="flex items-center gap-2 text-amber-900">
+              <ShieldCheck className="size-4 text-amber-800" />
+              <h4 className="font-bold text-sm">Anotações Internas da Operação (Restrito)</h4>
+            </div>
+            <p className="mt-1 text-[11px] text-amber-800 font-medium">
+              Confidencial: estas notas são visíveis exclusivamente para os administradores. Nunca são enviadas para o
+              cliente ou para convidados.
+            </p>
+            <textarea
+              value={form.internal_admin_notes}
+              onChange={(e) => setForm({ ...form, internal_admin_notes: e.target.value })}
+              placeholder="Ex: Pescador muito experiente, prefere pescar na popa do barco. Pontual nos pagamentos. Tem interesse em expedições no Rio Marié."
+              className="mt-2 min-h-24 w-full rounded-lg border border-amber-300 bg-white p-3 text-xs"
+            />
+          </div>
+        </div>
+
+        {error && <p className="mt-3 text-sm font-bold text-red-700">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-3 border-t pt-4">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg border px-4 py-2 text-sm font-bold text-ink-700 hover:bg-gray-50"
+          >
+            Fechar
+          </button>
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {saving ? "Salvando..." : "Salvar Perfil"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function AddGearAddonModal({
+  token,
+  reservation,
+  close,
+  added,
+}: {
+  token: string;
+  reservation: Reservation;
+  close: () => void;
+  added: () => Promise<void>;
+}) {
+  const gearList = useData<FishingGearProduct[]>("gear-products/?active=true", token, () => {});
+  const [selectedGearId, setSelectedGearId] = useState("");
+  const [modality, setModality] = useState<"RENTAL" | "SALE">("RENTAL");
+  const [quantity, setQuantity] = useState(1);
+  const [participantId, setParticipantId] = useState("");
+  const [unitPrice, setUnitPrice] = useState("0.00");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const selectedGear = useMemo(() => {
+    return gearList.data?.find((g) => g.id === selectedGearId) ?? null;
+  }, [gearList.data, selectedGearId]);
+
+  useEffect(() => {
+    if (selectedGear) {
+      let defaultModality: "RENTAL" | "SALE" = "RENTAL";
+      if (selectedGear.modality === "SALE") defaultModality = "SALE";
+      setModality(defaultModality);
+      const defaultPriceCents =
+        defaultModality === "RENTAL"
+          ? selectedGear.rental_price_cents
+          : selectedGear.sale_price_cents;
+      setUnitPrice((defaultPriceCents / 100).toFixed(2));
+    }
+  }, [selectedGear]);
+
+  function handleModalityChange(newModality: "RENTAL" | "SALE") {
+    setModality(newModality);
+    if (selectedGear) {
+      const priceCents =
+        newModality === "RENTAL"
+          ? selectedGear.rental_price_cents
+          : selectedGear.sale_price_cents;
+      setUnitPrice((priceCents / 100).toFixed(2));
+    }
+  }
+
+  const unitPriceCents = Math.round(Number(unitPrice.replace(",", ".")) * 100) || 0;
+  const totalPriceCents = unitPriceCents * quantity;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedGear) return setError("Selecione um equipamento.");
+    if (quantity <= 0) return setError("Quantidade deve ser maior que zero.");
+    if (quantity > selectedGear.inventory_quantity) {
+      return setError(`Estoque insuficiente. Apenas ${selectedGear.inventory_quantity} unidade(s) disponível(is).`);
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      await request(`reservations/${reservation.id}/gear-addons/`, token, {
+        method: "POST",
+        body: JSON.stringify({
+          gear_product_id: selectedGear.id,
+          modality,
+          quantity,
+          participant_id: participantId || null,
+          unit_price_cents: unitPriceCents,
+          notes: notes.trim(),
+        }),
+      });
+      await added();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <form onSubmit={submit} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-center justify-between border-b pb-3">
+          <h3 className="text-lg font-black text-brand-950">Adicionar Tralha à Reserva</h3>
+          <button type="button" onClick={close} className="rounded p-1 text-ink-500 hover:bg-gray-100">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          <label className="block text-xs font-bold">
+            Equipamento / Tralha *
+            <select
+              required
+              value={selectedGearId}
+              onChange={(e) => setSelectedGearId(e.target.value)}
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
+            >
+              <option value="">Selecione um equipamento...</option>
+              {gearList.data?.map((g) => (
+                <option key={g.id} value={g.id} disabled={g.inventory_quantity <= 0}>
+                  {g.name} — Estoque: {g.inventory_quantity} {g.inventory_quantity <= 0 ? "(ESGOTADO)" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {selectedGear && (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-bold">
+                  Modalidade *
+                  <select
+                    value={modality}
+                    onChange={(e) => handleModalityChange(e.target.value as "RENTAL" | "SALE")}
+                    className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
+                  >
+                    {(selectedGear.modality === "RENTAL" || selectedGear.modality === "BOTH") && (
+                      <option value="RENTAL">Locação (Aluguel)</option>
+                    )}
+                    {(selectedGear.modality === "SALE" || selectedGear.modality === "BOTH") && (
+                      <option value="SALE">Venda (Compra definitiva)</option>
+                    )}
+                  </select>
+                </label>
+
+                <label className="block text-xs font-bold">
+                  Quantidade * (Máx: {selectedGear.inventory_quantity})
+                  <input
+                    type="number"
+                    min={1}
+                    max={selectedGear.inventory_quantity}
+                    value={quantity}
+                    onChange={(e) => setQuantity(Math.max(1, Number(e.target.value) || 1))}
+                    className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-bold">
+                  Preço Unitário (R$)
+                  <input
+                    type="text"
+                    value={unitPrice}
+                    onChange={(e) => setUnitPrice(e.target.value)}
+                    className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
+                  />
+                </label>
+
+                <div>
+                  <span className="block text-xs font-bold text-ink-500">Valor Total Adicional</span>
+                  <div className="mt-1 flex h-10 items-center rounded-lg bg-brand-50 px-3 text-sm font-black text-brand-900 border border-brand-200">
+                    {money(totalPriceCents)}
+                  </div>
+                </div>
+              </div>
+
+              <label className="block text-xs font-bold">
+                Destinado ao Participante (opcional)
+                <select
+                  value={participantId}
+                  onChange={(e) => setParticipantId(e.target.value)}
+                  className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+                >
+                  <option value="">Geral / Toda a reserva</option>
+                  {reservation.participants?.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block text-xs font-bold">
+                Observações Operacionais (ex: canhoto, entregar no barco 02)
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Ex: Conjunto montado para canhoto."
+                  className="mt-1 min-h-16 w-full rounded-lg border p-2 text-xs"
+                />
+              </label>
+
+              <div className="rounded-lg bg-blue-50 p-3 text-xs text-blue-900 border border-blue-200">
+                <strong>Impacto Financeiro:</strong> O saldo devedor da reserva aumentará em{" "}
+                <strong>{money(totalPriceCents)}</strong> e {quantity} unidade(s) de estoque serão reservadas
+                imediatamente.
+              </div>
+            </>
+          )}
+        </div>
+
+        {error && <p className="mt-3 text-sm font-bold text-red-700">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-3 border-t pt-4">
+          <button
+            type="button"
+            onClick={close}
+            className="rounded-lg border px-4 py-2 text-sm font-bold text-ink-700 hover:bg-gray-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !selectedGear}
+            className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {saving ? "Adicionando..." : "Confirmar e Recalcular"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

@@ -13,7 +13,7 @@ LODGES = [
         "state": "MT",
         "river_section": "Rio Araguaia",
         "description": "Estrutura de ponta às margens do Rio Araguaia com apartamentos climatizados, restaurante típico e barcos rápidos.",
-        "amenities": ["Wi-Fi", "Ar-condicionado", "Piscina", "Quartos duplos e triplos", "Fábrica de gelo", "Restaurante regional", "Barcos com motor 40/50HP"],
+        "amenities": ["Wi-Fi", "Ar-condicionado", "Piscina", "Quartos confortáveis", "Restaurante regional", "Barcos com motor 40/50HP"],
         "meeting_point": "São Félix do Araguaia / MT",
         "directions": "Acesso via voo regional até São Félix do Araguaia ou transfer rodoviário a partir de Palmas/TO ou Confresa/MT. Encontro oficial na recepção às 16h.",
         "cover_image_url": "/expeditions/ponte-sao-felix.jpg",
@@ -25,7 +25,7 @@ LODGES = [
         "state": "GO",
         "river_section": "Rio Araguaia",
         "description": "Base estratégica no coração do Vale do Araguaia com tradição na pescaria de grandes bagres de couro e excelente conforto.",
-        "amenities": ["Wi-Fi", "Ar-condicionado", "Piscina", "Quartos privativos", "Restaurante completo", "Barcos equipados com rádio VHF", "Fábrica de gelo"],
+        "amenities": ["Wi-Fi", "Ar-condicionado", "Quartos privativos", "Restaurante completo", "Barcos equipados com rádio VHF", "Deck de embarque"],
         "meeting_point": "Bandeirantes / GO",
         "directions": "Acesso asfaltado a partir de Goiânia (aprox. 440 km) ou transfer contratado. Encontro oficial na Pousada Canaã até as 17h para jantar de boas-vindas.",
         "cover_image_url": "/expeditions/bandeirantes-piraiba.jpg",
@@ -47,7 +47,6 @@ SPECIES = [
     {"slug": "tambaqui", "common_name": "Tambaqui", "scientific_name": "Colossoma macropomum", "category": "ESCAMA"},
     {"slug": "cachara", "common_name": "Cachara", "scientific_name": "Pseudoplatystoma fasciatum", "category": "COURO"},
     {"slug": "pintado", "common_name": "Pintado", "scientific_name": "Pseudoplatystoma corruscans", "category": "COURO"},
-    {"slug": "jau", "common_name": "Jaú Gigante", "scientific_name": "Paulicea luetkeni", "category": "COURO"},
     {"slug": "apapa", "common_name": "Apapá", "scientific_name": "Pellona castelnaeana", "category": "ESCAMA"},
 ]
 
@@ -66,17 +65,26 @@ ARAGUAIA_DEFAULT_SPECIES_KEYS = [
     "tambaqui",
     "cachara",
     "pintado",
-    "jau",
     "apapa",
 ]
 
-DEFAULT_INCLUSIONS = [
+STANDARD_INCLUSIONS = [
     "Hospedagem completa com café, almoço e jantar",
     "Combustível 100% incluso para todos os dias de pesca",
     "Guias nativos profissionais em barcos equipados com rádio VHF",
-    "Iscas vivas (tuviras) e naturais inclusas",
+    "Iscas vivas e naturais inclusas",
     "Kit Sashimi & Ceviche preparado no rio",
-    "Open Bar de cervejas premium (Heineken, Original, Amstel)",
+    "Refrigerantes, água mineral e gelo à vontade",
+    "Torneio esportivo entre duplas com troféus oficiais",
+]
+
+COUPLES_INCLUSIONS = [
+    "Hospedagem completa com café, almoço e jantar",
+    "Combustível 100% incluso para todos os dias de pesca",
+    "Guias nativos profissionais em barcos equipados com rádio VHF",
+    "Iscas vivas e naturais inclusas",
+    "Kit Sashimi & Ceviche preparado no rio",
+    "Open Bar de cervejas premium (Heineken, Original, Stella Artois)",
     "Refrigerantes, água mineral e gelo à vontade",
     "Torneio esportivo entre duplas com troféus oficiais",
 ]
@@ -86,9 +94,24 @@ class Command(BaseCommand):
     help = "Cria as pousadas, espécies e expedições reais de 2026 com personalização completa."
 
     def handle(self, *args, **options):
+        from apps.expeditions.models import River, Amenity, LodgeAmenityLink, WaterBasin
+
+        araguaia, _ = River.objects.update_or_create(
+            slug="rio-araguaia",
+            defaults={
+                "name": "Rio Araguaia",
+                "basin": WaterBasin.TOCANTINS_ARAGUAIA,
+                "states": ["MT", "GO", "TO"],
+                "description": "Um dos maiores santuários da pesca esportiva mundial, berço dos gigantes de couro (Piraíba e Pirarara).",
+                "regulations": "Cota zero para transporte de peixes. Licença de pesca amadora obrigatória.",
+                "active": True,
+            },
+        )
+
         lodges_map = {}
         for data in LODGES:
-            lodge, _ = Lodge.objects.update_or_create(slug=data["slug"], defaults=data)
+            payload = {**data, "river": araguaia}
+            lodge, _ = Lodge.objects.update_or_create(slug=data["slug"], defaults=payload)
             lodges_map[data["slug"]] = lodge
 
         species_map = {}
@@ -108,10 +131,10 @@ class Command(BaseCommand):
                 "price_per_person_cents": 560000,
                 "deposit_cents": 250000,
                 "status": Expedition.Status.PUBLISHED,
-                "summary": "4 dias completos de pescaria All Inclusive no Rio Araguaia na Pousada Solar das Águas. Guias, barcos, combustível, iscas, kit ceviche/sashimi e open bar premium.",
+                "summary": "4 dias completos de pescaria no Rio Araguaia na Pousada Solar das Águas. Guias nativos, barcos rápidos, combustível livre, iscas, kit ceviche/sashimi e gelo à vontade.",
                 "lodge": lodges_map["pousada-solar-das-aguas"],
                 "cover_image_url": "/expeditions/ponte-sao-felix.jpg",
-                "inclusions": DEFAULT_INCLUSIONS,
+                "inclusions": STANDARD_INCLUSIONS,
                 "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
             {
@@ -125,10 +148,10 @@ class Command(BaseCommand):
                 "price_per_person_cents": 510000,
                 "deposit_cents": 250000,
                 "status": Expedition.Status.PUBLISHED,
-                "summary": "4 dias de pescaria de gigantes All Inclusive no Rio Araguaia na Pousada Canaã. Barcos equipados, combustível incluso, torneio entre duplas e open bar.",
+                "summary": "4 dias de pescaria de gigantes no Rio Araguaia na Pousada Canaã. Barcos equipados, combustível incluso, iscas e torneio entre duplas.",
                 "lodge": lodges_map["pousada-canaa"],
                 "cover_image_url": "/expeditions/bandeirantes-piraiba.jpg",
-                "inclusions": DEFAULT_INCLUSIONS,
+                "inclusions": STANDARD_INCLUSIONS,
                 "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
             {
@@ -142,10 +165,10 @@ class Command(BaseCommand):
                 "price_per_person_cents": 420000,
                 "deposit_cents": 200000,
                 "status": Expedition.Status.PUBLISHED,
-                "summary": "Grandes rios, boas companhias, melhores histórias! 4 noites e 3 dias de pesca All Inclusive com gastronomia especial e torneio entre os casais (R$ 8.400 por casal).",
+                "summary": "Grandes rios, boas companhias, melhores histórias! 4 noites e 3 dias de pesca All Inclusive com culinária típica no rio e na pousada e torneio entre os casais (R$ 8.400 por casal).",
                 "lodge": lodges_map["pousada-canaa"],
                 "cover_image_url": "/expeditions/casais-pesca.jpg",
-                "inclusions": DEFAULT_INCLUSIONS,
+                "inclusions": COUPLES_INCLUSIONS,
                 "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
             {
@@ -159,10 +182,10 @@ class Command(BaseCommand):
                 "price_per_person_cents": 560000,
                 "deposit_cents": 250000,
                 "status": Expedition.Status.PUBLISHED,
-                "summary": "Fechamento de temporada 2026 com chave de ouro em São Félix do Araguaia. Pescaria intensiva de Piraíba e Pirarara com estrutura de ponta.",
+                "summary": "Fechamento de temporada 2026 com chave de ouro em São Félix do Araguaia. Pescaria intensiva de Piraíba e Pirarara com estrutura completa.",
                 "lodge": lodges_map["pousada-solar-das-aguas"],
                 "cover_image_url": "/expeditions/por-do-sol-araguaia.jpg",
-                "inclusions": DEFAULT_INCLUSIONS,
+                "inclusions": STANDARD_INCLUSIONS,
                 "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
             {
@@ -176,10 +199,10 @@ class Command(BaseCommand):
                 "price_per_person_cents": 510000,
                 "deposit_cents": 250000,
                 "status": Expedition.Status.PUBLISHED,
-                "summary": "Expedições completas All Inclusive no Rio Araguaia com guias nativos, combustível incluso e torneio entre as duplas.",
+                "summary": "Expedições completas de pesca esportiva no Rio Araguaia com guias nativos, combustível incluso e torneio entre as duplas.",
                 "lodge": lodges_map["pousada-solar-das-aguas"],
                 "cover_image_url": "/expeditions/barco-araguaia.jpg",
-                "inclusions": DEFAULT_INCLUSIONS,
+                "inclusions": STANDARD_INCLUSIONS,
                 "species": ARAGUAIA_DEFAULT_SPECIES_KEYS,
             },
         ]
@@ -198,3 +221,17 @@ class Command(BaseCommand):
                         defaults={"is_primary": idx == 0, "display_order": idx},
                     )
             self.stdout.write(self.style.SUCCESS(f"Expedição {expedition.slug}: {'criada' if created else 'atualizada'}."))
+
+        # Garante catálogo canônico com Stella Artois e sem Amstel
+        from apps.expeditions.models import ExpeditionProduct, Product
+        Product.objects.filter(name__icontains="Amstel").update(active=False)
+        stella, _ = Product.objects.update_or_create(
+            name="Cerveja Stella Artois",
+            defaults={"unit": "lata", "package_size": 12, "aliases": ["stella", "stella_artois", "cerveja_stella"], "active": True},
+        )
+        for exp in Expedition.objects.all():
+            ExpeditionProduct.objects.get_or_create(
+                expedition=exp,
+                product=stella,
+                defaults={"standard_quantity_per_participant": 1, "active": True},
+            )

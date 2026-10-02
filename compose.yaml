@@ -18,13 +18,15 @@ services:
       DEBUG: "true"
       SECRET_KEY: unsafe-local-development-key
       ALLOWED_HOSTS: localhost,127.0.0.1,backend
-      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       ADMIN_EMAIL: admin@expedicaopiraiba.com.br
       ADMIN_PASSWORD: admin-local-2026
       POSTGRES_DB: expedicao_piraiba
       POSTGRES_USER: expedicao_piraiba
       POSTGRES_PASSWORD: expedicao_piraiba
       POSTGRES_HOST: db
+    volumes:
+      - ./backend:/app
     command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     depends_on:
       db:
@@ -53,8 +55,11 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_ENABLE_DEV_TOOLS: "true"
+        NEXT_PUBLIC_API_URL: "/api"
+        API_URL: "http://backend:8000/api"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api
+      API_URL: http://backend:8000/api
+      NEXT_PUBLIC_API_URL: /api
     depends_on:
       - backend
     ports:

@@ -39,4 +39,37 @@ class VerificationChallenge(models.Model):
     class Meta:
         indexes = [models.Index(fields=("customer", "channel", "created_at"))]
 
-# Create your models here.
+
+class CustomerProfile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    customer = models.OneToOneField(Customer, on_delete=models.CASCADE, related_name="profile")
+    rg = models.CharField(max_length=20, blank=True)
+    rg_issuer = models.CharField(max_length=20, blank=True)
+    birth_date = models.DateField(null=True, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=2, blank=True)
+    fishing_license_number = models.CharField(max_length=50, blank=True)
+    fishing_license_expiry = models.DateField(null=True, blank=True)
+    default_vest_size = models.CharField(max_length=10, blank=True)
+    dietary_notes = models.TextField(blank=True)
+    medical_notes = models.TextField(blank=True)
+    emergency_contact_name = models.CharField(max_length=160, blank=True)
+    emergency_contact_phone = models.CharField(max_length=20, blank=True)
+    internal_admin_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("customer__full_name",)
+
+    def __str__(self):
+        return f"Perfil de {self.customer.full_name}"
+
+    @property
+    def has_valid_license(self):
+        if not self.fishing_license_number:
+            return False
+        if not self.fishing_license_expiry:
+            return True
+        from django.utils import timezone
+        return self.fishing_license_expiry >= timezone.localdate()

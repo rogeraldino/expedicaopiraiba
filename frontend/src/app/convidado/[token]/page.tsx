@@ -213,7 +213,7 @@ export default function GuestPage({ params }: { params: Promise<{ token: string 
         <div className="flex gap-2 border-b border-ink-200 pb-3 overflow-x-auto">
           {[
             { id: "FICHA", label: "Ficha de Embarque", icon: UserCheck },
-            { id: "BEVERAGES", label: "Bebidas All Inclusive & Alimentação", icon: GlassWater },
+            { id: "BEVERAGES", label: "Bebidas & Alimentação", icon: GlassWater },
             { id: "CHECKLIST", label: "Checklist de Viagem", icon: ClipboardCheck },
             { id: "LOGISTICS", label: "Encontro & Pousada", icon: MapPin },
           ].map((tab) => {
@@ -559,7 +559,7 @@ function GuestBeveragesForm({
   return (
     <div className="mt-6 max-w-3xl rounded-3xl bg-white p-6 md:p-8 shadow-sm border border-ink-100 space-y-8">
       <div>
-        <h2 className="text-xl font-black text-ink-900">Cardápio de Bebidas All Inclusive</h2>
+        <h2 className="text-xl font-black text-ink-900">Cardápio de Bebidas & Consumo</h2>
         <p className="text-xs text-ink-500 mt-1">
           Selecione as cervejas e refrigerantes que você deseja disponíveis geladas no barco e na pousada.
         </p>

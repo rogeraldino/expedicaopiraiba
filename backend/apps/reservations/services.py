@@ -15,7 +15,7 @@ ALLOWED_TRANSITIONS = {
     Reservation.Status.AWAITING_PAYMENT: {Reservation.Status.PARTIALLY_PAID, Reservation.Status.CONFIRMED, Reservation.Status.PAID, Reservation.Status.EXPIRED, Reservation.Status.CANCELLED},
     Reservation.Status.PARTIALLY_PAID: {Reservation.Status.CONFIRMED, Reservation.Status.PAID, Reservation.Status.EXPIRED, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
     Reservation.Status.CONFIRMED: {Reservation.Status.PAID, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
-    Reservation.Status.PAID: {Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
+    Reservation.Status.PAID: {Reservation.Status.CONFIRMED, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
     Reservation.Status.EXPIRED: set(),
     Reservation.Status.CANCELLED: {Reservation.Status.REFUNDED},
     Reservation.Status.REFUNDED: set(),
@@ -38,8 +38,76 @@ def transition_locked_reservation(*, reservation, target_status, event_type, act
         reservation.held_until = None
         update_fields.append("held_until")
     reservation.save(update_fields=update_fields)
+
+    # Restores gear inventory if cancelled
+    if target_status == Reservation.Status.CANCELLED:
+        for addon in reservation.gear_addons.select_related("gear_product"):
+            gear = addon.gear_product
+            gear.inventory_quantity = F("inventory_quantity") + addon.quantity
+            gear.save(update_fields=["inventory_quantity", "updated_at"])
+            record_reservation_event(
+                reservation=reservation,
+                event_type="GEAR_INVENTORY_RESTORED",
+                actor_type=actor_type,
+                actor_identifier=actor_identifier,
+                reason="Restituição de estoque por cancelamento de reserva.",
+                payload={"gear_product_id": str(gear.id), "gear_name": gear.name, "quantity": addon.quantity},
+            )
+
     record_reservation_event(reservation=reservation, event_type=event_type, actor_type=actor_type, actor_identifier=actor_identifier, previous_status=previous_status, new_status=target_status, reason=reason, payload=payload)
     return reservation, True
+
+
+def recalculate_reservation_financials(
+    *,
+    reservation,
+    actor_type=ReservationEvent.ActorType.SYSTEM,
+    actor_identifier="",
+    admin_actor=None,
+    note="",
+    reason="",
+):
+    """
+    Recalculates total_price_cents from expedition base price + sum of gear addons.
+    Handles transitions between PAID and CONFIRMED when addons are added/removed.
+    """
+    if admin_actor:
+        actor_type = ReservationEvent.ActorType.ADMIN
+        actor_identifier = str(admin_actor)
+    event_reason = note or reason or "Ajuste financeiro de tralhas/equipamentos."
+
+    addons_total = reservation.gear_addons.aggregate(total=Sum("total_price_cents"))["total"] or 0
+    base_price = reservation.unit_price_cents * reservation.participant_count
+    new_total = base_price + addons_total
+    reservation.total_price_cents = new_total
+    reservation.save(update_fields=["total_price_cents", "updated_at"])
+
+    paid_cents = reservation.paid_amount_cents
+    remaining = max(new_total - paid_cents, 0)
+
+    # State transitions
+    if reservation.status == Reservation.Status.PAID and remaining > 0:
+        transition_locked_reservation(
+            reservation=reservation,
+            target_status=Reservation.Status.CONFIRMED,
+            event_type="GEAR_ADDON_ADDED",
+            actor_type=actor_type,
+            actor_identifier=actor_identifier,
+            reason=event_reason,
+            payload={"total_price_cents": new_total, "remaining_balance_cents": remaining, "addons_total_cents": addons_total},
+        )
+    elif reservation.status == Reservation.Status.CONFIRMED and remaining == 0 and paid_cents >= new_total:
+        transition_locked_reservation(
+            reservation=reservation,
+            target_status=Reservation.Status.PAID,
+            event_type="GEAR_ADDON_REMOVED",
+            actor_type=actor_type,
+            actor_identifier=actor_identifier,
+            reason=event_reason,
+            payload={"total_price_cents": new_total, "paid_cents": paid_cents},
+        )
+
+    return reservation
 
 
 @transaction.atomic

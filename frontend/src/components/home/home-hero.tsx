@@ -4,7 +4,7 @@ import { ArrowRight, CalendarDays, Fish, MessageCircle, Trophy, Users, UtensilsC
 const highlights = [
   { icon: Fish, title: "Enfrentar gigantes", detail: "Piraíbas e pirararas do Araguaia." },
   { icon: Trophy, title: "Batalhas inesquecíveis", detail: "Pesca esportiva com guias nativos." },
-  { icon: UtensilsCrossed, title: "Gastronomia no rio", detail: "Sabores que fazem parte da viagem." },
+  { icon: UtensilsCrossed, title: "Culinária no rio", detail: "Sabores típicos que fazem parte da viagem." },
   { icon: Users, title: "Histórias para compartilhar", detail: "Amizades e momentos para guardar." },
 ];
 
@@ -23,7 +23,7 @@ export function HomeHero() {
             O Rio Araguaia <span className="block text-gold-200">está chamando.</span>
           </h1>
           <p className="mt-7 max-w-[560px] text-[15px] leading-relaxed text-white/90 sm:text-lg">
-            Há mais de 20 anos proporcionando o que existe de melhor na pesca esportiva de gigantes. Barco, guias nativos, combustível, gastronomia e estrutura. <strong className="text-white">Tudo All Inclusive.</strong>
+            Há mais de 20 anos proporcionando o que existe de melhor na pesca esportiva de gigantes. Barco, guias nativos, combustível livre, comida típica no rio e estrutura completa. <strong className="text-white">Experiência completa no Araguaia.</strong>
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <a href="#expedicoes" className="home-button home-button-gold"><CalendarDays size={18} /> Ver expedições <ArrowRight size={17} /></a>

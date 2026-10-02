@@ -8,6 +8,10 @@ from .models import Expedition, Lodge, TargetSpecies
 
 
 class LodgeSerializer(serializers.ModelSerializer):
+    river_name = serializers.CharField(source="river.name", read_only=True, default=None)
+    amenities = serializers.SerializerMethodField()
+    amenities_detailed = serializers.SerializerMethodField()
+
     class Meta:
         model = Lodge
         fields = (
@@ -17,13 +21,35 @@ class LodgeSerializer(serializers.ModelSerializer):
             "city",
             "state",
             "river_section",
+            "river_name",
             "description",
+            "boat_fleet_details",
             "amenities",
+            "amenities_detailed",
             "meeting_point",
             "directions",
             "cover_image_url",
             "active",
         )
+
+    def get_amenities(self, obj):
+        structured = list(obj.amenities_structured.filter(active=True).values_list("name", flat=True))
+        if structured:
+            return structured
+        return obj.amenities or []
+
+    def get_amenities_detailed(self, obj):
+        return [
+            {
+                "id": str(a.id),
+                "name": a.name,
+                "category": a.category,
+                "category_display": a.get_category_display(),
+                "icon_key": a.icon_key,
+                "description": a.description,
+            }
+            for a in obj.amenities_structured.filter(active=True)
+        ]
 
 
 class TargetSpeciesSerializer(serializers.ModelSerializer):
@@ -36,6 +62,8 @@ class ExpeditionSerializer(serializers.ModelSerializer):
     available_slots = serializers.SerializerMethodField()
     duration_days = serializers.IntegerField(read_only=True)
     lodge = LodgeSerializer(read_only=True)
+    all_inclusive_package_name = serializers.CharField(source="all_inclusive_package.name", read_only=True, default=None)
+    beverage_package_name = serializers.CharField(source="beverage_package.name", read_only=True, default=None)
     target_species = serializers.SerializerMethodField()
 
     class Meta:
@@ -58,6 +86,8 @@ class ExpeditionSerializer(serializers.ModelSerializer):
             "cover_image_url",
             "gallery_image_urls",
             "inclusions",
+            "all_inclusive_package_name",
+            "beverage_package_name",
             "lodge",
             "target_species",
         )
