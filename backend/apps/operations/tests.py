@@ -51,6 +51,28 @@ class OperationsApiTests(TestCase):
         updated = self.client.patch(f"/api/operations/expeditions/{created.data['id']}/", {"status": "PUBLISHED"}, format="json", **auth)
         self.assertEqual(updated.data["status"], "PUBLISHED")
 
+    def test_expedition_gallery_and_meeting_instructions_round_trip(self):
+        auth = self.login()
+        url = f"/api/operations/expeditions/{self.expedition.id}/"
+        images = ["/gallery/captura-dupla.jpg", "/gallery/barco-araguaia.jpg"]
+        updated = self.client.patch(url, {
+            "cover_image_url": "/gallery/piraiba-rio.jpg",
+            "gallery_image_urls": images,
+            "meeting_instructions": "",
+        }, format="json", **auth)
+        self.assertEqual(updated.status_code, 200)
+        admin = self.client.get(url, **auth)
+        self.assertEqual(admin.data["cover_image_url"], "/gallery/piraiba-rio.jpg")
+        self.assertEqual(admin.data["gallery_image_urls"], images)
+        public = self.client.get(f"/api/expeditions/{self.expedition.slug}/")
+        self.assertEqual(public.data["gallery_image_urls"], images)
+        edited = self.client.patch(url, {
+            "gallery_image_urls": [images[1]], "meeting_instructions": "Portão principal",
+        }, format="json", **auth)
+        self.assertEqual(edited.status_code, 200)
+        self.assertEqual(edited.data["gallery_image_urls"], [images[1]])
+        self.assertEqual(edited.data["meeting_instructions"], "Portão principal")
+
     def test_development_cleanup_preserves_expeditions(self):
         customer = Customer.objects.create(cpf="52998224725", full_name="João", email="joao@example.com", phone="62999999999")
         Reservation.objects.create(customer=customer, expedition=self.expedition, participant_count=1, unit_price_cents=249000, total_price_cents=249000, deposit_cents=120000)

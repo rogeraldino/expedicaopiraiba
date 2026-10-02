@@ -51,12 +51,14 @@ nano .env
 docker compose -f compose.production.yaml up -d --build
 ```
 
-### Passo 4: Popular o Banco de Dados com os Dados Oficiais
+### Passo 4: Aplicar migrações e cadastrar o Desafio Piraíba 2026
 ```bash
-# Roda as migrações e cadastra as 4 expedições reais de 2026
+# Roda as migrações e cadastra a única expedição aprovada para 28–31/10/2026
 docker compose -f compose.production.yaml exec backend python manage.py migrate
-docker compose -f compose.production.yaml exec backend python manage.py seed_demo
+docker compose -f compose.production.yaml exec backend python manage.py create_desafio_piraiba_2026
 ```
+
+Antes do comando, confira expedições e reservas existentes nessas datas. A carga bloqueia colisões ambíguas e reservas e só publica após vincular pousada, espécies, Pacote da Expedição e bebidas. Ela reconcilia os dados aprovados se for reexecutada sem reservas, sobrescrevendo edições administrativas posteriores. Não use `seed_demo` para esta implantação: ele cria outras viagens de demonstração.
 
 ### Passo 5: Configurar o Caddy na VPS
 Abra o Caddyfile da VPS (geralmente em `/etc/caddy/Caddyfile`):
@@ -101,4 +103,5 @@ Para atualizar o código na VPS:
 ```bash
 git pull
 docker compose -f compose.production.yaml up -d --build
+docker compose -f compose.production.yaml exec backend python manage.py migrate
 ```

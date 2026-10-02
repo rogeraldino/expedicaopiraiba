@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import Link from "next/link";
 import { CalendarDays, Clock, MapPin, Users } from "lucide-react";
 
@@ -21,30 +22,14 @@ type ExpeditionData = {
   summary: string;
 };
 
-const fallback: ExpeditionData = {
-  id: "sao-felix-28-out",
-  name: "São Félix do Araguaia — 28 a 31 Out",
-  slug: "sao-felix-28-out",
-  destination: "São Félix do Araguaia/MT (Pousada Solar das Águas)",
-  departure_location: "São Félix do Araguaia/MT",
-  starts_at: "2026-10-28",
-  ends_at: "2026-10-31",
-  duration_days: 4,
-  capacity: 12,
-  available_slots: 12,
-  price_per_person_cents: 560000,
-  deposit_cents: 250000,
-  summary: "Fechamento de temporada 2026 com chave de ouro em São Félix do Araguaia.",
-};
-
 async function getExpedition(slug: string): Promise<ExpeditionData> {
   const api = process.env.API_URL ?? "http://localhost:8000/api";
   try {
-    const res = await fetch(`${api}/expeditions/${slug}/`, { next: { revalidate: 60 } });
-    if (!res.ok) return fallback;
+    const res = await fetch(`${api}/expeditions/${slug}/`, { cache: "no-store" });
+    if (!res.ok) notFound();
     return (await res.json()) as ExpeditionData;
   } catch {
-    return fallback;
+    notFound();
   }
 }
 

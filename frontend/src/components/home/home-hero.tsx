@@ -1,14 +1,15 @@
 import Image from "next/image";
-import { ArrowRight, CalendarDays, Fish, MessageCircle, Trophy, Users, UtensilsCrossed } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CalendarDays, MessageCircle } from "lucide-react";
+import type { Expedition } from "@/lib/api/expeditions";
+import { selectNextExpedition } from "@/lib/api/next-expedition";
 
-const highlights = [
-  { icon: Fish, title: "Enfrentar gigantes", detail: "Piraíbas e pirararas do Araguaia." },
-  { icon: Trophy, title: "Batalhas inesquecíveis", detail: "Pesca esportiva com guias nativos." },
-  { icon: UtensilsCrossed, title: "Culinária no rio", detail: "Sabores típicos que fazem parte da viagem." },
-  { icon: Users, title: "Histórias para compartilhar", detail: "Amizades e momentos para guardar." },
-];
+const price = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const date = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
 
-export function HomeHero() {
+export function HomeHero({ expeditions }: { expeditions: Expedition[] }) {
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const next = selectNextExpedition(expeditions, today);
   return (
     <section className="home-hero relative isolate overflow-hidden bg-river-950 text-white" aria-labelledby="home-title">
       <picture className="absolute inset-0">
@@ -31,16 +32,15 @@ export function HomeHero() {
           </div>
         </div>
         <aside className="home-hero-panel rounded-xl border border-gold-300/40 bg-river-950/85 p-6 shadow-2xl backdrop-blur-md">
-          <p className="home-eyebrow text-gold-200">Muito mais que pesca esportiva</p>
-          <ul className="mt-6 space-y-5">
-            {highlights.map(({ icon: Icon, title, detail }) => (
-              <li key={title} className="flex gap-4">
-                <Icon aria-hidden="true" className="mt-0.5 size-6 shrink-0 text-gold-300" strokeWidth={1.5} />
-                <span><strong className="block text-sm">{title}</strong><span className="mt-0.5 block text-xs leading-relaxed text-white/70">{detail}</span></span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-6 rounded-md border border-gold-300/55 px-4 py-3 text-center text-xs font-semibold text-gold-200">Consulte as vagas disponíveis em cada expedição</p>
+          <p className="home-eyebrow text-gold-200">Próxima expedição</p>
+          {next ? <>
+            {next.cover_image_url && <img src={next.cover_image_url} alt="Capa da próxima expedição" className="mt-5 aspect-video w-full rounded-lg object-cover" />}
+            <h2 className="mt-5 text-2xl font-black leading-tight">{next.name}</h2>
+            <p className="mt-3 text-sm text-white/80">{date.format(new Date(`${next.starts_at}T00:00:00Z`))} a {date.format(new Date(`${next.ends_at}T00:00:00Z`))} · {next.destination}</p>
+            <p className="mt-4 text-lg font-bold text-gold-200">{price.format(next.price_per_person_cents / 100)} <span className="text-xs font-normal text-white/70">por pessoa</span></p>
+            <p className="mt-1 text-xs text-white/70">{next.available_slots} vaga{next.available_slots === 1 ? "" : "s"} disponível{next.available_slots === 1 ? "" : "is"}</p>
+            <Link href={`/expedicoes/${next.slug}/checkout`} className="home-button home-button-gold mt-5 w-full justify-center">Reservar minha vaga <ArrowRight size={16} /></Link>
+          </> : <p className="mt-5 text-sm text-white/80">Novas datas serão anunciadas em breve.</p>}
         </aside>
       </div>
       <div className="pointer-events-none absolute bottom-5 left-5 hidden items-center gap-3 text-[10px] font-bold uppercase tracking-[.28em] text-white/65 xl:flex"><span className="h-px w-6 bg-gold-300" /> Gigantes existem aqui</div>

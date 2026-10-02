@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -55,53 +56,20 @@ type ExpeditionData = {
   deposit_cents: number;
   summary: string;
   cover_image_url?: string;
+  gallery_image_urls?: string[];
   lodge?: Lodge | null;
   target_species?: TargetSpecies[];
   inclusions?: string[];
 };
 
-const fallback: ExpeditionData = {
-  id: "sao-felix-28-out",
-  name: "São Félix do Araguaia — 28 a 31 Out",
-  slug: "sao-felix-28-out",
-  destination: "São Félix do Araguaia/MT (Pousada Solar das Águas)",
-  departure_location: "São Félix do Araguaia/MT",
-  starts_at: "2026-10-28",
-  ends_at: "2026-10-31",
-  duration_days: 4,
-  capacity: 12,
-  available_slots: 12,
-  price_per_person_cents: 560000,
-  deposit_cents: 250000,
-  summary: "4 dias completos de pescaria no Rio Araguaia na Pousada Solar das Águas.",
-  cover_image_url: "/expeditions/ponte-sao-felix.jpg",
-  lodge: {
-    id: "solar-das-aguas",
-    name: "Pousada Solar das Águas",
-    slug: "solar-das-aguas",
-    city: "São Félix do Araguaia",
-    state: "MT",
-    river_section: "Médio Araguaia",
-    description: "Excelente infraestrutura na beira do Rio Araguaia, quartos suítes climatizados, piscina e culinária típica no capricho.",
-    amenities: ["Suítes Climatizadas", "Piscina", "Wi-Fi", "Refeitório Climatizado", "Deck Flutuante"],
-    meeting_point: "Pousada Solar das Águas — Recepção",
-  },
-  target_species: [
-    { id: "1", common_name: "Piraíba", slug: "piraiba", scientific_name: "Brachyplatystoma filamentosum", category: "COURO", is_primary: true },
-    { id: "2", common_name: "Pirarara", slug: "pirarara", scientific_name: "Phractocephalus hemioliopterus", category: "COURO", is_primary: true },
-    { id: "3", common_name: "Bargada", slug: "bargada", category: "COURO", is_primary: false },
-    { id: "4", common_name: "Tucunaré Azul", slug: "tucunare-azul", category: "ESCAMA", is_primary: false },
-  ],
-};
-
 async function getExpedition(slug: string): Promise<ExpeditionData> {
   const api = process.env.API_URL ?? "http://localhost:8000/api";
   try {
-    const res = await fetch(`${api}/expeditions/${slug}/`, { next: { revalidate: 60 } });
-    if (!res.ok) return fallback;
+    const res = await fetch(`${api}/expeditions/${slug}/`, { cache: "no-store" });
+    if (!res.ok) notFound();
     return (await res.json()) as ExpeditionData;
   } catch {
-    return fallback;
+    notFound();
   }
 }
 
@@ -202,6 +170,19 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
           />
         </div>
       </section>
+
+      {Boolean(expedition.gallery_image_urls?.length) && (
+        <section className="container-page pb-12" aria-labelledby="expedition-gallery-title">
+          <h2 id="expedition-gallery-title" className="mb-4 text-lg font-black uppercase text-brand-800">Galeria da Expedição</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {expedition.gallery_image_urls?.map((url) => (
+              <div key={url} className="relative aspect-video overflow-hidden rounded-xl bg-brand-50">
+                <Image src={url} alt={`Foto da expedição ${expedition.name}`} fill sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-cover" unoptimized={url.startsWith("http")} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* DETALHAMENTO DO PACOTE */}
       <section className="container-page grid gap-5 pb-12 lg:grid-cols-2">

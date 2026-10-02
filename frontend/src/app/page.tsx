@@ -9,6 +9,8 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
 import { getExpeditions } from "@/lib/api/expeditions";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const expeditions = await getExpeditions();
 
@@ -16,7 +18,7 @@ export default async function Home() {
     <div className="home-page min-h-screen bg-paper text-ink">
       <SiteHeader />
       <main>
-        <HomeHero />
+        <HomeHero expeditions={expeditions} />
         <ExpeditionSection expeditions={expeditions} />
         <ExperienceSection />
         <StoriesSection />

@@ -1,5 +1,9 @@
 from datetime import date, timedelta
+from importlib import import_module
+from io import StringIO
 
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -8,7 +12,7 @@ from rest_framework.test import APIClient
 from apps.customers.models import Customer
 from apps.reservations.models import Reservation
 
-from .models import Expedition
+from .models import Amenity, BeveragePackageItem, Expedition, ExpeditionProduct, Lodge, Product, River, TargetSpecies
 from .services import transition_expedition
 
 
@@ -123,3 +127,55 @@ class PublishedExpeditionApiTests(TestCase):
         res_species = self.client.get("/api/species/")
         self.assertEqual(res_species.status_code, 200)
         self.assertTrue(any(s["slug"] == "piraiba_teste" for s in res_species.json()))
+
+
+class DesafioPiraibaCommandTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        River.objects.get_or_create(slug="rio-araguaia", defaults={"name": "Rio Araguaia"})
+        Lodge.objects.filter(name="Pousada Solar das Águas").update(
+            city="São Félix do Araguaia", state="MT", directions="",
+        )
+        TargetSpecies.objects.get_or_create(slug="piraiba", defaults={"common_name": "Piraíba"})
+        for name in ("Cerveja Heineken", "Cerveja Stella Artois", "Cerveja Original"):
+            Product.objects.get_or_create(name=name, defaults={"unit": "lata"})
+        catalog = import_module("apps.expeditions.migrations.0009_seed_rivers_amenities_and_migrate_lodges").AMENITIES_CATALOG
+        for name, category, icon_key, description, display_order in catalog:
+            Amenity.objects.get_or_create(name=name, defaults={
+                "category": category, "icon_key": icon_key,
+                "description": description, "display_order": display_order,
+            })
+
+    def test_publishes_once_and_reconciles_drift_on_retry(self):
+        call_command("create_desafio_piraiba_2026", stdout=StringIO())
+        expedition = Expedition.objects.get(slug="desafio-piraiba-rio-araguaia")
+        self.assertEqual(expedition.status, Expedition.Status.PUBLISHED)
+        self.assertEqual(expedition.deposit_cents, 112000)
+        self.assertEqual(expedition.balance_due_days_before, 7)
+        self.assertEqual(expedition.expedition_species.filter(is_primary=True).get().species.slug, "piraiba")
+        self.assertEqual(expedition.product_offers.count(), 3)
+        expedition.summary = "Resumo editado no admin"
+        expedition.save()
+        extra = Product.objects.create(name="Bebida indevida", unit="lata")
+        BeveragePackageItem.objects.create(package=expedition.beverage_package, product=extra, standard_quantity_per_participant=9)
+        ExpeditionProduct.objects.create(expedition=expedition, product=extra, standard_quantity_per_participant=9)
+        expedition.all_inclusive_package.inclusions = ["Outra inclusão"]
+        expedition.all_inclusive_package.save()
+        call_command("create_desafio_piraiba_2026", stdout=StringIO())
+        self.assertEqual(Expedition.objects.filter(starts_at=date(2026, 10, 28), ends_at=date(2026, 10, 31)).count(), 1)
+        expedition.refresh_from_db()
+        self.assertNotEqual(expedition.summary, "Resumo editado no admin")
+        self.assertEqual(expedition.all_inclusive_package.inclusions, expedition.inclusions)
+        self.assertEqual(expedition.beverage_package.items.count(), 3)
+        self.assertEqual(expedition.product_offers.count(), 3)
+
+    def test_refuses_to_change_expedition_with_reservation(self):
+        call_command("create_desafio_piraiba_2026", stdout=StringIO())
+        expedition = Expedition.objects.get(slug="desafio-piraiba-rio-araguaia")
+        customer = Customer.objects.create(cpf="52998224725", full_name="Cliente", email="cliente@teste.com", phone="5562999999999")
+        Reservation.objects.create(
+            customer=customer, expedition=expedition, participant_count=1,
+            unit_price_cents=560000, total_price_cents=560000, deposit_cents=112000,
+        )
+        with self.assertRaises(CommandError):
+            call_command("create_desafio_piraiba_2026", stdout=StringIO())

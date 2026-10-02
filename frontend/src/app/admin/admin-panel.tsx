@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, BarChart3, Beer, CalendarDays, Check, ChevronLeft, ChevronRight, Compass, Copy, Download, ExternalLink, FileText, Fish, House, ImageIcon, Layers, ListChecks, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, Sparkles, TicketCheck, Trash2, Users, X } from "lucide-react";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
@@ -19,7 +19,7 @@ type FishingGearProduct = { id: string; name: string; slug: string; category: st
 type ReservationGearAddon = { id: string; reservation?: string; participant?: string | null; participant_name?: string | null; gear_product: string; gear_product_id?: string; gear_product_name: string; gear_product_category: string; gear_product_category_display: string; modality: "RENTAL" | "SALE"; quantity: number; unit_price_cents: number; total_price_cents: number; notes: string; delivered: boolean; created_at: string };
 type CustomerProfile = { id?: string; rg?: string; rg_issuer?: string; birth_date?: string | null; city?: string; state?: string; fishing_license_number?: string; fishing_license_expiry?: string | null; has_valid_license?: boolean; default_vest_size?: string; dietary_notes?: string; medical_notes?: string; emergency_contact_name?: string; emergency_contact_phone?: string; internal_admin_notes?: string; created_at?: string; updated_at?: string };
 type CustomerCRM = { id: string; cpf: string; full_name: string; email: string; phone: string; city: string; state: string; has_valid_license: boolean; total_reservations: number; lifetime_value_cents: number; last_expedition_name?: string; last_expedition_date?: string; created_at: string; profile?: CustomerProfile; reservations?: { id: string; expedition_name: string; starts_at: string; status: string; participant_count: number; total_price_cents: number; paid_amount_cents: number; remaining_balance_cents: number; gear_addons_count: number; created_at: string }[] };
-type Expedition = { id: string; name: string; slug: string; destination: string; departure_location?: string; starts_at: string; ends_at: string; capacity: number; occupied_slots: number; available_slots: number; price_per_person_cents: number; deposit_cents: number; balance_due_days_before: number; status: string; summary: string; lodge?: Lodge | null; lodge_id?: string | null; all_inclusive_package?: { id: string; name: string; slug: string } | null; all_inclusive_package_id?: string | null; beverage_package?: { id: string; name: string; slug: string } | null; beverage_package_id?: string | null; cover_image_url?: string; target_species?: (Species & { is_primary?: boolean })[]; species_slugs?: string[]; inclusions?: string[] };
+type Expedition = { id: string; name: string; slug: string; destination: string; departure_location?: string; meeting_instructions?: string; starts_at: string; ends_at: string; capacity: number; occupied_slots: number; available_slots: number; price_per_person_cents: number; deposit_cents: number; balance_due_days_before: number; status: string; summary: string; lodge?: Lodge | null; lodge_id?: string | null; all_inclusive_package?: { id: string; name: string; slug: string } | null; all_inclusive_package_id?: string | null; beverage_package?: { id: string; name: string; slug: string } | null; beverage_package_id?: string | null; cover_image_url?: string; gallery_image_urls?: string[]; target_species?: (Species & { is_primary?: boolean })[]; species_slugs?: string[]; inclusions?: string[] };
 type Participant = { id: string; name: string; cpf?: string; phone: string; birth_date?: string | null; emergency_contact_name?: string; emergency_contact_phone?: string; operational_notes?: string; onboarding_status: string; preferences_confirmed?: boolean; dietary_confirmed?: boolean; checklist_completed?: boolean; selected_offers?: { id: string; name: string }[]; dietary_restrictions?: string[]; dietary_details?: string };
 type OperationalAlert = { id?: string; type?: string; level?: string; title?: string; message: string; reservation_id?: string; expedition_id?: string };
 type ExpeditionIndicator = { expedition_id?: string; id?: string; expedition_name?: string; name?: string; capacity: number; held_slots?: number; confirmed_slots?: number; occupied_slots?: number; available_slots: number; sold_cents?: number; received_cents?: number; outstanding_cents?: number; pending_preferences?: number; pending_checklists?: number; restrictions?: number };
@@ -41,10 +41,63 @@ const shortDate = (value?: string | null) => value ? new Date(value.length === 1
 const labels: Record<string, string> = { DRAFT: "Rascunho", PUBLISHED: "Publicada", SOLD_OUT: "Esgotada", CLOSED: "Encerrada", IN_PROGRESS: "Em andamento", COMPLETED: "Concluída", CANCELLED: "Cancelada", HELD: "Vagas protegidas", AWAITING_PAYMENT: "Aguardando pagamento", PARTIALLY_PAID: "Parcialmente paga", CONFIRMED: "Confirmada", PAID: "Paga", EXPIRED: "Expirada", REFUNDED: "Reembolsada" };
 const danger = ["EXPIRED", "CANCELLED", "REFUNDED"];
 function Status({ value }: { value: string }) { const tone = ["PAID", "CONFIRMED", "PUBLISHED", "COMPLETED"].includes(value) ? "bg-brand-100 text-brand-800" : danger.includes(value) ? "bg-red-100 text-red-700" : ["AWAITING_PAYMENT", "PARTIALLY_PAID"].includes(value) ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-700"; return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${tone}`}>{labels[value] ?? value}</span>; }
-function errorMessage(value: unknown) { if (!value || typeof value !== "object") return typeof value === "string" ? value : "Não foi possível concluir a operação."; const record = value as Record<string, unknown>; return typeof record.detail === "string" ? record.detail : Object.values(record).flat(3).join(" "); }
+function errorMessage(value: unknown) { if (value instanceof Error) return value.message || "Não foi possível concluir a operação."; if (!value || typeof value !== "object") return typeof value === "string" ? value : "Não foi possível concluir a operação."; const record = value as Record<string, unknown>; return typeof record.detail === "string" ? record.detail : Object.values(record).flat(3).join(" ") || "Não foi possível concluir a operação."; }
 async function request<T>(path: string, token: string, init?: RequestInit): Promise<T> { const response = await fetch(`${api}/operations/${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, ...(init?.body ? { "Content-Type": "application/json" } : {}), ...init?.headers } }); const result = (response.headers.get("content-type") ?? "").includes("json") ? await response.json() : await response.text(); if (!response.ok) throw result; return result as T; }
-function useData<T>(path: string | null, token: string, unauthorized: () => void) { const [data, setData] = useState<T | null>(null); const [error, setError] = useState(""); const [loading, setLoading] = useState(Boolean(path)); const load = useCallback(async () => { if (!path) return; setLoading(true); setError(""); try { setData(await request<T>(path, token)); } catch (value) { const message = errorMessage(value); if (message.toLowerCase().includes("sessão administrativa")) unauthorized(); else setError(message); } finally { setLoading(false); } }, [path, token, unauthorized]); useEffect(() => { const task = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(task); }, [load]); return { data, error, loading, load }; }
-function State({ loading, error }: { loading: boolean; error: string }) { if (loading) return <div className="rounded-xl bg-white p-10 text-center text-ink-500">Carregando dados...</div>; if (error) return <div className="rounded-xl bg-red-50 p-5 font-bold text-red-700">{error}</div>; return null; }
+function useData<T>(path: string | null, token: string, unauthorized: () => void) {
+  const [data, setData] = useState<T | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(Boolean(path));
+  const unauthorizedRef = useRef(unauthorized);
+  const requestId = useRef(0);
+  useEffect(() => { unauthorizedRef.current = unauthorized; }, [unauthorized]);
+
+  const load = useCallback(async (signal?: AbortSignal) => {
+    const currentId = ++requestId.current;
+    if (!path) {
+      setData(null);
+      setError("");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) controller.abort();
+    try {
+      const result = await request<T>(path, token, { signal: controller.signal });
+      if (requestId.current === currentId && !controller.signal.aborted) setData(result);
+    } catch (value) {
+      if (requestId.current !== currentId || signal?.aborted) return;
+      if (controller.signal.aborted) {
+        setError("A consulta demorou demais. Tente carregar novamente.");
+      } else {
+        const message = errorMessage(value);
+        if (message.toLowerCase().includes("sessão administrativa")) unauthorizedRef.current();
+        else setError(message);
+      }
+    } finally {
+      window.clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      if (requestId.current === currentId && !signal?.aborted) setLoading(false);
+    }
+  }, [path, token]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const currentRequestId = requestId;
+    const task = window.setTimeout(() => void load(controller.signal), 0);
+    return () => {
+      window.clearTimeout(task);
+      controller.abort();
+      ++currentRequestId.current;
+    };
+  }, [load]);
+  return { data, error, loading, load };
+}
+function State({ loading, error, retry }: { loading: boolean; error: string; retry?: () => void }) { if (loading) return <div className="rounded-xl bg-white p-10 text-center text-ink-500">Carregando dados...</div>; if (error) return <div className="rounded-xl bg-red-50 p-5 font-bold text-red-700">{error}{retry && <button type="button" onClick={retry} className="ml-3 rounded-lg border border-red-300 px-3 py-1 text-sm">Tentar novamente</button>}</div>; return null; }
 function Empty({ children }: { children: ReactNode }) { return <p className="p-8 text-center text-sm text-ink-500">{children}</p>; }
 function Header({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) { return <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-2xl font-black">{title}</h2><p className="mt-1 text-sm text-ink-500">{subtitle}</p></div>{action}</div>; }
 
@@ -64,7 +117,7 @@ export function AdminPanel() {
 
 function Login({ onLogin }: { onLogin: (token: string) => void }) { const [email,setEmail] = useState("admin@expedicaopiraiba.com.br"); const [password,setPassword] = useState("admin-local-2026"); const [error,setError] = useState(""); const [loading,setLoading] = useState(false); async function submit(event: FormEvent) { event.preventDefault(); setLoading(true); setError(""); try { const response = await fetch(`${api}/operations/login/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email,password }) }); const data = await response.json(); if (!response.ok) throw data; onLogin(data.token); } catch (value) { setError(errorMessage(value)); } finally { setLoading(false); } } return <main className="grid min-h-screen place-items-center bg-brand-900 p-5"><form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-8"><Image src="/brand/logo-expedicao-piraiba.png" alt="Expedição Piraíba" width={72} height={72} className="mx-auto rounded-full" /><h1 className="mt-5 text-center text-2xl font-black">Painel operacional</h1><label className="mt-7 block text-sm font-bold">E-mail<input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-2 h-12 w-full rounded-lg border px-3" /></label><label className="mt-4 block text-sm font-bold">Senha<input type="password" value={password} onChange={e => setPassword(e.target.value)} className="mt-2 h-12 w-full rounded-lg border px-3" /></label>{error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}<button disabled={loading} className="mt-5 min-h-12 w-full rounded-lg bg-brand-600 font-bold text-white">{loading ? "Entrando..." : "Entrar"}</button></form></main>; }
 
-function OverviewPanel({ token, unauthorized, go }: { token: string; unauthorized: () => void; go: (value: Section) => void }) { const result = useData<Overview>("overview/", token, unauthorized); if (!result.data) return <State loading={result.loading} error={result.error} />; const data = result.data; const cards = [["Valor vendido", money(data.sold_cents)], ["Valor recebido", money(data.revenue_cents)], ["Saldo pendente", money(data.outstanding_cents)], ["Reservas confirmadas", data.reservations.confirmed], ["Cadastros pendentes", data.incomplete_participants], ["Reservas totais", data.reservations.total]]; const indicators=data.expedition_indicators??data.expeditions??[]; return <div><Header title="Resumo do negócio" subtitle="Financeiro, ocupação e pendências operacionais." action={<button onClick={() => void result.load()} className="rounded-lg border bg-white p-2.5"><RefreshCw className="size-5" /></button>} /><section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([label,value]) => <article key={label} className="rounded-xl bg-white p-5"><span className="text-sm font-bold text-ink-500">{label}</span><strong className="mt-3 block text-2xl font-black">{value}</strong></article>)}</section>{Boolean(data.alerts?.length || data.incomplete_participants) && <section className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-black text-amber-900"><AlertTriangle className="mr-2 inline size-5" />Alertas operacionais</h3>{data.alerts?.map((alert,index) => <button key={alert.id ?? index} onClick={() => go("reservations")} className="mt-3 block w-full rounded-lg bg-white p-3 text-left text-sm"><strong>{alert.title ?? "Atenção"}</strong><span className="ml-2 text-ink-500">{alert.message}</span></button>)}{!data.alerts?.length && <p className="mt-2 text-sm">Há {data.incomplete_participants} cadastro(s) pendente(s).</p>}</section>}{indicators.length>0&&<ExpeditionIndicators items={indicators}/>}<div className="mt-6 grid gap-6 xl:grid-cols-2"><section className="rounded-xl bg-white p-5"><h3 className="font-black">Próximas expedições</h3>{data.upcoming_expeditions.map(item => <div key={item.id} className="mt-3 flex items-center gap-3 rounded-lg bg-[#f7f8f4] p-3"><CalendarDays className="text-brand-700" /><div className="flex-1"><strong>{item.name}</strong><p className="text-xs text-ink-500">{shortDate(item.starts_at)} · {item.destination}</p></div><strong>{item.occupied_slots}/{item.capacity}</strong></div>)}</section><section className="rounded-xl bg-white p-5"><h3 className="font-black">Reservas recentes</h3>{data.recent_reservations.map(item => <button key={item.id} onClick={() => go("reservations")} className="mt-3 flex w-full items-center gap-3 border-b pb-3 text-left"><div className="flex-1"><strong>{item.customer.name}</strong><p className="text-xs text-ink-500">{item.expedition.name}</p></div><Status value={item.status} /></button>)}</section></div></div>; }
+function OverviewPanel({ token, unauthorized, go }: { token: string; unauthorized: () => void; go: (value: Section) => void }) { const result = useData<Overview>("overview/", token, unauthorized); if (!result.data) return <State loading={result.loading} error={result.error} retry={() => void result.load()} />; const data = result.data; const cards = [["Valor vendido", money(data.sold_cents)], ["Valor recebido", money(data.revenue_cents)], ["Saldo pendente", money(data.outstanding_cents)], ["Reservas confirmadas", data.reservations.confirmed], ["Cadastros pendentes", data.incomplete_participants], ["Reservas totais", data.reservations.total]]; const indicators=data.expedition_indicators??data.expeditions??[]; return <div><Header title="Resumo do negócio" subtitle="Financeiro, ocupação e pendências operacionais." action={<button onClick={() => void result.load()} className="rounded-lg border bg-white p-2.5"><RefreshCw className="size-5" /></button>} /><section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([label,value]) => <article key={label} className="rounded-xl bg-white p-5"><span className="text-sm font-bold text-ink-500">{label}</span><strong className="mt-3 block text-2xl font-black">{value}</strong></article>)}</section>{Boolean(data.alerts?.length || data.incomplete_participants) && <section className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-black text-amber-900"><AlertTriangle className="mr-2 inline size-5" />Alertas operacionais</h3>{data.alerts?.map((alert,index) => <button key={alert.id ?? index} onClick={() => go("reservations")} className="mt-3 block w-full rounded-lg bg-white p-3 text-left text-sm"><strong>{alert.title ?? "Atenção"}</strong><span className="ml-2 text-ink-500">{alert.message}</span></button>)}{!data.alerts?.length && <p className="mt-2 text-sm">Há {data.incomplete_participants} cadastro(s) pendente(s).</p>}</section>}{indicators.length>0&&<ExpeditionIndicators items={indicators}/>}<div className="mt-6 grid gap-6 xl:grid-cols-2"><section className="rounded-xl bg-white p-5"><h3 className="font-black">Próximas expedições</h3>{data.upcoming_expeditions.map(item => <div key={item.id} className="mt-3 flex items-center gap-3 rounded-lg bg-[#f7f8f4] p-3"><CalendarDays className="text-brand-700" /><div className="flex-1"><strong>{item.name}</strong><p className="text-xs text-ink-500">{shortDate(item.starts_at)} · {item.destination}</p></div><strong>{item.occupied_slots}/{item.capacity}</strong></div>)}</section><section className="rounded-xl bg-white p-5"><h3 className="font-black">Reservas recentes</h3>{data.recent_reservations.map(item => <button key={item.id} onClick={() => go("reservations")} className="mt-3 flex w-full items-center gap-3 border-b pb-3 text-left"><div className="flex-1"><strong>{item.customer.name}</strong><p className="text-xs text-ink-500">{item.expedition.name}</p></div><Status value={item.status} /></button>)}</section></div></div>; }
 
 function ExpeditionIndicators({items}:{items:ExpeditionIndicator[]}){return <section className="mt-6"><h3 className="text-lg font-black">Indicadores por expedição</h3><div className="mt-3 grid gap-4 xl:grid-cols-2">{items.map((item,index)=><article key={item.expedition_id??item.id??index} className="rounded-xl bg-white p-5"><div className="flex justify-between gap-3"><strong>{item.expedition_name??item.name??"Expedição"}</strong><span className="text-sm font-bold text-brand-700">{item.available_slots} vagas livres</span></div><div className="mt-4 grid grid-cols-3 gap-2 text-sm"><Indicator label="Confirmadas" value={item.confirmed_slots??item.occupied_slots??0}/><Indicator label="Em hold" value={item.held_slots??0}/><Indicator label="Capacidade" value={item.capacity}/><Indicator label="A receber" value={money(item.outstanding_cents??0)}/><Indicator label="Preferências" value={item.pending_preferences??0}/><Indicator label="Checklists" value={item.pending_checklists??0}/></div>{Boolean(item.restrictions)&&<p className="mt-3 rounded-lg bg-amber-50 p-2 text-xs font-bold text-amber-900">{item.restrictions} participante(s) com restrição alimentar.</p>}</article>)}</div></section>}
 function Indicator({label,value}:{label:string;value:string|number}){return <div><span className="block text-xs text-ink-500">{label}</span><strong>{value}</strong></div>}
@@ -130,7 +183,7 @@ function ReservationsPanel({ token, unauthorized }: { token: string; unauthorize
         </select>
       </div>
       <div className="mt-6">
-        <State loading={list.loading} error={list.error} />
+        <State loading={list.loading} error={list.error} retry={() => void list.load()} />
         {list.data && (
           <div className="overflow-x-auto rounded-xl bg-white">
             <table className="w-full min-w-[850px] text-left text-sm">
@@ -939,7 +992,7 @@ function ExpeditionsPanel({ token, unauthorized }: { token: string; unauthorized
         }
       />
       <div className="mt-6">
-        <State loading={list.loading} error={list.error} />
+        <State loading={list.loading} error={list.error} retry={() => void list.load()} />
         {list.data && (
           <div className="grid gap-4 xl:grid-cols-2">
             {list.data.map((item) => (
@@ -1046,10 +1099,14 @@ const GALLERY_PHOTOS = [
 
 function GalleryPickerModal({
   currentUrl,
+  selectedUrls,
+  multiple = false,
   onSelect,
   close,
 }: {
   currentUrl?: string;
+  selectedUrls?: string[];
+  multiple?: boolean;
   onSelect: (url: string) => void;
   close: () => void;
 }) {
@@ -1059,7 +1116,7 @@ function GalleryPickerModal({
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div className="flex items-center gap-2">
             <ImageIcon className="size-5 text-brand-600" />
-            <h3 className="text-lg font-black text-ink-900">Escolha uma Imagem da Galeria</h3>
+            <h3 className="text-lg font-black text-ink-900">{multiple ? "Escolha as Fotos da Expedição" : "Escolha uma Imagem da Galeria"}</h3>
           </div>
           <button type="button" onClick={close} className="rounded-lg p-1 hover:bg-gray-100">
             <X className="size-5" />
@@ -1067,18 +1124,18 @@ function GalleryPickerModal({
         </div>
         <div className="max-h-[70vh] overflow-y-auto p-6">
           <p className="mb-4 text-xs text-ink-500">
-            Clique sobre a foto desejada para selecioná-la como imagem de capa.
+            {multiple ? "Clique nas fotos para incluir ou remover da galeria da expedição." : "Clique sobre a foto desejada para selecioná-la como imagem de capa."}
           </p>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
             {GALLERY_PHOTOS.map((photo) => {
-              const isSelected = currentUrl === photo.url;
+              const isSelected = multiple ? Boolean(selectedUrls?.includes(photo.url)) : currentUrl === photo.url;
               return (
                 <button
                   key={photo.url}
                   type="button"
                   onClick={() => {
                     onSelect(photo.url);
-                    close();
+                    if (!multiple) close();
                   }}
                   className={`group relative flex flex-col overflow-hidden rounded-xl border-2 text-left transition ${
                     isSelected
@@ -1113,7 +1170,7 @@ function GalleryPickerModal({
             onClick={close}
             className="rounded-lg border px-4 py-2 text-xs font-bold text-ink-700 hover:bg-gray-50"
           >
-            Fechar
+            {multiple ? "Concluir" : "Fechar"}
           </button>
         </div>
       </div>
@@ -1144,6 +1201,7 @@ function ExpeditionWizardModal({
     name: item?.name ?? "",
     destination: item?.destination ?? "",
     departure_location: item?.departure_location ?? "",
+    meeting_instructions: item?.meeting_instructions ?? "",
     starts_at: item?.starts_at ?? "",
     ends_at: item?.ends_at ?? "",
     capacity: String(item?.capacity ?? 12),
@@ -1157,6 +1215,7 @@ function ExpeditionWizardModal({
     all_inclusive_package_id: item?.all_inclusive_package?.id ?? item?.all_inclusive_package_id ?? "",
     beverage_package_id: item?.beverage_package?.id ?? item?.beverage_package_id ?? "",
     cover_image_url: item?.cover_image_url ?? "",
+    gallery_image_urls: item?.gallery_image_urls ?? [],
     inclusions: (item?.inclusions ?? [
       "Hospedagem Completa na Pousada",
       "Combustível e Óleo 100% Inclusos",
@@ -1183,7 +1242,7 @@ function ExpeditionWizardModal({
   const [riverNotice, setRiverNotice] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showGalleryPicker, setShowGalleryPicker] = useState(false);
+  const [showGalleryPicker, setShowGalleryPicker] = useState<"cover" | "gallery" | null>(null);
 
   function generateExpeditionName(lodgeName?: string, startsAt?: string) {
     if (!lodgeName) return "";
@@ -1391,6 +1450,7 @@ function ExpeditionWizardModal({
         name: form.name.trim(),
         destination: form.destination.trim(),
         departure_location: form.departure_location.trim(),
+        meeting_instructions: form.meeting_instructions.trim(),
         starts_at: form.starts_at,
         ends_at: form.ends_at,
         capacity: Number(form.capacity) || 12,
@@ -1400,6 +1460,7 @@ function ExpeditionWizardModal({
         status: finalStatus,
         summary: form.summary.trim(),
         cover_image_url: form.cover_image_url.trim(),
+        gallery_image_urls: form.gallery_image_urls,
         lodge_id: form.lodge_id || null,
         all_inclusive_package_id: form.all_inclusive_package_id || null,
         beverage_package_id: form.beverage_package_id || null,
@@ -1590,6 +1651,10 @@ function ExpeditionWizardModal({
                   set={(v) => setForm({ ...form, departure_location: v })}
                 />
               </div>
+              <label className="block text-xs font-bold text-ink-800">
+                Instruções de encontro (opcional)
+                <textarea value={form.meeting_instructions} onChange={(e) => setForm({ ...form, meeting_instructions: e.target.value })} rows={2} className="mt-1 w-full rounded-lg border p-3 text-xs" />
+              </label>
             </div>
           )}
 
@@ -1863,7 +1928,7 @@ function ExpeditionWizardModal({
                   <label className="text-xs font-bold text-ink-800">Imagem de Capa da Expedição</label>
                   <button
                     type="button"
-                    onClick={() => setShowGalleryPicker(true)}
+                    onClick={() => setShowGalleryPicker("cover")}
                     className="flex items-center gap-1.5 rounded-lg border border-brand-600 bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700 hover:bg-brand-100"
                   >
                     <ImageIcon className="size-3.5" />
@@ -1898,13 +1963,30 @@ function ExpeditionWizardModal({
                   </div>
                 ) : (
                   <div
-                    onClick={() => setShowGalleryPicker(true)}
+                    onClick={() => setShowGalleryPicker("cover")}
                     className="mt-2 flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50/50 py-4 text-xs font-bold text-ink-600 transition hover:border-brand-500 hover:bg-brand-50/30"
                   >
                     <ImageIcon className="size-4 text-brand-600" />
                     <span>Nenhuma imagem selecionada. Clique para escolher da galeria de fotos.</span>
                   </div>
                 )}
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-ink-800">Galeria da Expedição</label>
+                  <button type="button" onClick={() => setShowGalleryPicker("gallery")} className="rounded-lg border border-brand-600 bg-brand-50 px-3 py-1 text-xs font-bold text-brand-700">
+                    Escolher fotos
+                  </button>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {form.gallery_image_urls.map((url) => (
+                    <div key={url} className="relative overflow-hidden rounded-lg border">
+                      <img src={url} alt="Foto da galeria da expedição" className="aspect-video w-full object-cover" />
+                      <button type="button" onClick={() => setForm((prev) => ({ ...prev, gallery_image_urls: prev.gallery_image_urls.filter((image) => image !== url) }))} className="absolute right-1 top-1 rounded bg-white p-1" aria-label="Remover foto"><X className="size-3" /></button>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <label className="block text-xs font-bold text-ink-800">
@@ -2016,8 +2098,10 @@ function ExpeditionWizardModal({
       {showGalleryPicker && (
         <GalleryPickerModal
           currentUrl={form.cover_image_url}
-          onSelect={(url) => setForm((prev) => ({ ...prev, cover_image_url: url }))}
-          close={() => setShowGalleryPicker(false)}
+          selectedUrls={form.gallery_image_urls}
+          multiple={showGalleryPicker === "gallery"}
+          onSelect={(url) => setForm((prev) => showGalleryPicker === "cover" ? { ...prev, cover_image_url: url } : { ...prev, gallery_image_urls: prev.gallery_image_urls.includes(url) ? prev.gallery_image_urls.filter((image) => image !== url) : [...prev.gallery_image_urls, url] })}
+          close={() => setShowGalleryPicker(null)}
         />
       )}
     </div>
@@ -2045,7 +2129,7 @@ function LodgesPanel({ token, unauthorized }: { token: string; unauthorized: () 
         }
       />
       <div className="mt-6">
-        <State loading={list.loading} error={list.error} />
+        <State loading={list.loading} error={list.error} retry={() => void list.load()} />
         {list.data && (
           <div className="grid gap-4 xl:grid-cols-2">
             {list.data.map((item) => (
@@ -2743,7 +2827,7 @@ function RiversPanel({ token, unauthorized }: { token: string; unauthorized: () 
         }
       />
       <div className="mt-6">
-        <State loading={list.loading} error={list.error} />
+        <State loading={list.loading} error={list.error} retry={() => void list.load()} />
         {list.data && (
           <div className="grid gap-4 xl:grid-cols-2">
             {list.data.map((river) => (
@@ -3123,7 +3207,7 @@ function RiverSpeciesModal({
           <h3 className="text-xs font-black uppercase text-ink-900 mb-3">
             Espécies vinculadas ({currentList.data?.length ?? 0})
           </h3>
-          <State loading={currentList.loading} error={currentList.error} />
+          <State loading={currentList.loading} error={currentList.error} retry={() => void currentList.load()} />
           {currentList.data && currentList.data.length === 0 && (
             <p className="text-center text-xs text-ink-500 py-6">Nenhuma espécie vinculada a este rio ainda.</p>
           )}
@@ -3201,7 +3285,7 @@ function SpeciesPanel({ token, unauthorized }: { token: string; unauthorized: ()
         }
       />
       <div className="mt-6">
-        <State loading={list.loading} error={list.error} />
+        <State loading={list.loading} error={list.error} retry={() => void list.load()} />
         {list.data && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {list.data.map((item) => (
@@ -3467,7 +3551,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
       {/* All Inclusive Tab Content */}
       {tab === "all_inclusive" && (
         <div className="mt-6">
-          <State loading={allInclusiveList.loading} error={allInclusiveList.error} />
+          <State loading={allInclusiveList.loading} error={allInclusiveList.error} retry={() => void allInclusiveList.load()} />
           {allInclusiveList.data && (
             <div className="grid gap-4 xl:grid-cols-2">
               {allInclusiveList.data.map((pkg) => (
@@ -3538,7 +3622,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
       {/* Beverage Tab Content */}
       {tab === "beverage" && (
         <div className="mt-6">
-          <State loading={beverageList.loading} error={beverageList.error} />
+          <State loading={beverageList.loading} error={beverageList.error} retry={() => void beverageList.load()} />
           {beverageList.data && (
             <div className="grid gap-4 xl:grid-cols-2">
               {beverageList.data.map((pkg) => (
@@ -4190,7 +4274,7 @@ function BeveragePackageModal({
   );
 }
 
-function ConfigurationPanel({ token, unauthorized }: { token:string; unauthorized:()=>void }) { const expeditions=useData<Expedition[]>("expeditions/",token,unauthorized); const [selected,setSelected]=useState(""); const selectedId=selected||expeditions.data?.[0]?.id||""; const config=useData<Configuration>(selectedId?`expeditions/${selectedId}/configuration/`:null,token,unauthorized); return <div><Header title="Configuração operacional" subtitle="Defina encontro, bebidas oferecidas e checklist." /><div className="mt-5"><ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data??[]} all={false}/></div><div className="mt-6"><State loading={config.loading} error={config.error}/>{config.data&&<ConfigEditor key={selectedId} expedition={expeditions.data?.find(value=>value.id===selectedId)} config={config.data} token={token} reload={config.load}/>}</div></div>; }
+function ConfigurationPanel({ token, unauthorized }: { token:string; unauthorized:()=>void }) { const expeditions=useData<Expedition[]>("expeditions/",token,unauthorized); const [selected,setSelected]=useState(""); const selectedId=selected||expeditions.data?.[0]?.id||""; const config=useData<Configuration>(selectedId?`expeditions/${selectedId}/configuration/`:null,token,unauthorized); return <div><Header title="Configuração operacional" subtitle="Defina encontro, bebidas oferecidas e checklist." /><div className="mt-5"><ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data??[]} all={false}/></div><div className="mt-6"><State loading={config.loading} error={config.error} retry={() => void config.load()}/>{config.data&&<ConfigEditor key={selectedId} expedition={expeditions.data?.find(value=>value.id===selectedId)} config={config.data} token={token} reload={config.load}/>}</div></div>; }
 function ConfigEditor({ expedition,config,token,reload }: { expedition?:Expedition; config:Configuration; token:string; reload:()=>Promise<void> }) { const [departure,setDeparture]=useState(config.departure_location??""); const [instructions,setInstructions]=useState(config.meeting_instructions??""); const [products,setProducts]=useState(config.products??[]); const [offers,setOffers]=useState(config.offers??[]); const [checklist,setChecklist]=useState(config.checklist_items??config.checklist??[]); const [message,setMessage]=useState(""); const locked=["IN_PROGRESS","COMPLETED"].includes(expedition?.status??""); async function save(){if(!expedition)return;try{await request(`expeditions/${expedition.id}/configuration/`,token,{method:"PUT",body:JSON.stringify({departure_location:departure,meeting_instructions:instructions,products,offers,checklist_items:checklist})});setMessage("Configuração salva.");await reload();}catch(value){setMessage(errorMessage(value));}} function updatePackage(productId:string,size:number){setProducts(products.map(product=>product.id===productId?{...product,package_size:size||null}:product))} return <div className="space-y-6">{locked&&<p className="rounded-lg bg-amber-50 p-4 font-bold">Configuração bloqueada após o início da expedição.</p>}<Box title="Encontro"><div className="grid gap-3 sm:grid-cols-2"><Field label="Local de saída" value={departure} set={setDeparture}/><Field label="Orientações de encontro" value={instructions} set={setInstructions}/></div></Box><section className="rounded-xl bg-white p-5"><div className="flex justify-between"><div><h3 className="font-black">Oferta de bebidas</h3><p className="text-sm text-ink-500">O viajante escolhe opções, sem informar unidades.</p></div><button disabled={locked} onClick={()=>setOffers([...offers,{product_id:"",standard_quantity_per_participant:1,display_order:offers.length+1,note:"",active:true}])} className="rounded-lg border px-3 text-sm font-bold"><Plus className="mr-1 inline size-4"/>Oferta</button></div>{offers.map((offer,index)=><div key={offer.id??index} className="mt-3 grid gap-3 rounded-lg border p-3 lg:grid-cols-[2fr_1fr_1fr_2fr_auto]"><label className="text-xs font-bold">Bebida<select value={offer.product_id} onChange={e=>setOffers(offers.map((value,i)=>i===index?{...value,product_id:e.target.value}:value))} className="mt-1 h-10 w-full rounded-lg border"><option value="">Selecione</option>{products.map(product=><option key={product.id} value={product.id}>{product.name} ({product.unit})</option>)}</select></label><NumberField label="Padrão/pessoa" value={offer.standard_quantity_per_participant} set={number=>setOffers(offers.map((value,i)=>i===index?{...value,standard_quantity_per_participant:number}:value))}/><NumberField label="Por embalagem" value={products.find(product=>product.id===offer.product_id)?.package_size??0} set={number=>updatePackage(offer.product_id,number)}/><Field label="Observação" value={offer.note} set={note=>setOffers(offers.map((value,i)=>i===index?{...value,note}:value))}/><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={offer.active} onChange={e=>setOffers(offers.map((value,i)=>i===index?{...value,active:e.target.checked}:value))}/>Ativa</label></div>)}{!offers.length&&<Empty>Nenhuma bebida oferecida.</Empty>}</section><section className="rounded-xl bg-white p-5"><div className="flex justify-between"><h3 className="font-black">Checklist</h3><button disabled={locked} onClick={()=>setChecklist([...checklist,{title:"",description:"",required:true,active:true,display_order:checklist.length+1}])} className="rounded-lg border px-3 text-sm font-bold"><Plus className="mr-1 inline size-4"/>Item</button></div>{checklist.map((item,index)=><div key={item.id??index} className="mt-3 grid gap-3 rounded-lg border p-3 lg:grid-cols-[2fr_3fr_auto_auto]"><Field label="Título" value={item.title} set={title=>setChecklist(checklist.map((value,i)=>i===index?{...value,title}:value))}/><Field label="Orientação" value={item.description} set={description=>setChecklist(checklist.map((value,i)=>i===index?{...value,description}:value))}/><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={item.required} onChange={e=>setChecklist(checklist.map((value,i)=>i===index?{...value,required:e.target.checked}:value))}/>Obrigatório</label><label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={item.active} onChange={e=>setChecklist(checklist.map((value,i)=>i===index?{...value,active:e.target.checked}:value))}/>Ativo</label></div>)}{!checklist.length&&<Empty>Nenhum item configurado.</Empty>}</section>{message&&<p className="rounded-lg bg-brand-50 p-3 font-bold">{message}</p>}<button disabled={locked} onClick={()=>void save()} className="rounded-lg bg-brand-600 px-5 py-3 font-bold text-white disabled:opacity-50">Salvar configuração</button></div>; }
 function Field({label,value,set,type="text"}:{label:string;value:string;set:(value:string)=>void;type?:string}){return <label className="text-xs font-bold">{label}<input type={type} value={value??""} onChange={e=>set(e.target.value)} className="mt-1 h-10 w-full rounded-lg border px-3"/></label>}
 function NumberField({label,value,set}:{label:string;value:number;set:(value:number)=>void}){return <label className="text-xs font-bold">{label}<input type="number" min="0" step="1" value={value} onChange={e=>set(Number(e.target.value))} className="mt-1 h-10 w-full rounded-lg border px-3"/></label>}
@@ -4246,7 +4330,7 @@ function ManifestPanel({ token, unauthorized }: { token: string; unauthorized: (
         <ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data ?? []} all={false} />
       </div>
       <div className="mt-6">
-        <State loading={manifest.loading} error={manifest.error} />
+        <State loading={manifest.loading} error={manifest.error} retry={() => void manifest.load()} />
         {manifest.data && (
           <div className="rounded-xl bg-white p-6 shadow-xs">
             <div className="border-b pb-4">
@@ -4379,7 +4463,7 @@ function ManifestPanel({ token, unauthorized }: { token: string; unauthorized: (
   );
 }
 
-function ShoppingPanel({token,unauthorized}:{token:string;unauthorized:()=>void}){const expeditions=useData<Expedition[]>("expeditions/",token,unauthorized);const[selected,setSelected]=useState("");const selectedId=selected||expeditions.data?.[0]?.id||"";const[copied,setCopied]=useState(false);const result=useData<Consolidation>(selectedId?`expeditions/${selectedId}/consolidation/`:null,token,unauthorized);const text=useMemo(()=>result.data?.text??result.data?.items.map(row=>`${row.product}: ${row.total} ${row.unit}${row.package_size?` (${row.full_packages??0} embalagem(ns) + ${row.remainder??0} ${row.unit})`:""}`).join("\n")??"",[result.data]);async function download(format:"csv"|"txt"){try{const content=await request<string>(`expeditions/${selectedId}/consolidation.${format}`,token);const url=URL.createObjectURL(new Blob([content],{type:"text/plain;charset=utf-8"}));const anchor=document.createElement("a");anchor.href=url;anchor.download=`lista-compras-${selectedId}.${format}`;anchor.click();URL.revokeObjectURL(url)}catch(value){window.alert(errorMessage(value))}}async function copy(){await navigator.clipboard.writeText(text);setCopied(true);window.setTimeout(()=>setCopied(false),1500)}return <div><Header title="Lista de compras" subtitle="Consolidação por escolhas e padrão vigente das reservas garantidas." action={<div className="flex gap-2"><button onClick={()=>void copy()} className="rounded-lg border bg-white px-3 py-2 text-sm font-bold"><Copy className="mr-1 inline size-4"/>{copied?"Copiado":"Copiar"}</button><button onClick={()=>void download("csv")} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white"><Download className="mr-1 inline size-4"/>CSV</button><button onClick={()=>void download("txt")} className="rounded-lg bg-brand-900 px-3 py-2 text-sm font-bold text-white"><Download className="mr-1 inline size-4"/>Texto</button></div>}/><div className="mt-5"><ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data??[]} all={false}/></div><div className="mt-6"><State loading={result.loading} error={result.error}/>{result.data&&<div className="overflow-x-auto rounded-xl bg-white"><p className="p-4 text-xs">Snapshot: {new Date(result.data.generated_at).toLocaleString("pt-BR")}</p><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-brand-900 text-xs uppercase text-white"><tr><th className="px-5 py-4">Produto</th><th>Pessoas</th><th>Padrão</th><th>Total</th><th>Embalagens</th><th>Sobra</th><th>Atualização</th></tr></thead><tbody className="divide-y">{result.data.items.map(row=><tr key={row.offer_id}><td className="px-5 py-4"><strong>{row.product}</strong>{row.details?.length ? <details className="mt-2"><summary className="cursor-pointer text-xs font-bold text-brand-700">Ver {row.details.length} participante(s)</summary><ul className="mt-2 space-y-1 text-xs text-ink-500">{row.details.map((detail,index)=><li key={detail.participant_id??`${detail.reservation_id}-${index}`}>{detail.participant_name}{detail.customer_name ? ` · reserva de ${detail.customer_name}` : ""}</li>)}</ul></details> : null}</td><td>{row.people}</td><td>{row.standard_quantity_per_participant} {row.unit}</td><td className="font-black text-brand-800">{row.total} {row.unit}</td><td>{row.package_size?`${row.full_packages??0} × ${row.package_size}`:"—"}</td><td>{row.package_size?`${row.remainder??0} ${row.unit}`:"—"}</td><td>{shortDate(row.updated_at)}</td></tr>)}</tbody></table>{!result.data.items.length&&<Empty>Nenhuma escolha elegível.</Empty>}</div>}</div></div>}
+function ShoppingPanel({token,unauthorized}:{token:string;unauthorized:()=>void}){const expeditions=useData<Expedition[]>("expeditions/",token,unauthorized);const[selected,setSelected]=useState("");const selectedId=selected||expeditions.data?.[0]?.id||"";const[copied,setCopied]=useState(false);const result=useData<Consolidation>(selectedId?`expeditions/${selectedId}/consolidation/`:null,token,unauthorized);const text=useMemo(()=>result.data?.text??result.data?.items.map(row=>`${row.product}: ${row.total} ${row.unit}${row.package_size?` (${row.full_packages??0} embalagem(ns) + ${row.remainder??0} ${row.unit})`:""}`).join("\n")??"",[result.data]);async function download(format:"csv"|"txt"){try{const content=await request<string>(`expeditions/${selectedId}/consolidation.${format}`,token);const url=URL.createObjectURL(new Blob([content],{type:"text/plain;charset=utf-8"}));const anchor=document.createElement("a");anchor.href=url;anchor.download=`lista-compras-${selectedId}.${format}`;anchor.click();URL.revokeObjectURL(url)}catch(value){window.alert(errorMessage(value))}}async function copy(){await navigator.clipboard.writeText(text);setCopied(true);window.setTimeout(()=>setCopied(false),1500)}return <div><Header title="Lista de compras" subtitle="Consolidação por escolhas e padrão vigente das reservas garantidas." action={<div className="flex gap-2"><button onClick={()=>void copy()} className="rounded-lg border bg-white px-3 py-2 text-sm font-bold"><Copy className="mr-1 inline size-4"/>{copied?"Copiado":"Copiar"}</button><button onClick={()=>void download("csv")} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white"><Download className="mr-1 inline size-4"/>CSV</button><button onClick={()=>void download("txt")} className="rounded-lg bg-brand-900 px-3 py-2 text-sm font-bold text-white"><Download className="mr-1 inline size-4"/>Texto</button></div>}/><div className="mt-5"><ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data??[]} all={false}/></div><div className="mt-6"><State loading={result.loading} error={result.error} retry={() => void result.load()}/>{result.data&&<div className="overflow-x-auto rounded-xl bg-white"><p className="p-4 text-xs">Snapshot: {new Date(result.data.generated_at).toLocaleString("pt-BR")}</p><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-brand-900 text-xs uppercase text-white"><tr><th className="px-5 py-4">Produto</th><th>Pessoas</th><th>Padrão</th><th>Total</th><th>Embalagens</th><th>Sobra</th><th>Atualização</th></tr></thead><tbody className="divide-y">{result.data.items.map(row=><tr key={row.offer_id}><td className="px-5 py-4"><strong>{row.product}</strong>{row.details?.length ? <details className="mt-2"><summary className="cursor-pointer text-xs font-bold text-brand-700">Ver {row.details.length} participante(s)</summary><ul className="mt-2 space-y-1 text-xs text-ink-500">{row.details.map((detail,index)=><li key={detail.participant_id??`${detail.reservation_id}-${index}`}>{detail.participant_name}{detail.customer_name ? ` · reserva de ${detail.customer_name}` : ""}</li>)}</ul></details> : null}</td><td>{row.people}</td><td>{row.standard_quantity_per_participant} {row.unit}</td><td className="font-black text-brand-800">{row.total} {row.unit}</td><td>{row.package_size?`${row.full_packages??0} × ${row.package_size}`:"—"}</td><td>{row.package_size?`${row.remainder??0} ${row.unit}`:"—"}</td><td>{shortDate(row.updated_at)}</td></tr>)}</tbody></table>{!result.data.items.length&&<Empty>Nenhuma escolha elegível.</Empty>}</div>}</div></div>}
 
 function GearPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
   const [query, setQuery] = useState("");
@@ -4483,7 +4567,7 @@ function GearPanel({ token, unauthorized }: { token: string; unauthorized: () =>
       </div>
 
       <div className="mt-6">
-        <State loading={list.loading} error={list.error} />
+        <State loading={list.loading} error={list.error} retry={() => void list.load()} />
         {list.data && (
           <div className="overflow-x-auto rounded-xl bg-white shadow-xs">
             <table className="w-full min-w-[850px] text-left text-sm">
@@ -4983,7 +5067,7 @@ function CustomersPanel({ token, unauthorized }: { token: string; unauthorized: 
       </div>
 
       <div className="mt-6">
-        <State loading={list.loading} error={list.error} />
+        <State loading={list.loading} error={list.error} retry={() => void list.load()} />
         {list.data && (
           <div className="overflow-x-auto rounded-xl bg-white shadow-xs">
             <table className="w-full min-w-[850px] text-left text-sm">
