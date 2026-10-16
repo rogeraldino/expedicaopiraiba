@@ -161,20 +161,20 @@
     {
       "id": "REFINAMENTO-POUSADAS-WIZARD",
       "concept": "Refinamento UX de Pousadas com peixes diretos, comodidades dinâmicas, galeria de imagens e simplificação do Construtor de Expedições para 3 etapas",
-      "owner": "specs/active/Refinamento_UX_Pousadas_Wizard/spec.md",
+      "owner": "specs/archive/Refinamento_UX_Pousadas_Wizard/spec.md",
       "status": "normative",
       "version": "0.1",
       "scope": "modelos Lodge e Amenity, serializers de operações, seletor de galeria e ExpeditionWizardModal",
       "supersedes": [],
       "superseded_by": [],
-      "lifecycle": "IN_PROGRESS",
+      "lifecycle": "ARCHIVED",
       "ready_at": "2026-10-02",
       "ready_by": "Rodrigo",
       "ready_evidence": "instrução direta do organizador Rodrigo",
-      "acceptance_status": "PENDING",
-      "accepted_at": null,
-      "accepted_by": null,
-      "accepted_evidence": null
+      "acceptance_status": "ACCEPTED",
+      "accepted_at": "2026-10-16",
+      "accepted_by": "Rodrigo",
+      "accepted_evidence": "aprovação direta do organizador Rodrigo em sessão de desenvolvimento"
     }
   ]
 }

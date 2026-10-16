@@ -4,8 +4,10 @@
 identificador_normativo: REFINAMENTO-POUSADAS-WIZARD
 classificacao_risco: MEDIUM
 modulo: operacoes_pousadas_wizard
-status_documento: ACTIVE
+status_documento: ARCHIVED
 data_criacao: 2026-10-02
+data_aceite: 2026-10-16
+aceito_por: Rodrigo (Organizador)
 autor: Rodrigo (Organizador) & Equipe de Arquitetura Expedição Piraíba
 base_normativa:
   - docs/sdd/CONSTITUTION.md (§1, §2, §3, §4, §5)

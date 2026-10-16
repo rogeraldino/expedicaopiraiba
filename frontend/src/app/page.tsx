@@ -23,7 +23,7 @@ export default async function Home() {
         <ExperienceSection />
         <StoriesSection />
         <GalleryPreview />
-        <Season2027 />
+        {expeditions.length > 0 && <Season2027 />}
         <FaqSection />
       </main>
       <SiteFooter />

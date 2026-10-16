@@ -1,5 +1,18 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Estado operacional em 03/10/2026
+
+Após a publicação inicial do Desafio Piraíba, o catálogo geral de bebidas em `expeditions_product` foi restaurado via migração `0015_restore_beverage_catalog`. O banco agora conta com as 16 bebidas canônicas (cervejas Heineken, Stella Artois, Original, Amstel, Corona, Spaten, sem álcool; refrigerantes Coca-Cola, Coca Zero, Guaraná, Guaraná Zero; águas com/sem gás, água tônica, sucos e gelo/copos térmicos).
+
+O cardápio da expedição *Desafio Piraíba — Rio Araguaia* permanece preservado exatamente com as 3 cervejas homologadas (Heineken, Stella Artois e Original a 18 latas/pessoa).
+
+No painel administrativo:
+- **Cardápio de Bebidas (`BeveragePackageModal`):** inclusão de campo de busca instantânea e formulário inline para cadastrar e adicionar novas bebidas diretamente ao cardápio e ao catálogo com 1 clique;
+- **Aba de Cardápios (`PackagesPanel`):** adicionada a seção "Catálogo de Bebidas Cadastradas" e o botão "Nova bebida no catálogo", permitindo cadastrar, visualizar e editar qualquer bebida;
+- **Endpoints de Produtos (`ProductListView` e `ProductDetailView`):** adicionados suporte a `POST /api/operations/products/`, `PATCH` e `DELETE /api/operations/products/<id>/`.
+
+---
+
 > **Estado do Sistema:**
 > - Épica E01 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E01_P0-Closure/`);
 > - Épica E02 Concluída e Aceita (`ACCEPTED` / Arquivada em `specs/archive/E02_Customizacao-Expedicoes/`);

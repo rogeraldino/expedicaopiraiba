@@ -25,6 +25,7 @@ urlpatterns = [
     path("beverage-packages/<uuid:pk>/", BeveragePackageDetailView.as_view(), name="operations-beverage-package-detail"),
     path("beverage-packages/<uuid:package_id>/items/", BeveragePackageItemView.as_view(), name="operations-beverage-package-items"),
     path("products/", ProductListView.as_view(), name="operations-products"),
+    path("products/<int:pk>/", ProductDetailView.as_view(), name="operations-product-detail"),
     path("species/", SpeciesListCreateView.as_view(), name="operations-species"),
     path("species/<str:slug>/", SpeciesDetailView.as_view(), name="operations-species-detail"),
     path("reservations/<uuid:reservation_id>/participants/<uuid:participant_id>/", ParticipantUpdateView.as_view(), name="operations-participant-update"),

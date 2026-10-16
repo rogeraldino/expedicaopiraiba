@@ -69,9 +69,12 @@ class LoginView(APIView):
     permission_classes = []
 
     def post(self, request):
-        if not validate_credentials(str(request.data.get("email", "")), str(request.data.get("password", ""))):
-            return Response({"detail": "E-mail ou senha inválidos."}, status=status.HTTP_401_UNAUTHORIZED)
-        return Response({"token": create_admin_token(), "email": request.data["email"]})
+        from django.conf import settings
+
+        email = str(request.data.get("email") or settings.ADMIN_EMAIL)
+        if not validate_credentials(email, str(request.data.get("password", ""))):
+            return Response({"detail": "Senha inválida."}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({"token": create_admin_token(), "email": email})
 
 
 class ClearDevelopmentDataView(APIView):
@@ -552,11 +555,112 @@ class ProductListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        products = Product.objects.filter(active=True).order_by("category", "name")
+        category = request.query_params.get("category")
+        include_inactive = request.query_params.get("include_inactive", "").lower() in ("true", "1")
+        qs = Product.objects.all() if include_inactive else Product.objects.filter(active=True)
+        if category:
+            qs = qs.filter(category__iexact=category)
+        products = qs.order_by("category", "name")
         return Response([
-            {"id": p.id, "name": p.name, "category": p.category, "unit": p.unit, "package_size": p.package_size}
+            {
+                "id": p.id,
+                "name": p.name,
+                "category": p.category,
+                "unit": p.unit,
+                "package_size": p.package_size,
+                "active": p.active,
+            }
             for p in products
         ])
+
+    def post(self, request):
+        name = str(request.data.get("name", "")).strip()
+        if not name:
+            return Response({"detail": "Nome da bebida é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+        category = str(request.data.get("category", "BEBIDA")).strip() or "BEBIDA"
+        unit = str(request.data.get("unit", Product.Unit.CAN)).strip()
+        valid_units = {choice[0] for choice in Product.Unit.choices}
+        if unit not in valid_units:
+            unit = Product.Unit.CAN
+        package_size = request.data.get("package_size")
+        if package_size is not None:
+            try:
+                package_size = int(package_size)
+            except (ValueError, TypeError):
+                package_size = None
+
+        product, created = Product.objects.update_or_create(
+            name=name,
+            defaults={
+                "category": category,
+                "unit": unit,
+                "package_size": package_size,
+                "active": True,
+            },
+        )
+        return Response(
+            {
+                "id": product.id,
+                "name": product.name,
+                "category": product.category,
+                "unit": product.unit,
+                "package_size": product.package_size,
+                "active": product.active,
+            },
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class ProductDetailView(APIView):
+    authentication_classes = [OperationsAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def patch(self, request, pk):
+        try:
+            product = Product.objects.get(id=pk)
+        except Product.DoesNotExist:
+            return Response({"detail": "Produto não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        if "name" in request.data:
+            name = str(request.data["name"]).strip()
+            if name:
+                product.name = name
+        if "category" in request.data:
+            category = str(request.data["category"]).strip()
+            if category:
+                product.category = category
+        if "unit" in request.data:
+            unit = str(request.data["unit"]).strip()
+            if unit in {choice[0] for choice in Product.Unit.choices}:
+                product.unit = unit
+        if "package_size" in request.data:
+            try:
+                product.package_size = int(request.data["package_size"]) if request.data["package_size"] is not None else None
+            except (ValueError, TypeError):
+                pass
+        if "active" in request.data:
+            product.active = bool(request.data["active"])
+
+        product.save()
+        return Response({
+            "id": product.id,
+            "name": product.name,
+            "category": product.category,
+            "unit": product.unit,
+            "package_size": product.package_size,
+            "active": product.active,
+        })
+
+    def delete(self, request, pk):
+        try:
+            product = Product.objects.get(id=pk)
+        except Product.DoesNotExist:
+            return Response({"detail": "Produto não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        product.active = False
+        product.save(update_fields=["active"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 
 class ReservationDetailView(OperationsView):

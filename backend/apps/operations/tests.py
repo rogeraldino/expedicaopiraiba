@@ -41,6 +41,14 @@ class OperationsApiTests(TestCase):
         self.assertEqual(self.client.get("/api/operations/overview/").status_code, 403)
         self.assertEqual(self.client.get("/api/operations/reservations/").status_code, 403)
 
+    def test_admin_can_log_in_with_password_only(self):
+        response = self.client.post("/api/operations/login/", {"password": "safe-test-password"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("token", response.data)
+        self.assertEqual(response.data["email"], "admin@example.com")
+        invalid = self.client.post("/api/operations/login/", {"password": "wrong"}, format="json")
+        self.assertEqual(invalid.status_code, 401)
+
     def test_overview_and_expedition_management(self):
         auth = self.login()
         overview = self.client.get("/api/operations/overview/", **auth)
@@ -504,6 +512,43 @@ class OperationsApiTests(TestCase):
         self.expedition.save()
         del_ok = self.client.delete(f"/api/operations/beverage-packages/{bev_id}/", **auth)
         self.assertEqual(del_ok.status_code, 204)
+
+    def test_operations_product_crud_and_catalog(self):
+        auth = self.login()
+        # 1. Lista produtos
+        list_res = self.client.get("/api/operations/products/", **auth)
+        self.assertEqual(list_res.status_code, 200)
+
+        # 2. Tenta criar sem nome -> 400
+        bad_res = self.client.post("/api/operations/products/", {"name": ""}, format="json", **auth)
+        self.assertEqual(bad_res.status_code, 400)
+
+        # 3. Cria novo produto (bebida)
+        create_res = self.client.post("/api/operations/products/", {
+            "name": "Cerveja Corona Teste",
+            "category": "BEBIDA",
+            "unit": "garrafa",
+            "package_size": 6,
+        }, format="json", **auth)
+        self.assertEqual(create_res.status_code, 201)
+        prod_id = create_res.data["id"]
+        self.assertEqual(create_res.data["name"], "Cerveja Corona Teste")
+        self.assertEqual(create_res.data["unit"], "garrafa")
+
+        # 4. Atualiza produto via PATCH
+        patch_res = self.client.patch(f"/api/operations/products/{prod_id}/", {
+            "unit": "lata",
+            "name": "Cerveja Corona Lata Teste",
+        }, format="json", **auth)
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.data["unit"], "lata")
+        self.assertEqual(patch_res.data["name"], "Cerveja Corona Lata Teste")
+
+        # 5. Desativa produto via DELETE
+        del_res = self.client.delete(f"/api/operations/products/{prod_id}/", **auth)
+        self.assertEqual(del_res.status_code, 204)
+        active_list = self.client.get("/api/operations/products/", **auth)
+        self.assertNotIn(prod_id, [p["id"] for p in active_list.data])
 
     def test_expedition_wizard_creation_with_packages_and_deposit_validation(self):
         auth = self.login()

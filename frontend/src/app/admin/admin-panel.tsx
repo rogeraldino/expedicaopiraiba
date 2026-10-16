@@ -115,7 +115,43 @@ export function AdminPanel() {
   </div>;
 }
 
-function Login({ onLogin }: { onLogin: (token: string) => void }) { const [email,setEmail] = useState("admin@expedicaopiraiba.com.br"); const [password,setPassword] = useState("admin-local-2026"); const [error,setError] = useState(""); const [loading,setLoading] = useState(false); async function submit(event: FormEvent) { event.preventDefault(); setLoading(true); setError(""); try { const response = await fetch(`${api}/operations/login/`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email,password }) }); const data = await response.json(); if (!response.ok) throw data; onLogin(data.token); } catch (value) { setError(errorMessage(value)); } finally { setLoading(false); } } return <main className="grid min-h-screen place-items-center bg-brand-900 p-5"><form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-8"><Image src="/brand/logo-expedicao-piraiba.png" alt="Expedição Piraíba" width={72} height={72} className="mx-auto rounded-full" /><h1 className="mt-5 text-center text-2xl font-black">Painel operacional</h1><label className="mt-7 block text-sm font-bold">E-mail<input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mt-2 h-12 w-full rounded-lg border px-3" /></label><label className="mt-4 block text-sm font-bold">Senha<input type="password" value={password} onChange={e => setPassword(e.target.value)} className="mt-2 h-12 w-full rounded-lg border px-3" /></label>{error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}<button disabled={loading} className="mt-5 min-h-12 w-full rounded-lg bg-brand-600 font-bold text-white">{loading ? "Entrando..." : "Entrar"}</button></form></main>; }
+function Login({ onLogin }: { onLogin: (token: string) => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`${api}/operations/login/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw data;
+      onLogin(data.token);
+    } catch (value) {
+      setError(errorMessage(value));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return <main className="grid min-h-screen place-items-center bg-brand-900 p-5">
+    <form onSubmit={submit} className="w-full max-w-md rounded-2xl bg-white p-8">
+      <Image src="/brand/logo-expedicao-piraiba.png" alt="Expedição Piraíba" width={72} height={72} className="mx-auto rounded-full" />
+      <h1 className="mt-5 text-center text-2xl font-black">Painel operacional</h1>
+      <label className="mt-7 block text-sm font-bold">Senha do administrador
+        <input type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" required className="mt-2 h-12 w-full rounded-lg border px-3" />
+      </label>
+      {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-bold text-red-700">{error}</p>}
+      <button disabled={loading} className="mt-5 min-h-12 w-full rounded-lg bg-brand-600 font-bold text-white">{loading ? "Entrando..." : "Entrar"}</button>
+    </form>
+  </main>;
+}
 
 function OverviewPanel({ token, unauthorized, go }: { token: string; unauthorized: () => void; go: (value: Section) => void }) { const result = useData<Overview>("overview/", token, unauthorized); if (!result.data) return <State loading={result.loading} error={result.error} retry={() => void result.load()} />; const data = result.data; const cards = [["Valor vendido", money(data.sold_cents)], ["Valor recebido", money(data.revenue_cents)], ["Saldo pendente", money(data.outstanding_cents)], ["Reservas confirmadas", data.reservations.confirmed], ["Cadastros pendentes", data.incomplete_participants], ["Reservas totais", data.reservations.total]]; const indicators=data.expedition_indicators??data.expeditions??[]; return <div><Header title="Resumo do negócio" subtitle="Financeiro, ocupação e pendências operacionais." action={<button onClick={() => void result.load()} className="rounded-lg border bg-white p-2.5"><RefreshCw className="size-5" /></button>} /><section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{cards.map(([label,value]) => <article key={label} className="rounded-xl bg-white p-5"><span className="text-sm font-bold text-ink-500">{label}</span><strong className="mt-3 block text-2xl font-black">{value}</strong></article>)}</section>{Boolean(data.alerts?.length || data.incomplete_participants) && <section className="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-5"><h3 className="font-black text-amber-900"><AlertTriangle className="mr-2 inline size-5" />Alertas operacionais</h3>{data.alerts?.map((alert,index) => <button key={alert.id ?? index} onClick={() => go("reservations")} className="mt-3 block w-full rounded-lg bg-white p-3 text-left text-sm"><strong>{alert.title ?? "Atenção"}</strong><span className="ml-2 text-ink-500">{alert.message}</span></button>)}{!data.alerts?.length && <p className="mt-2 text-sm">Há {data.incomplete_participants} cadastro(s) pendente(s).</p>}</section>}{indicators.length>0&&<ExpeditionIndicators items={indicators}/>}<div className="mt-6 grid gap-6 xl:grid-cols-2"><section className="rounded-xl bg-white p-5"><h3 className="font-black">Próximas expedições</h3>{data.upcoming_expeditions.map(item => <div key={item.id} className="mt-3 flex items-center gap-3 rounded-lg bg-[#f7f8f4] p-3"><CalendarDays className="text-brand-700" /><div className="flex-1"><strong>{item.name}</strong><p className="text-xs text-ink-500">{shortDate(item.starts_at)} · {item.destination}</p></div><strong>{item.occupied_slots}/{item.capacity}</strong></div>)}</section><section className="rounded-xl bg-white p-5"><h3 className="font-black">Reservas recentes</h3>{data.recent_reservations.map(item => <button key={item.id} onClick={() => go("reservations")} className="mt-3 flex w-full items-center gap-3 border-b pb-3 text-left"><div className="flex-1"><strong>{item.customer.name}</strong><p className="text-xs text-ink-500">{item.expedition.name}</p></div><Status value={item.status} /></button>)}</section></div></div>; }
 
@@ -3448,6 +3484,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
 
   const [editingAllInclusive, setEditingAllInclusive] = useState<AllInclusivePackage | "new" | null>(null);
   const [editingBeverage, setEditingBeverage] = useState<BeveragePackage | "new" | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | "new" | null>(null);
   const [deleteError, setDeleteError] = useState("");
 
   async function handleDeleteAllInclusive(pkg: AllInclusivePackage) {
@@ -3490,16 +3527,28 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
               Novo pacote da expedição
             </button>
           ) : (
-            <button
-              onClick={() => {
-                setDeleteError("");
-                setEditingBeverage("new");
-              }}
-              className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
-            >
-              <Plus className="mr-2 inline size-4" />
-              Novo cardápio de bebidas
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  setDeleteError("");
+                  setEditingProduct("new");
+                }}
+                className="rounded-lg border border-brand-600 bg-white px-3.5 py-3 text-sm font-bold text-brand-700 shadow-sm hover:bg-brand-50"
+              >
+                <Plus className="mr-1.5 inline size-4" />
+                Nova bebida no catálogo
+              </button>
+              <button
+                onClick={() => {
+                  setDeleteError("");
+                  setEditingBeverage("new");
+                }}
+                className="rounded-lg bg-brand-600 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-brand-700"
+              >
+                <Plus className="mr-2 inline size-4" />
+                Novo cardápio de bebidas
+              </button>
+            </div>
           )
         }
       />
@@ -3697,6 +3746,62 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
               {!beverageList.data.length && <Empty>Nenhum cardápio de bebidas cadastrado.</Empty>}
             </div>
           )}
+
+          {/* Catálogo Geral de Bebidas Cadastradas */}
+          <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+              <div>
+                <h3 className="text-base font-black text-ink-900 flex items-center gap-2">
+                  <Beer className="size-5 text-amber-600" />
+                  Catálogo de Bebidas Cadastradas ({productsList.data?.length ?? 0})
+                </h3>
+                <p className="text-xs text-ink-500">
+                  Todas as bebidas cadastradas no sistema disponíveis para os cardápios das expedições.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingProduct("new")}
+                className="rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-700"
+              >
+                <Plus className="mr-1.5 inline size-3.5" />
+                Cadastrar nova bebida
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <State loading={productsList.loading} error={productsList.error} retry={() => void productsList.load()} />
+              {productsList.data && (
+                <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                  {productsList.data.map((prod) => (
+                    <div
+                      key={prod.id}
+                      className="flex items-center justify-between rounded-xl border border-gray-100 bg-[#f7f8f4] p-3 text-xs"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <strong className="block truncate text-ink-900 font-bold">{prod.name}</strong>
+                        <div className="mt-1 flex items-center gap-1.5 text-[10px] text-ink-500">
+                          <span className="rounded bg-white px-1.5 py-0.5 border font-semibold">{prod.unit}</span>
+                          {prod.package_size && <span>Pack {prod.package_size}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setEditingProduct(prod)}
+                          title="Editar bebida"
+                          className="rounded border bg-white p-1.5 hover:bg-gray-100"
+                        >
+                          <Pencil className="size-3.5 text-ink-600" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {!productsList.data.length && <Empty>Nenhuma bebida cadastrada.</Empty>}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -3722,6 +3827,19 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
           saved={async () => {
             setEditingBeverage(null);
             await beverageList.load();
+            await productsList.load();
+          }}
+        />
+      )}
+
+      {editingProduct && (
+        <ProductModal
+          token={token}
+          item={editingProduct === "new" ? undefined : editingProduct}
+          close={() => setEditingProduct(null)}
+          saved={async () => {
+            setEditingProduct(null);
+            await productsList.load();
           }}
         />
       )}
@@ -4067,6 +4185,15 @@ function BeveragePackageModal({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showAddInline, setShowAddInline] = useState(false);
+  const [inlineName, setInlineName] = useState("");
+  const [inlineUnit, setInlineUnit] = useState("lata");
+  const [inlineQty, setInlineQty] = useState(6);
+  const [inlineNote, setInlineNote] = useState("");
+  const [inlineLoading, setInlineLoading] = useState(false);
+  const [inlineError, setInlineError] = useState("");
+
   const activeCount = rows.filter((r) => r.enabled).length;
 
   function toggleProduct(productId: string | number) {
@@ -4090,6 +4217,60 @@ function BeveragePackageModal({
   function setAll(enabled: boolean) {
     setRows((prev) => prev.map((r) => ({ ...r, enabled })));
   }
+
+  async function handleInlineAdd() {
+    if (!inlineName.trim()) return;
+    setInlineLoading(true);
+    setInlineError("");
+    try {
+      const res = await request<Product>("products/", token, {
+        method: "POST",
+        body: JSON.stringify({
+          name: inlineName.trim(),
+          category: "BEBIDA",
+          unit: inlineUnit,
+        }),
+      });
+      setRows((prev) => {
+        const existingIdx = prev.findIndex(
+          (r) => String(r.productId) === String(res.id) || r.name.toLowerCase() === res.name.toLowerCase()
+        );
+        if (existingIdx >= 0) {
+          const updated = [...prev];
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            enabled: true,
+            quantity: inlineQty,
+            note: inlineNote.trim(),
+          };
+          return updated;
+        }
+        return [
+          ...prev,
+          {
+            productId: res.id,
+            name: res.name,
+            category: res.category,
+            unit: res.unit,
+            enabled: true,
+            quantity: inlineQty,
+            note: inlineNote.trim(),
+          },
+        ];
+      });
+      setInlineName("");
+      setInlineNote("");
+      setShowAddInline(false);
+    } catch (err) {
+      setInlineError(errorMessage(err));
+    } finally {
+      setInlineLoading(false);
+    }
+  }
+
+  const filteredRows = rows.filter((r) =>
+    r.name.toLowerCase().includes(searchTerm.toLowerCase().trim())
+  );
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -4169,7 +4350,7 @@ function BeveragePackageModal({
           </label>
 
           <div className="border-t pt-4">
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <div>
                 <h4 className="text-sm font-black text-ink-900">
                   Bebidas do Cardápio ({activeCount} ativada{activeCount === 1 ? "" : "s"})
@@ -4178,7 +4359,14 @@ function BeveragePackageModal({
                   Ative ou desative cada bebida e defina a cota padrão por participante.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Buscar bebida..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="h-8 w-36 sm:w-44 rounded-lg border px-2 text-xs"
+                />
                 <button
                   type="button"
                   onClick={() => setAll(true)}
@@ -4197,8 +4385,8 @@ function BeveragePackageModal({
               </div>
             </div>
 
-            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-              {rows.map((row) => (
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {filteredRows.map((row) => (
                 <div
                   key={row.productId}
                   className={`flex flex-col gap-2 rounded-xl border p-3 transition sm:flex-row sm:items-center sm:justify-between ${
@@ -4250,7 +4438,99 @@ function BeveragePackageModal({
                   )}
                 </div>
               ))}
-              {!rows.length && <Empty>Nenhum produto cadastrado no catálogo.</Empty>}
+              {!filteredRows.length && (
+                <Empty>
+                  {searchTerm ? "Nenhuma bebida encontrada para a busca." : "Nenhuma bebida cadastrada no catálogo."}
+                </Empty>
+              )}
+            </div>
+
+            {/* Adicionar nova bebida diretamente ao cardápio */}
+            <div className="mt-4 rounded-xl border border-dashed border-brand-300 bg-brand-50/40 p-3.5">
+              {!showAddInline ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAddInline(true)}
+                  className="flex items-center gap-2 text-xs font-bold text-brand-700 hover:text-brand-900"
+                >
+                  <Plus className="size-4" />
+                  Não encontrou a bebida desejada? Clique aqui para cadastrar e adicionar ao cardápio
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <strong className="text-xs font-black text-brand-900">
+                      Cadastrar e incluir nova bebida
+                    </strong>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddInline(false);
+                        setInlineError("");
+                      }}
+                      className="text-xs text-ink-400 hover:text-ink-700"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-4">
+                    <div className="sm:col-span-2">
+                      <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Nome da Bebida</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Cerveja Corona, Red Bull..."
+                        value={inlineName}
+                        onChange={(e) => setInlineName(e.target.value)}
+                        className="h-8 w-full rounded border bg-white px-2 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Embalagem</label>
+                      <select
+                        value={inlineUnit}
+                        onChange={(e) => setInlineUnit(e.target.value)}
+                        className="h-8 w-full rounded border bg-white px-1 text-xs"
+                      >
+                        <option value="lata">Lata</option>
+                        <option value="garrafa">Garrafa</option>
+                        <option value="unidade">Unidade</option>
+                        <option value="pacote">Pacote</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-ink-600 block mb-0.5">Cota/pessoa</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={inlineQty}
+                        onChange={(e) => setInlineQty(Math.max(1, Number(e.target.value) || 1))}
+                        className="h-8 w-full rounded border bg-white px-2 text-xs font-bold"
+                      />
+                    </div>
+                  </div>
+                  {inlineError && <p className="text-[11px] font-bold text-red-600">{inlineError}</p>}
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddInline(false);
+                        setInlineError("");
+                      }}
+                      className="rounded border bg-white px-3 py-1 text-xs font-bold"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={inlineLoading || !inlineName.trim()}
+                      onClick={() => void handleInlineAdd()}
+                      className="rounded bg-brand-600 px-3 py-1 text-xs font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+                    >
+                      {inlineLoading ? "Cadastrando..." : "Adicionar ao cardápio"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -4267,6 +4547,149 @@ function BeveragePackageModal({
             className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-bold text-white shadow hover:bg-brand-700 disabled:opacity-50"
           >
             {loading ? "Salvando..." : item ? "Salvar alterações" : "Criar cardápio"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ProductModal({
+  token,
+  item,
+  close,
+  saved,
+}: {
+  token: string;
+  item?: Product;
+  close: () => void;
+  saved: () => Promise<void>;
+}) {
+  const [name, setName] = useState(item?.name ?? "");
+  const [unit, setUnit] = useState(item?.unit ?? "lata");
+  const [packageSize, setPackageSize] = useState<number | "">(item?.package_size ?? 12);
+  const [active, setActive] = useState(item?.active ?? true);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    if (!name.trim()) {
+      setError("Nome da bebida é obrigatório.");
+      return;
+    }
+    setLoading(true);
+    try {
+      if (item) {
+        await request(`products/${item.id}/`, token, {
+          method: "PATCH",
+          body: JSON.stringify({
+            name: name.trim(),
+            unit,
+            package_size: packageSize === "" ? null : Number(packageSize),
+            active,
+          }),
+        });
+      } else {
+        await request("products/", token, {
+          method: "POST",
+          body: JSON.stringify({
+            name: name.trim(),
+            category: "BEBIDA",
+            unit,
+            package_size: packageSize === "" ? null : Number(packageSize),
+          }),
+        });
+      }
+      await saved();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/55 p-4">
+      <form onSubmit={submit} className="my-5 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+        <div className="flex items-center justify-between border-b pb-3">
+          <div className="flex items-center gap-2">
+            <Beer className="size-5 text-amber-600" />
+            <h3 className="text-lg font-black">{item ? "Editar bebida" : "Nova bebida no catálogo"}</h3>
+          </div>
+          <button type="button" onClick={close} className="rounded-lg p-1 text-ink-400 hover:bg-gray-100">
+            <X className="size-5" />
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3.5">
+          <label className="block text-xs font-bold text-ink-800">
+            Nome da Bebida
+            <input
+              type="text"
+              required
+              placeholder="Ex: Cerveja Corona, Suco de Laranja..."
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs font-bold text-ink-800">
+              Unidade / Embalagem
+              <select
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                className="mt-1 h-10 w-full rounded-lg border bg-white px-3 text-sm"
+              >
+                <option value="lata">Lata</option>
+                <option value="garrafa">Garrafa</option>
+                <option value="unidade">Unidade</option>
+                <option value="pacote">Pacote</option>
+                <option value="saco">Saco</option>
+              </select>
+            </label>
+
+            <label className="block text-xs font-bold text-ink-800">
+              Unidades por fardo/pack
+              <input
+                type="number"
+                min={1}
+                placeholder="Ex: 12"
+                value={packageSize}
+                onChange={(e) => setPackageSize(e.target.value === "" ? "" : Number(e.target.value))}
+                className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+              />
+            </label>
+          </div>
+
+          {item && (
+            <label className="flex items-center gap-2 text-xs font-bold text-ink-800 pt-1">
+              <input
+                type="checkbox"
+                checked={active}
+                onChange={(e) => setActive(e.target.checked)}
+                className="size-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+              />
+              Bebida ativa no catálogo
+            </label>
+          )}
+        </div>
+
+        {error && <p className="mt-3 text-xs font-bold text-red-600">{error}</p>}
+
+        <div className="mt-6 flex justify-end gap-2 border-t pt-4">
+          <button type="button" onClick={close} className="rounded-lg border px-4 py-2 text-xs font-bold">
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-xs font-bold text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            {loading ? "Salvando..." : "Salvar bebida"}
           </button>
         </div>
       </form>
