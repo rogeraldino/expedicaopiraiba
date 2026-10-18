@@ -4,7 +4,7 @@ from threading import Barrier
 from unittest import skipUnless
 
 from django.db import close_old_connections, connection
-from django.test import TransactionTestCase
+from django.test import TransactionTestCase, override_settings
 
 from apps.customers.models import Customer
 from apps.expeditions.models import Expedition
@@ -13,6 +13,7 @@ from .models import Payment
 from .services import create_balance_payment, simulate_paid_event
 
 
+@override_settings(PAYMENT_GATEWAY="FAKE")
 @skipUnless(connection.vendor == "postgresql", "Locks concorrentes exigem PostgreSQL")
 class BalancePaymentConcurrencyTests(TransactionTestCase):
     reset_sequences = True

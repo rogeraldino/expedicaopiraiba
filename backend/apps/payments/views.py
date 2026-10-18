@@ -1,5 +1,16 @@
+import hashlib
+import hmac
+import json
+import logging
+import urllib.error
+import urllib.request
+
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import HttpResponse, JsonResponse
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.views.decorators.csrf import csrf_exempt
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,6 +22,8 @@ from .models import Payment
 from apps.customers.services import customer_from_session_token
 from apps.reservations.customer_views import authenticated_customer, reservation_payload
 from apps.reservations.models import Reservation
+
+logger = logging.getLogger(__name__)
 
 
 class CreatePixView(APIView):
@@ -93,3 +106,97 @@ class BalancePaymentConfirmView(APIView):
             "expedition__checklist_items",
         ).get(id=reservation_id, customer=customer)
         return Response(reservation_payload(reservation))
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class MercadoPagoWebhookView(View):
+    def post(self, request, *args, **kwargs):
+        secret = getattr(settings, "MERCADOPAGO_WEBHOOK_SECRET", "")
+        signature_header = request.headers.get("x-signature") or request.headers.get("X-Signature", "")
+        request_id = request.headers.get("x-request-id") or request.headers.get("X-Request-Id", "")
+
+        try:
+            body = json.loads(request.body.decode("utf-8")) if request.body else {}
+        except Exception:
+            body = {}
+
+        data_id = (
+            body.get("data", {}).get("id")
+            or request.GET.get("data.id")
+            or request.GET.get("id")
+            or body.get("id")
+        )
+
+        if secret and signature_header and request_id and data_id:
+            try:
+                parts = dict(part.strip().split("=", 1) for part in signature_header.split(","))
+                ts = parts.get("ts")
+                v1 = parts.get("v1")
+                if ts and v1:
+                    canonical = f"id:{data_id};request-id:{request_id};ts:{ts};"
+                    expected_sig = hmac.new(
+                        secret.encode("utf-8"), canonical.encode("utf-8"), hashlib.sha256
+                    ).hexdigest()
+                    if not hmac.compare_digest(expected_sig, v1):
+                        logger.warning("Mercado Pago webhook signature mismatch.")
+                        return HttpResponse("Invalid signature", status=401)
+            except Exception as e:
+                logger.error("Error parsing Mercado Pago webhook signature: %s", e)
+                return HttpResponse("Invalid signature format", status=400)
+
+        event_type = (
+            body.get("type")
+            or request.GET.get("type")
+            or request.GET.get("topic")
+            or body.get("action")
+        )
+
+        if not data_id:
+            return JsonResponse({"status": "ignored_no_id"}, status=200)
+
+        if event_type in ("payment", "payment.updated", "payment.created", None):
+            access_token = getattr(settings, "MERCADOPAGO_ACCESS_TOKEN", "")
+            if not access_token:
+                logger.error("MERCADOPAGO_ACCESS_TOKEN is not configured.")
+                return JsonResponse({"status": "token_missing"}, status=500)
+
+            req = urllib.request.Request(
+                f"https://api.mercadopago.com/v1/payments/{data_id}",
+                headers={"Authorization": f"Bearer {access_token}"},
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    if resp.status == 200:
+                        payment_data = json.loads(resp.read().decode("utf-8"))
+                        status_name = payment_data.get("status")
+                        if status_name == "approved":
+                            logger.info("Mercado Pago payment %s approved. Processing...", data_id)
+                            process_paid_event(
+                                external_event_id=f"mp_{data_id}_{status_name}",
+                                external_payment_id=str(data_id),
+                                payload=payment_data,
+                            )
+                        else:
+                            logger.info(
+                                "Mercado Pago payment %s status is %s (not approved).",
+                                data_id,
+                                status_name,
+                            )
+                    else:
+                        logger.warning(
+                            "Could not fetch payment %s from Mercado Pago (HTTP %s).",
+                            data_id,
+                            resp.status,
+                        )
+            except urllib.error.HTTPError as e:
+                logger.warning(
+                    "Could not fetch payment %s from Mercado Pago (HTTP %s): %s",
+                    data_id,
+                    e.code,
+                    e.read().decode("utf-8", errors="replace"),
+                )
+            except Exception as e:
+                logger.error("Error processing Mercado Pago payment %s: %s", data_id, e)
+
+        return JsonResponse({"status": "received"}, status=200)

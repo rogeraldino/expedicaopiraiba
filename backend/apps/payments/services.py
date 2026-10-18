@@ -8,7 +8,7 @@ from django.utils import timezone
 from apps.reservations.models import Reservation, ReservationEvent
 from apps.reservations.services import record_reservation_event, transition_locked_reservation
 
-from .gateways import FakePaymentGateway
+from .gateways import FakePaymentGateway, get_payment_gateway
 from .models import Payment, PaymentTransaction
 
 
@@ -28,8 +28,15 @@ def create_pix_payment(*, customer, reservation_id):
         else:
             payment = reservation.payments.filter(status__in=(Payment.Status.PENDING, Payment.Status.PROCESSING)).first()
             if not payment:
-                gateway_payment = FakePaymentGateway().create_pix(reservation_id=reservation.id, amount_cents=reservation.deposit_cents)
-                payment = Payment.objects.create(reservation=reservation, external_id=gateway_payment.external_id, amount_cents=reservation.deposit_cents, pix_copy_paste=gateway_payment.pix_copy_paste, expires_at=gateway_payment.expires_at)
+                gateway_payment = get_payment_gateway().create_pix(reservation_id=reservation.id, amount_cents=reservation.deposit_cents, customer=customer)
+                payment = Payment.objects.create(
+                    reservation=reservation,
+                    provider=gateway_payment.provider,
+                    external_id=gateway_payment.external_id,
+                    amount_cents=reservation.deposit_cents,
+                    pix_copy_paste=gateway_payment.pix_copy_paste,
+                    expires_at=gateway_payment.expires_at,
+                )
                 record_reservation_event(reservation=reservation, event_type="PAYMENT_CREATED", actor_type=ReservationEvent.ActorType.CUSTOMER, actor_identifier=str(customer.id), payload={"payment_id": str(payment.id), "amount_cents": payment.amount_cents, "method": payment.method})
             transition_locked_reservation(reservation=reservation, target_status=Reservation.Status.AWAITING_PAYMENT, event_type="PAYMENT_AWAITING", actor_type=ReservationEvent.ActorType.CUSTOMER, actor_identifier=str(customer.id))
     if expired:
@@ -53,8 +60,16 @@ def create_balance_payment(*, customer, reservation_id):
         active.exclude(amount_cents=remaining).update(status=Payment.Status.CANCELLED)
         if payment:
             return payment
-        gateway_payment = FakePaymentGateway().create_pix(reservation_id=reservation.id, amount_cents=remaining)
-        payment = Payment.objects.create(reservation=reservation, purpose=Payment.Purpose.BALANCE, external_id=gateway_payment.external_id, amount_cents=remaining, pix_copy_paste=gateway_payment.pix_copy_paste, expires_at=gateway_payment.expires_at)
+        gateway_payment = get_payment_gateway().create_pix(reservation_id=reservation.id, amount_cents=remaining, customer=customer)
+        payment = Payment.objects.create(
+            reservation=reservation,
+            purpose=Payment.Purpose.BALANCE,
+            provider=gateway_payment.provider,
+            external_id=gateway_payment.external_id,
+            amount_cents=remaining,
+            pix_copy_paste=gateway_payment.pix_copy_paste,
+            expires_at=gateway_payment.expires_at,
+        )
         record_reservation_event(reservation=reservation, event_type="BALANCE_PAYMENT_CREATED", actor_type=ReservationEvent.ActorType.CUSTOMER, actor_identifier=str(customer.id), payload={"payment_id": str(payment.id), "amount_cents": remaining})
         return payment
 

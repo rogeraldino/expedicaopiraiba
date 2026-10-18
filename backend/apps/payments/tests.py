@@ -10,7 +10,7 @@ from apps.customers.services import create_customer_session_token
 from .models import Payment, PaymentTransaction
 
 
-@override_settings(DEBUG=True, FAKE_WEBHOOK_SECRET="test-secret")
+@override_settings(DEBUG=True, FAKE_WEBHOOK_SECRET="test-secret", PAYMENT_GATEWAY="FAKE")
 class PaymentApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -81,3 +81,93 @@ class PaymentApiTests(TestCase):
         other = Customer.objects.create(cpf="11144477735", full_name="Outro", email="other@example.com", phone="62988887777")
         auth = {"HTTP_AUTHORIZATION": f"Bearer {create_customer_session_token(other)}"}
         self.assertEqual(self.client.post(f"/api/me/reservations/{hold.data['reservation_id']}/balance-payment/", format="json", **auth).status_code, 404)
+
+    def test_mercadopago_gateway_create_pix(self):
+        import json
+        from unittest.mock import patch, MagicMock
+        from .gateways import MercadoPagoPaymentGateway
+
+        data = {
+            "id": 999888777,
+            "status": "pending",
+            "date_of_expiration": "2026-10-19T18:00:00.000-03:00",
+            "point_of_interaction": {
+                "transaction_data": {
+                    "qr_code": "00020126510014br.gov.bcb.pix...",
+                    "qr_code_base64": "base64png...",
+                    "ticket_url": "https://mercadopago.com/ticket",
+                }
+            },
+        }
+        mock_resp = MagicMock()
+        mock_resp.status = 201
+        mock_resp.read.return_value = json.dumps(data).encode("utf-8")
+
+        mock_cm = MagicMock()
+        mock_cm.__enter__.return_value = mock_resp
+        mock_cm.__exit__.return_value = False
+
+        with patch("urllib.request.urlopen", return_value=mock_cm) as mock_urlopen:
+            gateway = MercadoPagoPaymentGateway(access_token="test-mp-token")
+            customer = MagicMock()
+            customer.email = "test@example.com"
+            customer.full_name = "Cliente Teste"
+            customer.cpf = "12345678909"
+
+            payment = gateway.create_pix(
+                reservation_id="res-123",
+                amount_cents=150000,
+                customer=customer,
+            )
+            self.assertEqual(payment.external_id, "999888777")
+            self.assertEqual(payment.provider, "MERCADOPAGO")
+            self.assertEqual(payment.pix_copy_paste, "00020126510014br.gov.bcb.pix...")
+            self.assertEqual(payment.ticket_url, "https://mercadopago.com/ticket")
+            mock_urlopen.assert_called_once()
+
+    @override_settings(MERCADOPAGO_ACCESS_TOKEN="test-token", MERCADOPAGO_WEBHOOK_SECRET="secret123")
+    def test_mercadopago_webhook_approves_payment(self):
+        import json
+        from unittest.mock import patch, MagicMock
+        import hashlib, hmac
+
+        hold, created = self.create_hold_and_payment()
+        payment = Payment.objects.get(id=created.data["payment_id"])
+
+        payment_data = {
+            "id": payment.external_id,
+            "status": "approved",
+            "transaction_amount": 1200.0,
+            "external_reference": str(hold.data["reservation_id"]),
+        }
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = json.dumps(payment_data).encode("utf-8")
+        mock_cm = MagicMock()
+        mock_cm.__enter__.return_value = mock_resp
+        mock_cm.__exit__.return_value = False
+
+        # Build valid signature
+        data_id = payment.external_id
+        req_id = "req-test-uuid"
+        ts = "1792361000"
+        canonical = f"id:{data_id};request-id:{req_id};ts:{ts};"
+        v1 = hmac.new(b"secret123", canonical.encode("utf-8"), hashlib.sha256).hexdigest()
+        sig_header = f"ts={ts},v1={v1}"
+
+        with patch("urllib.request.urlopen", return_value=mock_cm):
+            payload = {"type": "payment", "data": {"id": data_id}}
+            resp = self.client.post(
+                "/api/webhooks/mercadopago/",
+                payload,
+                format="json",
+                HTTP_X_SIGNATURE=sig_header,
+                HTTP_X_REQUEST_ID=req_id,
+            )
+            self.assertEqual(resp.status_code, 200)
+
+            payment.refresh_from_db()
+            self.assertEqual(payment.status, Payment.Status.PAID)
+            reservation = Reservation.objects.get(id=hold.data["reservation_id"])
+            self.assertEqual(reservation.status, Reservation.Status.CONFIRMED)

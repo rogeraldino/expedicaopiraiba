@@ -1,5 +1,28 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Infraestrutura produção/sandbox — 18/10/2026
+
+Para uma passagem operacional ao Antigravity, incluindo estado de provedores e sequência de retomada, consulte [`ANTIGRAVITY_HANDOFF.md`](ANTIGRAVITY_HANDOFF.md).
+
+Spec HIGH v0.1 em `specs/archive/Infra_Producao_Sandbox/`: Rodrigo declarou READY («Perfeito, execute»), Grill/Counsel PASS, implantação e validação local concluídas; Ponytail técnico independente PASS. Rodrigo validou o backup externo no WSL/Windows em 18/10/2026 e formalizou ACCEPTED; dossiê arquivado.
+
+- Caddy com certificados Let's Encrypt válidos para apex/www/sb; HTTP→HTTPS, apex→www.
+- www permanece 503 manutenção para todo caminho/método; nenhuma operação comercial pública liberada.
+- sb tem gateway com login por senha e cookie host-only Secure/HttpOnly/Strict 12h, separado de Authorization Bearer do produto. Credenciais privadas em `/etc/piraiba`, acesso pelo helper `/root/infra/piraiba/show-sandbox-access.py` no terminal da VM. Nenhuma senha no Git.
+- Compose independentes piraiba-production/piraiba-sandbox, PostgreSQL 17 e volumes/redes exclusivos, segredos distintos, código em snapshots; bases novas sem dados comerciais. Desenvolvimento antigo preservado em loopback3000/8000; novos upstreams loopback3001/8001 e3002/8002. Gateway loopback8090.
+- Limites memória/CPU/PIDs, rotação3x10MB, restart unless-stopped, apps não root/read-only/capabilities removidas. Jobs somente expire_holds idempotente, sem mensagens/provedores.
+- Backups registry `/etc/vm-backup/environments.json`: três dumps consistentes, restauração individual validada, manifesto v2 mantendo compatibilidade do cliente Windows e prefixo legado. Publicação completa com marcador ready. Chave privada age permanece no WSL. Novo formato ainda precisa de cópia/descriptografia externa confirmada.
+- Builds e TypeScript passaram; Django checks/migrations passaram; testes gateway6, backup4, HTTP integrado e26 checks independentes; reinício/persistência e fail-closed PASS. Evidências sanitizadas em `/root/infra/piraiba`. Runbook `deploy/ENVIRONMENTS.md`.
+- Auditoria npm: vulnerabilidade crítica do Next.js e vulnerabilidades de `sharp`, `source-map-js`, `brace-expansion` e `js-yaml` foram corrigidas em 18/10/2026 com atualização para Next.js 16.4.2 e correções semver no package-lock.json. Ocorrências caíram de 10 (1 crítica, 9 altas) para 5 altas restritas à toolchain (`braces` em devDependencies, sem patch upstream publicado). Build e TypeScript PASS, e imagem atualizada implantada com sucesso no sandbox. Produção permanece em 503.
+- Snapshot de aplicação inclui alterações locais, identificado por SHA base e SHA256 do artefato em `/etc/piraiba/release.json`, não declarado commit limpo. Pipeline CI/CD completo e retenção/alertas são próximos itens.
+
+
+## Decisões de provedores — 18/10/2026
+
+- **Gmail:** `expedicaopiraiba@gmail.com` com senha de app em `/root/.config/expedicaopiraiba/providers.env`, teste de autenticação SMTP STARTTLS bem-sucedido. `VerificationChallenge` suporta `EMAIL`.
+- **WhatsApp (Meta Cloud API / Coexistence):** Pausado em 18/10/2026 após sucesso na emissão e validação do token permanente de Usuário do Sistema (`Rodrigo Dev`), subscrição do app `1641019714739355` na WABA `449201538285349`, configuração de webhooks HTTPS em `/api/webhooks/whatsapp/` no Caddy e mudança de status do número `+55 62 8161-2128` para `CONNECTED` sem interrupção do celular. A submissão de modelos aguarda vinculação de método de pagamento à WABA pelo portfólio titular.
+- **Mercado Pago:** Integrado e validado em 18/10/2026. Aplicação `Expedição Piraíba` (ID `3855226698945154`, owner `88566949`). Gateway oficial de PIX implementado no backend, teste real executado com sucesso na API, webhook HTTPS ativo em `/api/webhooks/mercadopago/` com validação de assinatura HMAC SHA-256 (`x-signature`) e conciliação idempotente no banco. Chaves salvas sob `chmod 0600` em `/etc/piraiba/production.env` e `/etc/piraiba/sandbox.env`.
+
 ## Preparação para VM e provedores — 18/10/2026
 
 Rodrigo iniciou a frente de implantação em VM com domínio próprio, e-mail Google, WhatsApp API e Mercado Pago. A pesquisa de documentação oficial, a ordem de execução, os riscos atuais e as decisões pendentes estão em [`docs/PROVIDER_PREP.md`](docs/PROVIDER_PREP.md). Esta etapa é somente preparação documental: nenhuma credencial foi adicionada, nenhuma API real foi conectada e nenhum pagamento real foi homologado. O próximo agente deve ler a Constituição e os owners normativos antes de propor a spec HIGH. A VM recém-criada ainda precisa ter sistema operacional e arquitetura confirmados; o usuário relatou que `npm` não funciona nela e recebeu comandos condicionais para Ubuntu/Debian.

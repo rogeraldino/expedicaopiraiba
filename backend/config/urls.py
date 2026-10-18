@@ -20,6 +20,8 @@ from django.urls import include, path
 
 
 from apps.expeditions.views import LodgeListView, TargetSpeciesListView
+from apps.operations.whatsapp import WhatsAppOAuthCallbackView, WhatsAppWebhookView
+from apps.payments.views import MercadoPagoWebhookView
 
 
 def health(_request):
@@ -27,6 +29,9 @@ def health(_request):
 
 urlpatterns = [
     path("api/health/", health),
+    path("api/webhooks/whatsapp/", WhatsAppWebhookView.as_view(), name="whatsapp-webhook"),
+    path("api/webhooks/whatsapp/oauth/", WhatsAppOAuthCallbackView.as_view(), name="whatsapp-oauth-callback"),
+    path("api/webhooks/mercadopago/", MercadoPagoWebhookView.as_view(), name="mercadopago-webhook"),
     path("api/expeditions/", include("apps.expeditions.urls")),
     path("api/lodges/", LodgeListView.as_view(), name="public-lodge-list"),
     path("api/species/", TargetSpeciesListView.as_view(), name="public-species-list"),

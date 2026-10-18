@@ -2,6 +2,16 @@
 
 Este documento registra requisitos técnicos das documentações oficiais para preparar a integração. Não altera regras de produto nem autoriza cobrança ou envio em produção. As credenciais devem ficar no `.env` da VM, fora do Git.
 
+## Definições confirmadas pelo organizador — 18/10/2026
+
+- Sequência confirmada por Rodrigo: organizar Gmail e WhatsApp primeiro; decisões e integração de Mercado Pago serão retomadas depois.
+- E-mail: Gmail pessoal `expedicaopiraiba@gmail.com`. Método de autenticação ainda a selecionar e homologar; nenhuma credencial recebida.
+- WhatsApp: API oficial Meta. Segundo Rodrigo, o portfólio empresarial existe, ele possui acesso de desenvolvedor e falta adicionar o método de cobrança. Número, permissões, token e templates ainda precisam de verificação técnica.
+- Mercado Pago: a primeira entrega inclui Pix, cartão e boleto, checkout, cancelamentos e devoluções. Isso amplia o escopo anterior; não reduzir a entrega a Pix.
+- Políticas comerciais ainda a especificar: parcelamento e juros, validade do boleto, ocupação de vagas durante compensação, pagamento após expiração, cancelamento, reembolso total/parcial e tratamento de contestações. Não inferir políticas a partir da capacidade da API.
+- Domínio: configuração adiada pelo organizador por aproximadamente duas horas; nome final ainda não confirmado.
+- Estado: definições de escopo, sem READY para implementação semântica. Mensagens recebidas, eventos e destinatários de notificações continuam pendentes.
+
 ## Objetivo e estado para o próximo agente
 
 Rodrigo quer colocar a Expedição Piraíba em uma VM com domínio próprio e ativar envio de e-mail pelo Google, envio/recepção pela API do WhatsApp e cobrança pelo Mercado Pago. A pesquisa dos provedores foi feita em 18/10/2026. **Nenhuma integração real foi implementada ou testada com credenciais.** O repositório continua com pagamentos e OTP simulados. Não interpretar este documento como READY ou ACCEPTED.
@@ -15,7 +25,7 @@ Ordem de execução sugerida:
 5. Integrar Pix real no backend e trocar o checkout para aguardar confirmação confiável. `backend/apps/payments/services.py` usa `FakePaymentGateway`; `backend/apps/payments/urls.py` e `backend/apps/payments/views.py` expõem confirmação simulada, inclusive do saldo. A UI chama esses endpoints. Antes de habilitar cobrança real, impedir esses caminhos de marcar pagamento como pago.
 6. Testar contratos com respostas simuladas, duplicidade/retry, concorrência em PostgreSQL e fluxos de erro; depois testar credenciais de homologação e webhooks no domínio HTTPS. O teste Pix sandbox de criação não comprova pagamento aprovado. Executar a revisão Ponytail e o gate real previstos na Constituição.
 
-Decisões ainda sem resposta do organizador: conta Google Workspace ou Gmail pessoal; API oficial Meta ou outro provedor; Pix isolado ou também cartão nesta entrega; e destino das mensagens recebidas (registro, painel ou automação). Evitar preencher essas lacunas com suposições.
+As escolhas de conta e provedores estão registradas acima. Permanecem abertas as políticas financeiras, o método de autenticação do Gmail e o destino das mensagens recebidas (registro, painel ou automação). Evitar preencher essas lacunas com suposições.
 
 ## Meta WhatsApp Business Platform (Cloud API)
 
@@ -47,8 +57,8 @@ Fontes: [SMTP relay do Google Workspace](https://support.google.com/a/answer/176
 
 ## Pendências para a integração no repositório
 
-- Definir a conta Google e o método de autenticação, os eventos de envio e os destinatários.
+- Selecionar e homologar autenticação do Gmail pessoal confirmado; definir eventos de envio e destinatários.
 - Definir o escopo de mensagens recebidas pelo WhatsApp: registro, painel de atendimento ou automação.
-- Definir Pix isolado ou Pix e cartão no primeiro incremento.
+- Especificar Pix, cartão e boleto no primeiro incremento, incluindo estados, parcelamento, expiração, cancelamentos, devoluções e contestações.
 - Criar especificação HIGH e revisar os efeitos sobre autenticação, estados de reserva, idempotência, conciliação e privacidade antes da implementação semântica, conforme `docs/sdd/CONSTITUTION.md`.
 - Remover o retorno público de `dev_code` e desabilitar todos os caminhos de confirmação simulada antes de habilitar cobrança real.

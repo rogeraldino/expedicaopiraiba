@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-09-19",
+  "updated_at": "2026-10-18",
   "entries": [
     {
       "id": "GOV-DEVELOPMENT",
@@ -175,6 +175,24 @@
       "accepted_at": "2026-10-16",
       "accepted_by": "Rodrigo",
       "accepted_evidence": "aprovação direta do organizador Rodrigo em sessão de desenvolvimento"
+    },
+    {
+      "id": "INFRA-PRODUCAO-SANDBOX",
+      "concept": "Infraestrutura de produção e sandbox, isolamento de ambientes, Caddy HTTPS e backups multiambiente",
+      "owner": "specs/archive/Infra_Producao_Sandbox/spec.md",
+      "status": "normative",
+      "version": "0.1",
+      "scope": "isolamento de containers Docker, Caddy, gateway de proteção de sandbox, limites de recursos e backups multiambiente",
+      "supersedes": [],
+      "superseded_by": [],
+      "lifecycle": "ARCHIVED",
+      "ready_at": "2026-10-18",
+      "ready_by": "Rodrigo",
+      "ready_evidence": "specs/archive/Infra_Producao_Sandbox/grill.md; specs/archive/Infra_Producao_Sandbox/counsel.md",
+      "acceptance_status": "ACCEPTED",
+      "accepted_at": "2026-10-18",
+      "accepted_by": "Rodrigo",
+      "accepted_evidence": "specs/archive/Infra_Producao_Sandbox/ponytail.md; specs/archive/Infra_Producao_Sandbox/evidence.md"
     }
   ]
 }

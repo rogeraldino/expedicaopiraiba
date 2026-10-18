@@ -33,6 +33,9 @@ ALLOWED_HOSTS = [host for host in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.
 FAKE_WEBHOOK_SECRET = os.getenv("FAKE_WEBHOOK_SECRET", "fake-local-secret")
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "admin@expedicaopiraiba.com.br")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin-local-2026")
+WHATSAPP_WEBHOOK_VERIFY_TOKEN = os.getenv("WHATSAPP_WEBHOOK_VERIFY_TOKEN", "")
+META_APP_SECRET = os.getenv("META_APP_SECRET", "")
+META_APP_ID = os.getenv("META_APP_ID", "")
 
 
 # Application definition
@@ -151,4 +154,9 @@ SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 OTP_EXPIRY_MINUTES = 5
 
 OPERATIONAL_WHATSAPP_URL = os.getenv("OPERATIONAL_WHATSAPP_URL", "https://wa.me/5562981612128")
+
+# Mercado Pago Configuration
+MERCADOPAGO_ACCESS_TOKEN = os.getenv("MERCADOPAGO_ACCESS_TOKEN", "")
+MERCADOPAGO_PUBLIC_KEY = os.getenv("MERCADOPAGO_PUBLIC_KEY", "")
+MERCADOPAGO_WEBHOOK_SECRET = os.getenv("MERCADOPAGO_WEBHOOK_SECRET", "")
 
