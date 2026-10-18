@@ -1,5 +1,9 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Preparação para VM e provedores — 18/10/2026
+
+Rodrigo iniciou a frente de implantação em VM com domínio próprio, e-mail Google, WhatsApp API e Mercado Pago. A pesquisa de documentação oficial, a ordem de execução, os riscos atuais e as decisões pendentes estão em [`docs/PROVIDER_PREP.md`](docs/PROVIDER_PREP.md). Esta etapa é somente preparação documental: nenhuma credencial foi adicionada, nenhuma API real foi conectada e nenhum pagamento real foi homologado. O próximo agente deve ler a Constituição e os owners normativos antes de propor a spec HIGH. A VM recém-criada ainda precisa ter sistema operacional e arquitetura confirmados; o usuário relatou que `npm` não funciona nela e recebeu comandos condicionais para Ubuntu/Debian.
+
 ## Estado operacional em 03/10/2026
 
 Após a publicação inicial do Desafio Piraíba, o catálogo geral de bebidas em `expeditions_product` foi restaurado via migração `0015_restore_beverage_catalog`. O banco agora conta com as 16 bebidas canônicas (cervejas Heineken, Stella Artois, Original, Amstel, Corona, Spaten, sem álcool; refrigerantes Coca-Cola, Coca Zero, Guaraná, Guaraná Zero; águas com/sem gás, água tônica, sucos e gelo/copos térmicos).
