@@ -190,6 +190,7 @@ def create_reservation_payment(
                     method=Payment.Method.PIX,
                     amount_cents=reservation.deposit_cents,
                     pix_copy_paste=gateway_payment.pix_copy_paste,
+                    pix_qr_code_base64=gateway_payment.qr_code_base64,
                     expires_at=gateway_payment.expires_at,
                 )
                 record_reservation_event(
@@ -249,6 +250,7 @@ def create_balance_payment(*, customer, reservation_id):
             external_id=gateway_payment.external_id,
             amount_cents=remaining,
             pix_copy_paste=gateway_payment.pix_copy_paste,
+            pix_qr_code_base64=gateway_payment.qr_code_base64,
             expires_at=gateway_payment.expires_at,
         )
         record_reservation_event(

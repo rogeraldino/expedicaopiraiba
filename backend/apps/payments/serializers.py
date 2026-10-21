@@ -14,6 +14,7 @@ def payment_payload(payment):
         "method": payment.method,
         "amount_cents": payment.amount_cents,
         "pix_copy_paste": payment.pix_copy_paste,
+        "pix_qr_code_base64": payment.pix_qr_code_base64,
         "ticket_url": payment.boleto_url,
         "boleto_barcode": payment.boleto_barcode,
         "card_brand": payment.card_brand,

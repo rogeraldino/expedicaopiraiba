@@ -52,6 +52,7 @@ class FakePaymentGateway:
             status="PENDING",
             method="PIX",
             pix_copy_paste=code,
+            qr_code_base64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
             expires_at=timezone.now() + timedelta(minutes=15),
             provider="FAKE",
         )
@@ -132,6 +133,7 @@ class MercadoPagoPaymentGateway:
         last_name = full_name[1] if len(full_name) > 1 else first_name
         cpf = "".join(filter(str.isdigit, customer.cpf)) if customer and getattr(customer, "cpf", None) else ""
 
+        notification_url = getattr(settings, "MERCADOPAGO_NOTIFICATION_URL", "")
         payload = {
             "transaction_amount": amount_decimal,
             "description": f"Expedição Piraíba - Reserva {reservation_id}",
@@ -143,6 +145,8 @@ class MercadoPagoPaymentGateway:
                 "last_name": last_name,
             },
         }
+        if notification_url:
+            payload["notification_url"] = notification_url
         if cpf:
             payload["payer"]["identification"] = {
                 "type": "CPF",
@@ -202,6 +206,7 @@ class MercadoPagoPaymentGateway:
         email = customer.email if customer and getattr(customer, "email", None) else "contato@expedicaopiraiba.com.br"
         cpf = "".join(filter(str.isdigit, customer.cpf)) if customer and getattr(customer, "cpf", None) else ""
 
+        notification_url = getattr(settings, "MERCADOPAGO_NOTIFICATION_URL", "")
         payload = {
             "transaction_amount": amount_decimal,
             "token": card_token,
@@ -213,6 +218,8 @@ class MercadoPagoPaymentGateway:
                 "email": email,
             },
         }
+        if notification_url:
+            payload["notification_url"] = notification_url
         if cpf:
             payload["payer"]["identification"] = {
                 "type": "CPF",
@@ -264,6 +271,7 @@ class MercadoPagoPaymentGateway:
         exp_date = expires_at or (timezone.now() + timedelta(days=3))
         exp_iso = exp_date.strftime("%Y-%m-%dT%H:%M:%S.000-03:00")
 
+        notification_url = getattr(settings, "MERCADOPAGO_NOTIFICATION_URL", "")
         payload = {
             "transaction_amount": amount_decimal,
             "description": f"Expedição Piraíba - Boleto Reserva {reservation_id}",
@@ -288,6 +296,8 @@ class MercadoPagoPaymentGateway:
                 },
             },
         }
+        if notification_url:
+            payload["notification_url"] = notification_url
 
         key = idempotency_key or generate_idempotency_key(reservation_id, "INITIAL", "BOLETO", amount_cents)
         data = self._post("/v1/payments", payload, idempotency_key=key)

@@ -122,8 +122,82 @@ class PaymentApiTests(TestCase):
             self.assertEqual(payment.external_id, "999888777")
             self.assertEqual(payment.provider, "MERCADOPAGO")
             self.assertEqual(payment.pix_copy_paste, "00020126510014br.gov.bcb.pix...")
+            self.assertEqual(payment.qr_code_base64, "base64png...")
             self.assertEqual(payment.ticket_url, "https://mercadopago.com/ticket")
             mock_urlopen.assert_called_once()
+
+    @override_settings(MERCADOPAGO_ACCESS_TOKEN="test-token")
+    def test_payment_status_view_active_auto_heal(self):
+        import json
+        from unittest.mock import patch, MagicMock
+
+        hold, created = self.create_hold_and_payment()
+        payment = Payment.objects.get(id=created.data["payment_id"])
+        payment.provider = "MERCADOPAGO"
+        payment.external_id = "mp_pay_99999"
+        payment.pix_qr_code_base64 = ""
+        payment.save()
+
+        payment_data = {
+            "id": "mp_pay_99999",
+            "status": "approved",
+            "point_of_interaction": {
+                "transaction_data": {
+                    "qr_code_base64": "auto_heal_qr_base64_png"
+                }
+            }
+        }
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = json.dumps(payment_data).encode("utf-8")
+        mock_cm = MagicMock()
+        mock_cm.__enter__.return_value = mock_resp
+        mock_cm.__exit__.return_value = False
+
+        with patch("urllib.request.urlopen", return_value=mock_cm):
+            resp = self.client.get(f"/api/payments/{payment.id}/status/")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.data["status"], "PAID")
+            self.assertEqual(resp.data["reservation_status"], "CONFIRMED")
+            self.assertEqual(resp.data["pix_qr_code_base64"], "auto_heal_qr_base64_png")
+
+            payment.refresh_from_db()
+            self.assertEqual(payment.status, Payment.Status.PAID)
+            self.assertEqual(payment.pix_qr_code_base64, "auto_heal_qr_base64_png")
+            reservation = Reservation.objects.get(id=hold.data["reservation_id"])
+            self.assertEqual(reservation.status, Reservation.Status.CONFIRMED)
+
+    @override_settings(MERCADOPAGO_ACCESS_TOKEN="test-token", MERCADOPAGO_WEBHOOK_SECRET="secret123")
+    def test_mercadopago_webhook_without_signature_authenticates_direct(self):
+        import json
+        from unittest.mock import patch, MagicMock
+
+        hold, created = self.create_hold_and_payment()
+        payment = Payment.objects.get(id=created.data["payment_id"])
+
+        payment_data = {
+            "id": payment.external_id,
+            "status": "approved",
+            "currency_id": "BRL",
+            "transaction_amount": payment.amount_cents / 100.0,
+            "external_reference": str(hold.data["reservation_id"]),
+        }
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = json.dumps(payment_data).encode("utf-8")
+        mock_cm = MagicMock()
+        mock_cm.__enter__.return_value = mock_resp
+        mock_cm.__exit__.return_value = False
+
+        with patch("urllib.request.urlopen", return_value=mock_cm):
+            payload = {"type": "payment", "data": {"id": payment.external_id}}
+            resp = self.client.post("/api/webhooks/mercadopago/", payload, format="json")
+            self.assertEqual(resp.status_code, 200)
+
+            payment.refresh_from_db()
+            self.assertEqual(payment.status, Payment.Status.PAID)
 
     @override_settings(MERCADOPAGO_ACCESS_TOKEN="test-token", MERCADOPAGO_WEBHOOK_SECRET="secret123")
     def test_mercadopago_webhook_approves_payment(self):

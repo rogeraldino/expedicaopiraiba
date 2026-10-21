@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { AlertCircle, ArrowLeft, CheckCircle2, Copy, CreditCard, ExternalLink, Loader2, LockKeyhole, QrCode, Receipt, RefreshCw } from "lucide-react";
 import Link from "next/link";
+import QRCode from "qrcode";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 const inputClass =
@@ -42,6 +43,9 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   const [paymentId, setPaymentId] = useState("");
   const [reservationId, setReservationId] = useState("");
   const [pixCode, setPixCode] = useState("");
+  const [pixQrCodeBase64, setPixQrCodeBase64] = useState("");
+  const [pixQrDataUrl, setPixQrDataUrl] = useState("");
+  const [copiedPix, setCopiedPix] = useState(false);
   const [ticketUrl, setTicketUrl] = useState("");
   const [boletoBarcode, setBoletoBarcode] = useState("");
   const [amountDue, setAmountDue] = useState(0);
@@ -105,11 +109,30 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       setReservationId("");
       setPaymentId("");
       setPixCode("");
+      setPixQrCodeBase64("");
+      setPixQrDataUrl("");
+      setCopiedPix(false);
       setTicketUrl("");
       setBoletoBarcode("");
       setIsEditing(true);
       setStep("FORM");
     }
+  }
+
+  // Fallback client-side QR Code generation if base64 image from gateway is not available
+  useEffect(() => {
+    if (pixCode && !pixQrCodeBase64) {
+      QRCode.toDataURL(pixCode, { width: 320, margin: 1 })
+        .then((url) => setPixQrDataUrl(url))
+        .catch(() => setPixQrDataUrl(""));
+    }
+  }, [pixCode, pixQrCodeBase64]);
+
+  function handleCopyPix() {
+    if (!pixCode) return;
+    navigator.clipboard.writeText(pixCode);
+    setCopiedPix(true);
+    setTimeout(() => setCopiedPix(false), 2500);
   }
 
   // Polling payment status when on PAYMENT step
@@ -123,6 +146,10 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         if (!res.ok) return;
         const data = await res.json();
         if (!active) return;
+
+        if (data.pix_qr_code_base64 && !pixQrCodeBase64) {
+          setPixQrCodeBase64(data.pix_qr_code_base64);
+        }
 
         if (data.status === "PAID" || data.reservation_status === "CONFIRMED" || data.reservation_status === "PAID") {
           if (data.customer_session_token) {
@@ -144,7 +171,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       active = false;
       clearInterval(interval);
     };
-  }, [step, paymentId]);
+  }, [step, paymentId, pixQrCodeBase64]);
 
   async function requestCode(event: FormEvent) {
     event.preventDefault();
@@ -315,6 +342,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       }
 
       setPixCode(payment.pix_copy_paste ?? "");
+      setPixQrCodeBase64(payment.pix_qr_code_base64 ?? "");
       setTicketUrl(payment.ticket_url ?? "");
       setBoletoBarcode(payment.boleto_barcode ?? "");
       setStep("PAYMENT");
@@ -393,20 +421,65 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
             <p className="mt-1 text-xs text-ink-500">
               Suas vagas ficam protegidas no sistema até <strong>{holdUntil}</strong>.
             </p>
-            <div className="mt-5 rounded-xl bg-sand-50 p-4 border border-sand-200">
-              <p className="text-xs font-bold uppercase tracking-wider text-ink-600">Código PIX Copia e Cola</p>
-              <p className="mt-2 break-all font-mono text-xs text-ink-800 select-all">{pixCode}</p>
+
+            {/* Visual QR Code Image */}
+            <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border-2 border-brand-200 bg-brand-50/50 p-6 text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-brand-800">
+                1. Aponte a câmera do seu banco para o QR Code
+              </p>
+              <div className="mt-4 flex size-64 items-center justify-center overflow-hidden rounded-2xl border border-ink-900/10 bg-white p-3 shadow-md">
+                {(pixQrCodeBase64 || pixQrDataUrl) ? (
+                  <img
+                    src={pixQrCodeBase64 ? `data:image/png;base64,${pixQrCodeBase64}` : pixQrDataUrl}
+                    alt="QR Code PIX para leitura e pagamento"
+                    className="size-full object-contain"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center gap-2 text-xs text-ink-400">
+                    <RefreshCw className="size-6 animate-spin text-brand-600" />
+                    <span>Gerando imagem do QR Code...</span>
+                  </div>
+                )}
+              </div>
+              <p className="mt-3 text-xs text-ink-600">
+                Abra o aplicativo do seu banco, escolha <strong>Pagar via PIX</strong> e escaneie o código acima.
+              </p>
             </div>
+
+            {/* Copia e Cola Code Box */}
+            <div className="mt-5 rounded-xl bg-sand-50 p-4 border border-sand-200">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-600">2. Ou utilize o Copia e Cola</p>
+                {copiedPix && (
+                  <span className="inline-flex items-center gap-1 text-xs font-bold text-brand-700 animate-pulse">
+                    <CheckCircle2 className="size-3.5" /> Copiado!
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 break-all font-mono text-xs text-ink-800 select-all bg-white p-3 rounded-lg border border-sand-300">
+                {pixCode}
+              </p>
+            </div>
+
             <button
               type="button"
-              onClick={() => navigator.clipboard.writeText(pixCode)}
-              className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-brand-600 font-bold text-brand-700 hover:bg-brand-50"
+              onClick={handleCopyPix}
+              className="mt-4 flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-brand-600 font-bold text-white shadow hover:bg-brand-700 transition"
             >
-              <Copy className="size-4" /> Copiar código PIX
+              {copiedPix ? (
+                <>
+                  <CheckCircle2 className="size-5 text-white" /> Código PIX Copiado!
+                </>
+              ) : (
+                <>
+                  <Copy className="size-5 text-white" /> Copiar Código PIX
+                </>
+              )}
             </button>
-            <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-brand-50 p-3 text-xs text-brand-800">
-              <RefreshCw className="size-4 animate-spin text-brand-600" />
-              Aguardando confirmação do banco... Você será redirecionado automaticamente.
+
+            <div className="mt-5 flex items-center justify-center gap-2.5 rounded-xl bg-brand-50 p-3.5 text-xs font-medium text-brand-900 border border-brand-200">
+              <RefreshCw className="size-4 animate-spin text-brand-600 shrink-0" />
+              <span>Aguardando compensação instantânea... Assim que o banco confirmar, a tela atualizará automaticamente.</span>
             </div>
           </>
         )}

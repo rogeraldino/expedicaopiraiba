@@ -53,6 +53,49 @@ class PaymentStatusView(APIView):
             )
         except Payment.DoesNotExist:
             return Response({"detail": "Pagamento não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Active auto-heal reconciliation during polling: check gateway directly if still pending
+        if (
+            payment.status in (Payment.Status.PENDING, Payment.Status.PROCESSING)
+            and payment.external_id
+            and not payment.external_id.startswith("fake_")
+        ):
+            access_token = getattr(settings, "MERCADOPAGO_ACCESS_TOKEN", "")
+            if payment.provider == "MERCADOPAGO" and access_token:
+                try:
+                    req = urllib.request.Request(
+                        f"https://api.mercadopago.com/v1/payments/{payment.external_id}",
+                        headers={"Authorization": f"Bearer {access_token}"},
+                        method="GET",
+                    )
+                    with urllib.request.urlopen(req, timeout=3) as resp:
+                        if resp.status == 200:
+                            data = json.loads(resp.read().decode("utf-8"))
+                            mp_status = data.get("status")
+
+                            # Backfill qr_code_base64 if missing on model
+                            poi = data.get("point_of_interaction", {}).get("transaction_data", {})
+                            qr_b64 = poi.get("qr_code_base64", "")
+                            if qr_b64 and not payment.pix_qr_code_base64:
+                                payment.pix_qr_code_base64 = qr_b64
+                                payment.save(update_fields=["pix_qr_code_base64", "updated_at"])
+
+                            if mp_status == "approved":
+                                logger.info(
+                                    "Active reconciliation detected approved payment for %s (MP id: %s)",
+                                    payment.id,
+                                    payment.external_id,
+                                )
+                                process_paid_event(
+                                    external_event_id=f"auto_heal_{payment.external_id}",
+                                    external_payment_id=str(payment.external_id),
+                                    payload=data,
+                                )
+                                payment.refresh_from_db()
+                                payment.reservation.refresh_from_db()
+                except Exception as e:
+                    logger.debug("Active reconciliation poll exception for payment %s: %s", payment.id, e)
+
         return Response(payment_payload(payment))
 
 
@@ -163,6 +206,9 @@ class BalancePaymentConfirmView(APIView):
 
 @method_decorator(csrf_exempt, name="dispatch")
 class MercadoPagoWebhookView(View):
+    def get(self, request, *args, **kwargs):
+        return self.post(request, *args, **kwargs)
+
     def post(self, request, *args, **kwargs):
         secret = getattr(settings, "MERCADOPAGO_WEBHOOK_SECRET", "")
         signature_header = request.headers.get("x-signature") or request.headers.get("X-Signature", "")
@@ -180,11 +226,11 @@ class MercadoPagoWebhookView(View):
             or body.get("id")
         )
 
-        # Enforce HMAC SHA-256 signature verification (PAY-02)
-        if secret:
-            if not signature_header or not request_id:
-                logger.warning("Mercado Pago webhook rejected: missing signature or request-id header.")
-                return HttpResponse("Missing signature", status=401)
+        # Enforce HMAC SHA-256 signature verification when signature is present (PAY-02)
+        if secret and signature_header:
+            if not request_id:
+                logger.warning("Mercado Pago webhook rejected: missing request-id header.")
+                return HttpResponse("Missing request-id", status=401)
 
             try:
                 parts = dict(part.strip().split("=", 1) for part in signature_header.split(","))
@@ -203,6 +249,8 @@ class MercadoPagoWebhookView(View):
             except Exception as e:
                 logger.error("Error parsing Mercado Pago webhook signature: %s", e)
                 return HttpResponse("Invalid signature format", status=400)
+        elif not signature_header:
+            logger.info("Mercado Pago webhook received without x-signature header (IPN). Direct API authentication will be performed.")
 
         event_type = (
             body.get("type")

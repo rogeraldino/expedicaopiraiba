@@ -172,6 +172,7 @@ OPERATIONAL_WHATSAPP_URL = os.getenv("OPERATIONAL_WHATSAPP_URL", "https://wa.me/
 MERCADOPAGO_ACCESS_TOKEN = os.getenv("MERCADOPAGO_ACCESS_TOKEN") or os.getenv("MERCADOPAGO_TEST_ACCESS_TOKEN", "")
 MERCADOPAGO_PUBLIC_KEY = os.getenv("MERCADOPAGO_PUBLIC_KEY") or os.getenv("MERCADOPAGO_TEST_PUBLIC_KEY", "")
 MERCADOPAGO_WEBHOOK_SECRET = os.getenv("MERCADOPAGO_WEBHOOK_SECRET", "")
+MERCADOPAGO_NOTIFICATION_URL = os.getenv("MERCADOPAGO_NOTIFICATION_URL", "https://www.expedicaopiraiba.com.br/api/webhooks/mercadopago/")
 
 # Email Configuration (Gmail SMTP)
 EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")

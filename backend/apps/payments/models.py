@@ -29,6 +29,7 @@ class Payment(models.Model):
     amount_cents = models.PositiveIntegerField()
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     pix_copy_paste = models.TextField(blank=True)
+    pix_qr_code_base64 = models.TextField(blank=True)
     boleto_url = models.URLField(max_length=500, blank=True)
     boleto_barcode = models.CharField(max_length=100, blank=True)
     card_brand = models.CharField(max_length=30, blank=True)
