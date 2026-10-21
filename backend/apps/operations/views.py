@@ -56,12 +56,25 @@ from .serializers import (
     RiverSpeciesSerializer,
 )
 
-ACTIVE_RESERVATIONS = (Reservation.Status.CONFIRMED, Reservation.Status.PAID)
+ACTIVE_RESERVATIONS = (
+    Reservation.Status.CONFIRMED,
+    Reservation.Status.PAID,
+    Reservation.Status.PARTIALLY_PAID,
+)
 
 
 def expeditions_with_occupancy():
-    active = Q(reservations__status__in=ACTIVE_RESERVATIONS) | Q(reservations__status=Reservation.Status.PARTIALLY_PAID, reservations__payments__status=Payment.Status.PAID, reservations__payments__amount_cents__gte=F("reservations__deposit_cents")) | Q(reservations__status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT), reservations__held_until__gt=timezone.now())
-    return Expedition.objects.annotate(occupied_slots=Coalesce(Sum("reservations__participant_count", filter=active), Value(0), output_field=IntegerField())).select_related("lodge").prefetch_related("expedition_species__species")
+    active = Q(reservations__status__in=ACTIVE_RESERVATIONS) | Q(
+        reservations__status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT),
+        reservations__held_until__gt=timezone.now(),
+    )
+    return Expedition.objects.annotate(
+        occupied_slots=Coalesce(
+            Sum("reservations__participant_count", filter=active),
+            Value(0),
+            output_field=IntegerField(),
+        )
+    ).select_related("lodge").prefetch_related("expedition_species__species")
 
 
 class LoginView(APIView):
@@ -862,6 +875,7 @@ class ParticipantUpdateView(OperationsView):
                 participant.operational_notes = data["operational_notes"]
 
             # Reset preferences and onboarding for replaced participant
+            participant.token_version += 1
             participant.onboarding_status = ReservationParticipant.OnboardingStatus.PENDING
             participant.completed_at = None
             participant.product_choices_confirmed_at = None

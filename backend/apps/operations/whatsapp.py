@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import logging
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
@@ -9,7 +10,116 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views import View
 from django.utils.decorators import method_decorator
 
+from apps.customers.models import Customer, WhatsAppContact, WhatsAppMessage
+
 logger = logging.getLogger(__name__)
+
+
+def process_inbound_whatsapp_webhook(payload: dict) -> int:
+    """
+    Passively parses and records inbound WhatsApp messages and contacts
+    from Meta Cloud API webhook payloads. Auto-correlates to existing Customers.
+    """
+    processed = 0
+    if not isinstance(payload, dict):
+        return 0
+
+    entries = payload.get("entry", [])
+    for entry in entries:
+        changes = entry.get("changes", [])
+        for change in changes:
+            value = change.get("value", {})
+            messages = value.get("messages", [])
+            contacts = value.get("contacts", [])
+
+            contact_map = {}
+            for c in contacts:
+                wa_id = c.get("wa_id")
+                name = c.get("profile", {}).get("name", "")
+                if wa_id:
+                    contact_map[wa_id] = name
+
+            for msg in messages:
+                wamid = msg.get("id")
+                from_num = msg.get("from")
+                if not wamid or not from_num:
+                    continue
+
+                clean_phone = "".join(filter(str.isdigit, str(from_num)))
+                profile_name = contact_map.get(from_num) or contact_map.get(clean_phone) or ""
+                msg_type = msg.get("type", "text")
+
+                # Extract text body or description
+                if msg_type == "text":
+                    body = msg.get("text", {}).get("body", "")
+                elif msg_type in ("image", "video", "audio", "document"):
+                    caption = msg.get(msg_type, {}).get("caption", "")
+                    body = caption if caption else f"[{msg_type.upper()}]"
+                elif msg_type == "interactive":
+                    interactive = msg.get("interactive", {})
+                    btn = interactive.get("button_reply", {}).get("title")
+                    lst = interactive.get("list_reply", {}).get("title")
+                    body = btn or lst or "[INTERATIVO]"
+                elif msg_type == "button":
+                    body = msg.get("button", {}).get("text", "[BOTAO]")
+                elif msg_type == "location":
+                    loc = msg.get("location", {})
+                    body = f"[LOCALIZAÇÃO: {loc.get('latitude')}, {loc.get('longitude')}]"
+                else:
+                    body = f"[{msg_type.upper()}]"
+
+                # Parse timestamp
+                ts = None
+                raw_ts = msg.get("timestamp")
+                if raw_ts:
+                    try:
+                        ts = datetime.fromtimestamp(int(raw_ts), tz=dt_timezone.utc)
+                    except (ValueError, TypeError, OverflowError):
+                        ts = None
+
+                # Correlate to existing Customer if matching phone
+                customer = None
+                if len(clean_phone) >= 8:
+                    suffix = clean_phone[-8:]
+                    customer = Customer.objects.filter(phone__endswith=suffix).first()
+
+                # Get or create WhatsAppContact
+                contact, _ = WhatsAppContact.objects.get_or_create(
+                    phone=clean_phone,
+                    defaults={
+                        "wa_id": str(from_num),
+                        "profile_name": profile_name,
+                        "customer": customer,
+                    },
+                )
+
+                update_fields = []
+                if profile_name and not contact.profile_name:
+                    contact.profile_name = profile_name
+                    update_fields.append("profile_name")
+                if customer and not contact.customer:
+                    contact.customer = customer
+                    update_fields.append("customer")
+
+                contact.total_messages_count += 1
+                update_fields.extend(["total_messages_count", "last_message_at"])
+                contact.save(update_fields=update_fields)
+
+                # Store message idempotently (ignore duplicates from webhook retries)
+                WhatsAppMessage.objects.get_or_create(
+                    wamid=wamid,
+                    defaults={
+                        "contact": contact,
+                        "direction": WhatsAppMessage.Direction.INBOUND,
+                        "message_type": msg_type,
+                        "body": body,
+                        "raw_payload": msg,
+                        "timestamp": ts,
+                    },
+                )
+                processed += 1
+
+    return processed
 
 
 @method_decorator(csrf_exempt, name="dispatch")
@@ -60,8 +170,11 @@ class WhatsAppWebhookView(View):
         try:
             payload = json.loads(request.body.decode("utf-8"))
             logger.info("WhatsApp webhook received event: %s", payload.get("object"))
+            processed_count = process_inbound_whatsapp_webhook(payload)
+            if processed_count > 0:
+                logger.info("WhatsApp webhook stored %d incoming message(s).", processed_count)
         except Exception as e:
-            logger.error("Error decoding WhatsApp webhook payload: %s", e)
+            logger.error("Error decoding/processing WhatsApp webhook payload: %s", e)
 
         # Meta requires an immediate 200 OK
         return JsonResponse({"status": "received"}, status=200)

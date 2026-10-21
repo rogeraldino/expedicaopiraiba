@@ -14,6 +14,9 @@ import {
   Users,
   WalletCards,
   AlertCircle,
+  ArrowLeft,
+  Loader2,
+  ShieldCheck,
 } from "lucide-react";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
@@ -61,8 +64,11 @@ export default function MinhaReservaPage() {
   const [error, setError] = useState("");
 
   // Login form state (if not authenticated)
+  const [loginStep, setLoginStep] = useState<"cpf" | "otp">("cpf");
   const [cpf, setCpf] = useState("");
-  const [phone, setPhone] = useState("");
+  const [code, setCode] = useState("");
+  const [challengeId, setChallengeId] = useState("");
+  const [infoMessage, setInfoMessage] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
 
@@ -100,7 +106,7 @@ export default function MinhaReservaPage() {
     }
   }, [loadReservations]);
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
     setLoginError("");
     setLoginLoading(true);
@@ -108,17 +114,41 @@ export default function MinhaReservaPage() {
       const res = await fetch(`${API}/me/auth/lookup/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ cpf, phone }),
+        body: JSON.stringify({ cpf }),
       });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.detail || "Reserva não encontrada.");
       }
+      setChallengeId(data.challenge_id || "");
+      setInfoMessage(data.message || "Código de verificação enviado para os canais cadastrados.");
+      setLoginStep("otp");
+    } catch (err: unknown) {
+      setLoginError(err instanceof Error ? err.message : "Erro ao buscar reserva.");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    setLoginError("");
+    setLoginLoading(true);
+    try {
+      const res = await fetch(`${API}/me/auth/verify/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ challenge_id: challengeId, code: code.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Código de verificação incorreto ou expirado.");
+      }
       setCustomerToken(data.token);
       setToken(data.token);
       loadReservations(data.token);
     } catch (err: unknown) {
-      setLoginError(err instanceof Error ? err.message : "Erro ao buscar reserva.");
+      setLoginError(err instanceof Error ? err.message : "Erro ao validar código.");
     } finally {
       setLoginLoading(false);
     }
@@ -154,43 +184,91 @@ export default function MinhaReservaPage() {
               </div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
-                  CPF do Titular
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="000.000.000-00"
-                  value={cpf}
-                  onChange={(e) => setCpf(formatCpf(e.target.value))}
-                  className="w-full rounded-xl border border-ink-200 px-4 py-3 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                />
-              </div>
+            {loginStep === "cpf" ? (
+              <form onSubmit={handleSendOtp} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                    CPF do Titular
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="000.000.000-00"
+                    value={cpf}
+                    onChange={(e) => setCpf(formatCpf(e.target.value))}
+                    className="w-full rounded-xl border border-ink-200 px-4 py-3 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  />
+                  <p className="mt-2 text-xs text-ink-400">
+                    Enviaremos um código de 6 dígitos para o e-mail cadastrado na reserva.
+                  </p>
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
-                  WhatsApp / Telefone Cadastrado
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="(00) 00000-0000"
-                  value={phone}
-                  onChange={(e) => setPhone(formatPhone(e.target.value))}
-                  className="w-full rounded-xl border border-ink-200 px-4 py-3 text-sm font-semibold text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
-                />
-              </div>
+                <button
+                  type="submit"
+                  disabled={loginLoading || cpf.length < 14}
+                  className="w-full mt-2 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-600 px-5 py-3 text-sm font-black text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+                >
+                  {loginLoading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="size-4 animate-spin" />
+                      Localizando reserva...
+                    </span>
+                  ) : (
+                    "Receber Código de Acesso"
+                  )}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <div className="rounded-xl bg-brand-50 p-3.5 text-xs text-brand-800 font-medium">
+                  {infoMessage}
+                </div>
 
-              <button
-                type="submit"
-                disabled={loginLoading || cpf.length < 14 || phone.length < 14}
-                className="w-full mt-2 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-600 px-5 py-3 text-sm font-black text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
-              >
-                {loginLoading ? "Consultando reservas..." : "Acessar Minhas Reservas"}
-              </button>
-            </form>
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-ink-700 mb-1">
+                    Código de Segurança (6 dígitos)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    maxLength={6}
+                    placeholder="123456"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                    className="w-full rounded-xl border border-ink-200 px-4 py-3 text-center text-2xl font-mono font-bold tracking-widest text-ink-900 focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-600/20"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loginLoading || code.length !== 6}
+                  className="w-full mt-2 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand-600 px-5 py-3 text-sm font-black text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
+                >
+                  {loginLoading ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="size-4 animate-spin" />
+                      Validando código...
+                    </span>
+                  ) : (
+                    "Confirmar e Acessar Minhas Reservas"
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLoginStep("cpf");
+                    setCode("");
+                    setLoginError("");
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-semibold text-ink-500 hover:text-ink-800 transition-colors"
+                >
+                  <ArrowLeft className="size-3.5" />
+                  Corrigir CPF
+                </button>
+              </form>
+            )}
           </div>
         ) : (
           <div className="max-w-4xl mx-auto">

@@ -33,7 +33,7 @@ class PaymentApiTests(TestCase):
     def test_creates_pix_and_simulation_confirms_reservation(self):
         hold, payment = self.create_hold_and_payment()
         self.assertEqual(payment.status_code, 201)
-        self.assertEqual(payment.data["amount_cents"], 120000)
+        self.assertEqual(payment.data["amount_cents"], 240000)
         self.assertIn("FAKEPIX", payment.data["pix_copy_paste"])
         confirmed = self.client.post(f"/api/payments/{payment.data['payment_id']}/simulate-confirmation/", {"verification_token": self.token}, format="json")
         self.assertEqual(confirmed.status_code, 200)
@@ -41,8 +41,8 @@ class PaymentApiTests(TestCase):
         self.assertEqual(confirmed.data["reservation_id"], hold.data["reservation_id"])
         reservation = Reservation.objects.get(id=hold.data["reservation_id"])
         self.assertEqual(reservation.status, Reservation.Status.CONFIRMED)
-        self.assertEqual(reservation.paid_amount_cents, 120000)
-        self.assertEqual(reservation.remaining_balance_cents, 378000)
+        self.assertEqual(reservation.paid_amount_cents, 240000)
+        self.assertEqual(reservation.remaining_balance_cents, 258000)
         self.assertTrue(reservation.events.filter(event_type="PAYMENT_CONFIRMED").exists())
 
     def test_webhook_is_authenticated_and_idempotent(self):
@@ -137,7 +137,8 @@ class PaymentApiTests(TestCase):
         payment_data = {
             "id": payment.external_id,
             "status": "approved",
-            "transaction_amount": 1200.0,
+            "currency_id": "BRL",
+            "transaction_amount": payment.amount_cents / 100.0,
             "external_reference": str(hold.data["reservation_id"]),
         }
 

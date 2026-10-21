@@ -76,6 +76,7 @@ class ReservationParticipant(models.Model):
     emergency_contact_name = models.CharField(max_length=160, blank=True)
     emergency_contact_phone = models.CharField(max_length=20, blank=True)
     vest_size = models.CharField(max_length=10, choices=VestSize.choices, default=VestSize.G, blank=True)
+    token_version = models.PositiveIntegerField(default=1)
     health_notes = models.TextField(blank=True)
     operational_notes = models.TextField(blank=True)
     onboarding_status = models.CharField(max_length=20, choices=OnboardingStatus.choices, default=OnboardingStatus.PENDING)

@@ -18,6 +18,12 @@ from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
+providers_env = Path(os.getenv("PROVIDERS_ENV_PATH", "/root/.config/expedicaopiraiba/providers.env"))
+try:
+    if providers_env.exists():
+        load_dotenv(providers_env)
+except (PermissionError, OSError):
+    pass
 
 
 # Quick-start development settings - unsuitable for production
@@ -54,6 +60,7 @@ INSTALLED_APPS = [
     'apps.reservations',
     'apps.payments',
     'apps.operations',
+    'apps.media_library',
 ]
 
 MIDDLEWARE = [
@@ -140,6 +147,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", str(BASE_DIR / "media")))
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = [
@@ -156,7 +164,29 @@ OTP_EXPIRY_MINUTES = 5
 OPERATIONAL_WHATSAPP_URL = os.getenv("OPERATIONAL_WHATSAPP_URL", "https://wa.me/5562981612128")
 
 # Mercado Pago Configuration
-MERCADOPAGO_ACCESS_TOKEN = os.getenv("MERCADOPAGO_ACCESS_TOKEN", "")
-MERCADOPAGO_PUBLIC_KEY = os.getenv("MERCADOPAGO_PUBLIC_KEY", "")
+MERCADOPAGO_ACCESS_TOKEN = os.getenv("MERCADOPAGO_ACCESS_TOKEN") or os.getenv("MERCADOPAGO_TEST_ACCESS_TOKEN", "")
+MERCADOPAGO_PUBLIC_KEY = os.getenv("MERCADOPAGO_PUBLIC_KEY") or os.getenv("MERCADOPAGO_TEST_PUBLIC_KEY", "")
 MERCADOPAGO_WEBHOOK_SECRET = os.getenv("MERCADOPAGO_WEBHOOK_SECRET", "")
+
+# Email Configuration (Gmail SMTP)
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "expedicaopiraiba@gmail.com")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Expedição Piraíba <expedicaopiraiba@gmail.com>")
+EMAIL_TIMEOUT = 5
+
+# WhatsApp Meta Configuration
+WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
+WHATSAPP_WABA_ID = os.getenv("WHATSAPP_WABA_ID", "")
+META_ACCESS_TOKEN = os.getenv("META_ACCESS_TOKEN", "")
+
+# Payments & Simulation Control
+import sys
+TESTING = "test" in sys.argv
+ALLOW_SIMULATED_PAYMENTS = os.getenv("ALLOW_SIMULATED_PAYMENTS", "false").lower() == "true" or TESTING
+PAYMENT_GATEWAY = os.getenv("PAYMENT_GATEWAY", "FAKE" if TESTING else ("MERCADOPAGO" if MERCADOPAGO_ACCESS_TOKEN else "FAKE"))
+EXPOSE_DEV_CODE = os.getenv("EXPOSE_DEV_CODE", "false").lower() == "true" or TESTING
 

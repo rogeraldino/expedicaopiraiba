@@ -9,6 +9,8 @@ from apps.customers.services import (
     customer_from_session_token,
     customer_lookup,
     participant_from_guest_token,
+    start_portal_reaccess,
+    verify_portal_reaccess,
 )
 
 from .customer_serializers import CustomerParticipantSerializer
@@ -306,8 +308,24 @@ class CustomerAuthLookupView(APIView):
     def post(self, request):
         cpf = request.data.get("cpf", "")
         phone = request.data.get("phone", "")
+
+        # If phone is not provided, perform secure 2-step OTP challenge
+        if not phone and cpf:
+            try:
+                challenge_id, challenge_status, msg = start_portal_reaccess(cpf=cpf)
+            except DjangoValidationError as err:
+                msg = err.message if hasattr(err, "message") else str(err.messages[0])
+                return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                "challenge_id": challenge_id,
+                "status": challenge_status,
+                "message": msg,
+            })
+
         if not cpf or not phone:
-            return Response({"detail": "Informe o CPF e o WhatsApp/Telefone cadastrados."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Informe o CPF cadastrado."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Legacy / backward-compatible direct lookup with CPF and phone match
         try:
             customer, token = customer_lookup(cpf=cpf, phone=phone)
         except DjangoValidationError as err:
@@ -317,6 +335,35 @@ class CustomerAuthLookupView(APIView):
         reservations_count = Reservation.objects.filter(customer=customer).count()
         return Response({
             "token": token,
+            "customer": {
+                "id": str(customer.id),
+                "full_name": customer.full_name,
+                "email": customer.email,
+                "phone": customer.phone,
+            },
+            "reservations_count": reservations_count,
+        })
+
+
+class CustomerAuthVerifyView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        challenge_id = request.data.get("challenge_id", "")
+        code = request.data.get("code", "")
+        if not challenge_id or not code:
+            return Response({"detail": "Informe o ID da verificação e o código de 6 dígitos."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            customer, session_token = verify_portal_reaccess(challenge_id=challenge_id, code=code)
+        except DjangoValidationError as err:
+            msg = err.message if hasattr(err, "message") else str(err.messages[0])
+            return Response({"detail": msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        reservations_count = Reservation.objects.filter(customer=customer).count()
+        return Response({
+            "token": session_token,
             "customer": {
                 "id": str(customer.id),
                 "full_name": customer.full_name,

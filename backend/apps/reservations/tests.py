@@ -44,7 +44,7 @@ class CheckoutApiTests(TestCase):
         reservation = Reservation.objects.get(id=response.data["reservation_id"])
         self.assertEqual(reservation.status, Reservation.Status.HELD)
         self.assertEqual(reservation.total_price_cents, 498000)
-        self.assertEqual(reservation.deposit_cents, 120000)
+        self.assertEqual(reservation.deposit_cents, 240000)
         self.assertEqual(reservation.payment_plan, Reservation.PaymentPlan.DEPOSIT)
         self.assertEqual(reservation.balance_due_at, self.expedition.starts_at - timedelta(days=30))
         self.assertEqual(reservation.participants.count(), 2)
@@ -57,6 +57,42 @@ class CheckoutApiTests(TestCase):
         self.assertEqual(first.status_code, 201)
         second = self.client.post("/api/checkout/hold/", {"verification_token": token, "expedition_slug": self.expedition.slug, "participant_names": ["Ana", "Bia"], "payment_plan": "FULL"}, format="json")
         self.assertEqual(second.status_code, 400)
+
+    def test_cancel_hold_releases_seats_for_data_correction(self):
+        token = self.identify_and_verify()
+        first = self.client.post("/api/checkout/hold/", {"verification_token": token, "expedition_slug": self.expedition.slug, "participant_names": ["João", "Pedro"], "payment_plan": "FULL"}, format="json")
+        self.assertEqual(first.status_code, 201)
+        res_id = first.data["reservation_id"]
+
+        cancel_resp = self.client.post("/api/checkout/cancel-hold/", {"verification_token": token, "reservation_id": res_id}, format="json")
+        self.assertEqual(cancel_resp.status_code, 201)
+        self.assertTrue(cancel_resp.data["cancelled"])
+
+        res = Reservation.objects.get(id=res_id)
+        self.assertEqual(res.status, Reservation.Status.CANCELLED)
+
+        # Now can hold again with corrected data without capacity error
+        second = self.client.post("/api/checkout/hold/", {"verification_token": token, "expedition_slug": self.expedition.slug, "participant_names": ["João Corrigido", "Pedro Corrigido"], "payment_plan": "FULL"}, format="json")
+        self.assertEqual(second.status_code, 201)
+
+    def test_replace_reservation_id_atomically_replaces_old_hold(self):
+        token = self.identify_and_verify()
+        first = self.client.post("/api/checkout/hold/", {"verification_token": token, "expedition_slug": self.expedition.slug, "participant_names": ["João", "Pedro"], "payment_plan": "FULL"}, format="json")
+        self.assertEqual(first.status_code, 201)
+        first_id = first.data["reservation_id"]
+
+        # Directly replace old hold with 2 new seats (which would exceed 3 capacity if first was not replaced)
+        second = self.client.post("/api/checkout/hold/", {
+            "verification_token": token,
+            "expedition_slug": self.expedition.slug,
+            "participant_names": ["Ana", "Bia"],
+            "payment_plan": "FULL",
+            "replace_reservation_id": first_id,
+        }, format="json")
+        self.assertEqual(second.status_code, 201)
+
+        first_res = Reservation.objects.get(id=first_id)
+        self.assertEqual(first_res.status, Reservation.Status.CANCELLED)
 
     def test_expire_holds_is_idempotent_and_audited(self):
         token = self.identify_and_verify()

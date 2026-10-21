@@ -163,7 +163,7 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
             src={expedition.cover_image_url || heroImage}
             alt={expedition.name}
             fill
-            unoptimized={Boolean(expedition.cover_image_url?.startsWith("http"))}
+            unoptimized={Boolean(expedition.cover_image_url?.startsWith("http") || expedition.cover_image_url?.startsWith("/api/media/"))}
             sizes="(min-width: 1024px) 60vw, 100vw"
             className="object-cover"
             priority
@@ -177,7 +177,7 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {expedition.gallery_image_urls?.map((url) => (
               <div key={url} className="relative aspect-video overflow-hidden rounded-xl bg-brand-50">
-                <Image src={url} alt={`Foto da expedição ${expedition.name}`} fill sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-cover" unoptimized={url.startsWith("http")} />
+                <Image src={url} alt={`Foto da expedição ${expedition.name}`} fill sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw" className="object-cover" unoptimized={url.startsWith("http") || url.startsWith("/api/media/")} />
               </div>
             ))}
           </div>

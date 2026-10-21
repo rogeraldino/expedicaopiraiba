@@ -130,21 +130,43 @@ def expire_holds(*, now=None):
 
 
 @transaction.atomic
-def create_hold(*, customer, expedition_slug, participant_names, payment_plan):
+def create_hold(*, customer, expedition_slug, participant_names, payment_plan, replace_reservation_id=None):
     try:
         expedition = Expedition.objects.select_for_update().get(slug=expedition_slug, status=Expedition.Status.PUBLISHED)
     except Expedition.DoesNotExist:
         raise ValidationError("Expedição indisponível para reserva.")
+
+    if expedition.ends_at < timezone.localdate():
+        raise ValidationError("Expedição já encerrada.")
+
+    if replace_reservation_id:
+        try:
+            old_res = Reservation.objects.get(id=replace_reservation_id, customer=customer)
+            if old_res.status in (Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT):
+                old_res.status = Reservation.Status.CANCELLED
+                old_res.save(update_fields=["status"])
+                record_reservation_event(
+                    reservation=old_res,
+                    event_type="RESERVATION_CANCELLED",
+                    actor_type=ReservationEvent.ActorType.CUSTOMER,
+                    actor_identifier=str(customer.id),
+                    new_status=Reservation.Status.CANCELLED,
+                    payload={"reason": "Substituída por correção de dados no checkout"},
+                )
+        except (Reservation.DoesNotExist, ValueError):
+            pass
+
     names = [name.strip() for name in participant_names if name and name.strip()]
     if not 1 <= len(names) <= 12:
         raise ValidationError("Informe entre 1 e 12 participantes.")
     active = Q(status__in=(Reservation.Status.CONFIRMED, Reservation.Status.PAID)) | Q(status=Reservation.Status.PARTIALLY_PAID, payments__status="PAID", payments__amount_cents__gte=F("deposit_cents"))
     held = Q(status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT), held_until__gt=timezone.now())
-    occupied = Reservation.objects.filter(Q(expedition=expedition) & (active | held)).distinct().aggregate(total=Sum("participant_count"))["total"] or 0
+    eligible_reservation_ids = Reservation.objects.filter(Q(expedition=expedition) & (active | held)).values_list("id", flat=True).distinct()
+    occupied = Reservation.objects.filter(id__in=eligible_reservation_ids).aggregate(total=Sum("participant_count"))["total"] or 0
     if occupied + len(names) > expedition.capacity:
         raise ValidationError("Não há vagas suficientes para esta reserva.")
     total = expedition.price_per_person_cents * len(names)
-    amount_due = expedition.deposit_cents if payment_plan == "DEPOSIT" else total
+    amount_due = (expedition.deposit_cents * len(names)) if payment_plan == "DEPOSIT" else total
     balance_due_at = expedition.starts_at - timedelta(days=expedition.balance_due_days_before) if payment_plan == "DEPOSIT" and amount_due < total else None
     reservation = Reservation.objects.create(
         customer=customer,

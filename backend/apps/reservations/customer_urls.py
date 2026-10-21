@@ -2,6 +2,7 @@ from django.urls import path
 
 from .customer_views import (
     CustomerAuthLookupView,
+    CustomerAuthVerifyView,
     CustomerGuestChecklistView,
     CustomerGuestDetailView,
     CustomerGuestPreferencesView,
@@ -16,6 +17,7 @@ from apps.payments.views import BalancePaymentConfirmView, BalancePaymentView
 
 urlpatterns = [
     path("auth/lookup/", CustomerAuthLookupView.as_view(), name="customer-auth-lookup"),
+    path("auth/verify/", CustomerAuthVerifyView.as_view(), name="customer-auth-verify"),
     path("reservations/", CustomerReservationListView.as_view(), name="customer-reservation-list"),
     path("reservations/<uuid:reservation_id>/", CustomerReservationDetailView.as_view(), name="customer-reservation-detail"),
     path("reservations/<uuid:reservation_id>/participants/<uuid:participant_id>/", CustomerParticipantDetailView.as_view(), name="customer-participant-detail"),

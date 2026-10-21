@@ -17,6 +17,9 @@ import {
   MapPin,
   MessageCircle,
   Plus,
+  QrCode,
+  RefreshCw,
+  Loader2,
   Share2,
   ShieldCheck,
   Sparkles,
@@ -1666,23 +1669,53 @@ function Payment({
   amount: number;
   saved: (d: Data) => void;
 }) {
-  const [charge, setCharge] = useState<{ id: string } | null>(null);
+  const [charge, setCharge] = useState<{
+    id: string;
+    pix_copy_paste?: string;
+    amount_cents?: number;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
 
-  async function call(confirm = false) {
+  const refreshReservation = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/me/reservations/${id}/`, {
+        headers: headers(),
+      });
+      if (res.ok) {
+        const d = (await res.json()) as Data;
+        saved(d);
+        setConfirmed(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, [id, saved]);
+
+  async function initiatePayment() {
     setBusy(true);
     setFailure("");
     try {
-      const d = (await result(
-        await fetch(`${API}/me/reservations/${id}/balance-payment/${confirm ? "confirm/" : ""}`, {
-          method: "POST",
-          headers: { ...headers(), "Content-Type": "application/json" },
-          body: JSON.stringify(confirm ? { payment_id: charge?.id } : {}),
-        })
-      )) as Data;
-      if (confirm) saved(d);
-      else setCharge(d as never);
+      const res = await fetch(`${API}/me/reservations/${id}/balance-payment/`, {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Não foi possível gerar a cobrança.");
+      }
+      const data = await res.json();
+      if (data.reservation_status === "PAID" || data.remaining_balance_cents === 0) {
+        await refreshReservation();
+        return;
+      }
+      setCharge({
+        id: data.payment_id || data.id,
+        pix_copy_paste: data.pix_copy_paste,
+        amount_cents: data.amount_cents || amount,
+      });
     } catch (x) {
       setFailure(errorMsg(x));
     } finally {
@@ -1690,16 +1723,150 @@ function Payment({
     }
   }
 
+  // Poll payment status
+  useEffect(() => {
+    if (!charge?.id || confirmed) return;
+
+    let active = true;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/payments/${charge.id}/status/`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!active) return;
+        if (data.status === "PAID" || data.reservation_status === "PAID" || data.reservation_status === "CONFIRMED") {
+          clearInterval(interval);
+          await refreshReservation();
+        }
+      } catch {
+        // ignore network error during polling
+      }
+    }, 3000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [charge?.id, confirmed, refreshReservation]);
+
+  const allowSimulation = process.env.NEXT_PUBLIC_ALLOW_SIMULATED_PAYMENTS === "true";
+
+  async function simulatePayment() {
+    if (!charge?.id) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${API}/me/reservations/${id}/balance-payment/confirm/`, {
+        method: "POST",
+        headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ payment_id: charge.id }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || "Erro na simulação.");
+      }
+      const d = (await res.json()) as Data;
+      saved(d);
+      setConfirmed(true);
+    } catch (x) {
+      setFailure(errorMsg(x));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleCopy() {
+    if (!charge?.pix_copy_paste) return;
+    navigator.clipboard.writeText(charge.pix_copy_paste);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  if (confirmed) {
+    return (
+      <div className="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-emerald-800 text-xs font-semibold flex items-center gap-2">
+        <Check className="size-4 text-emerald-600" />
+        Pagamento do saldo confirmado com sucesso! Sua expedição está 100% quitada.
+      </div>
+    );
+  }
+
+  if (!charge) {
+    return (
+      <div className="mt-4">
+        <button
+          onClick={initiatePayment}
+          disabled={busy}
+          className="w-full rounded-xl bg-brand-600 p-3 font-bold text-white hover:bg-brand-700 transition shadow text-xs inline-flex items-center justify-center gap-2"
+        >
+          {busy ? (
+            <>
+              <Loader2 className="size-4 animate-spin" />
+              Gerando chave PIX...
+            </>
+          ) : (
+            `Pagar Saldo Restante (${money(amount)}) via PIX`
+          )}
+        </button>
+        {failure && <p className="mt-2 text-xs font-bold text-red-700">{failure}</p>}
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-4">
-      <button
-        onClick={() => void call(!!charge)}
-        disabled={busy}
-        className="w-full rounded-xl bg-brand-600 p-3 font-bold text-white hover:bg-brand-700 transition shadow text-xs"
-      >
-        {busy ? "Processando..." : charge ? "Simular Confirmação do Pagamento (PIX)" : `Pagar Saldo Restante (${money(amount)})`}
-      </button>
-      {failure && <p className="mt-2 text-xs font-bold text-red-700">{failure}</p>}
+    <div className="mt-4 rounded-xl border border-brand-200 bg-brand-50/50 p-4 space-y-3">
+      <div className="flex items-center gap-2 text-brand-900 font-bold text-xs uppercase tracking-wider">
+        <QrCode className="size-4 text-brand-700" />
+        PIX para Quitação de Saldo
+      </div>
+
+      <p className="text-xs text-ink-600">
+        Copie o código PIX abaixo e conclua o pagamento no aplicativo do seu banco:
+      </p>
+
+      {charge.pix_copy_paste && (
+        <div className="space-y-2">
+          <div className="rounded-lg bg-white border border-ink-200 p-2.5 font-mono text-[11px] text-ink-800 break-all select-all max-h-24 overflow-y-auto">
+            {charge.pix_copy_paste}
+          </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-white border border-brand-600 py-2 px-3 text-xs font-bold text-brand-700 hover:bg-brand-50 transition"
+          >
+            {copied ? (
+              <>
+                <Check className="size-3.5 text-emerald-600" />
+                Código PIX Copiado!
+              </>
+            ) : (
+              <>
+                <Copy className="size-3.5" />
+                Copiar Código PIX
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      <div className="flex items-center justify-center gap-2 py-2 text-xs text-brand-800 font-medium">
+        <RefreshCw className="size-3.5 animate-spin text-brand-600" />
+        Aguardando confirmação bancária em tempo real...
+      </div>
+
+      {allowSimulation && (
+        <div className="pt-2 border-t border-brand-100">
+          <button
+            type="button"
+            onClick={simulatePayment}
+            disabled={busy}
+            className="w-full text-center text-[11px] text-ink-400 hover:text-ink-600 underline py-1"
+          >
+            {busy ? "Confirmando..." : "[DEV] Simular Confirmação Bancária"}
+          </button>
+        </div>
+      )}
+
+      {failure && <p className="text-xs font-bold text-red-700">{failure}</p>}
     </div>
   );
 }

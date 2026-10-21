@@ -13,7 +13,7 @@ export function ExpeditionCard({ expedition }: { expedition: Expedition }) {
   return (
     <article className="home-card flex h-full flex-col overflow-hidden rounded-lg border border-river-900/10 bg-white shadow-card">
       <Link href={`/expedicoes/${expedition.slug}` as never} className="group relative block h-40 overflow-hidden bg-river-100" aria-label={`Ver ${expedition.name}`}>
-        <Image src={imageSrc} alt="" fill unoptimized={imageSrc.startsWith("http")} sizes="(min-width:1280px) 210px, (min-width:640px) 45vw, 78vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
+        <Image src={imageSrc} alt="" fill unoptimized={imageSrc.startsWith("http") || imageSrc.startsWith("/api/media/")} sizes="(min-width:1280px) 210px, (min-width:640px) 45vw, 78vw" className="object-cover transition-transform duration-500 group-hover:scale-105" />
       </Link>
       <div className="flex flex-1 flex-col p-4">
         <p className="home-eyebrow text-[9px] text-gold-700">{shortDate.format(start)} a {shortDate.format(end)} · {start.getFullYear()}</p>

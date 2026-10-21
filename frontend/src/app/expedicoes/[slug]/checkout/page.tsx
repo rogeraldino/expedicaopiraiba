@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { CalendarDays, Clock, MapPin, Users } from "lucide-react";
+import { ArrowLeft, CalendarDays, Clock, MapPin, Users } from "lucide-react";
 
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -54,9 +54,17 @@ export default async function CheckoutPage({ params }: { params: Promise<{ slug:
 
       <section className="container-page grid gap-8 pb-16 lg:grid-cols-[1.55fr_.85fr]">
         <div>
-          <span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-brand-800">
-            Reserva Online & Segura
-          </span>
+          <Link
+            href={`/expedicoes/${slug}` as never}
+            className="mb-4 inline-flex items-center gap-1.5 text-xs font-bold text-brand-700 hover:text-brand-900 transition-colors"
+          >
+            <ArrowLeft className="size-3.5" /> Voltar para a expedição
+          </Link>
+          <div>
+            <span className="rounded-full bg-brand-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-brand-800">
+              Reserva Online & Segura
+            </span>
+          </div>
           <h1 className="mt-2 text-4xl font-black sm:text-5xl text-brand-900">Finalizar Reserva</h1>
           <p className="mb-7 mt-2 text-ink-600">
             Informe seus dados para proteger suas vagas por 15 minutos com lock transacional.

@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .serializers import HoldSerializer, IdentifySerializer, VerifySerializer
+from .serializers import CancelHoldSerializer, HoldSerializer, IdentifySerializer, VerifySerializer
 
 
 class SerializerActionView(APIView):
@@ -25,3 +25,7 @@ class VerifyView(SerializerActionView):
 
 class HoldView(SerializerActionView):
     serializer_class = HoldSerializer
+
+
+class CancelHoldView(SerializerActionView):
+    serializer_class = CancelHoldSerializer

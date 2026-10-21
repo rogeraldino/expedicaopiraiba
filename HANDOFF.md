@@ -1,5 +1,139 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Retomada e Conclusão Técnica do Estágio 1 — 21/10/2026, 17:05 UTC
+
+Rodrigo solicitou: «Continue o desenvolvimento». A sequência de 8 passos foi executada e concluída com sucesso:
+
+### O que foi concluído na retomada:
+1. **Ponytail Independente e Adversarial CONCLUÍDO:**
+   - Parecer **PASS** emitido por revisor independente e registrado em [`specs/active/Estagio1_Sandbox_Midia/ponytail.md`](specs/active/Estagio1_Sandbox_Midia/ponytail.md).
+   - Verificadas defesas contra path traversal, negação de serviço em descompressão, bypass de Content-Length, vazamento de metadados pessoais (EXIF/GPS/autor) e limpeza transacional atômica em falhas de escrita/banco.
+2. **Qualidade de Código e Baseline de Lint:**
+   - Comparação exata contra `origin/main` (`ad84eed`): exatamente os mesmos 6 erros de hooks React preexistentes e redução de 1 aviso (de 11 para 10). **Zero erros ou avisos novos** introduzidos.
+   - `next typegen && tsc --noEmit` passou com **0 erros** de TypeScript.
+   - Build do Next.js Turbopack no container Docker finalizado com **sucesso total**.
+3. **Infraestrutura e Backup Rastreáveis:**
+   - Novo artefato de infraestrutura gerado: `/srv/piraiba/artifacts/infra-20261021T164601Z.tar.gz` (SHA256: `3f00197589571e413428186d32d559c04a658ea4fb779b4fa74ae0fa9d815cc8`).
+   - Manifesto `/etc/piraiba/infra-release.json` atualizado com o hash oficial do gateway corrigido (`140294f391d82e5dee2dbd0baa6c90ed0c66fb853e440df82709e1271b94a755`).
+   - Ajustes de backup multirelease e compose de volume de mídia aplicados à infraestrutura efetiva.
+   - Backup criptografado completo executado com sucesso e validação de banco confirmada (`database_restore: PASS`).
+4. **Publicação no Sandbox:**
+   - Snapshot de código `/srv/piraiba/artifacts/20261021T165806Z-ad84eed57db1.tar.gz` criado e extraído em `/srv/piraiba/sandbox/releases/20261021T165806Z-ad84eed57db1`.
+   - Imagens `piraiba-backend:20261021T165806Z-ad84eed57db1` e `piraiba-frontend-sandbox:20261021T165806Z-ad84eed57db1` construídas.
+   - Migração `media_library.0001_initial` aplicada com sucesso no banco `piraiba_sandbox`.
+   - Containers do sandbox recriados e em execução saudável (`healthy`), com o volume `/srv/piraiba/sandbox/media` montado no backend (UID 1000). Produção permaneceu estritamente intocada em manutenção.
+5. **Validação Operacional e HTTPS no Sandbox:**
+   - Login administrativo autenticado via API do sandbox.
+   - Upload real de teste executado via HTTPS em `https://sb.expedicaopiraiba.com.br/api/operations/media/` com retorno 201 Created e metadados sanitizados.
+   - Imagem WebP e miniatura servidas com status 200 OK e cabeçalhos de cache imutáveis.
+   - Persistência física comprovada no host e testada após reinicialização do container do backend.
+   - Imagem associada com sucesso à Pousada Solar das Águas via `PATCH /api/operations/lodges/<id>/` e refletida imediatamente na API pública de pousadas.
+   - Pré-condições da carga da expedição revisadas (identificada a proteção estrita que impede instruções de Goiânia herdarem direções de São Félix do Araguaia).
+
+### Estado atual
+- Estágio 1: **VALIDATED** (Ponytail PASS, publicado e funcional no sandbox).
+- Produção: **Inalterada** (503 manutenção).
+- Próximo passo: Validação visual/aceite humano do Estágio 1 e refinamento/início do Estágio 2 (Identidade, Mensageria e Pagamentos reais).
+
+### O que já foi feito
+
+- Removidas as estimativas de dias. Épica movida para
+  [`specs/active/ENTREGA_OPERACIONAL_MVP.md`](specs/active/ENTREGA_OPERACIONAL_MVP.md).
+- **Correção das imagens já aplicada no sandbox:** `/check` no gateway aceita
+  query string para roteamento, preservando cookie e classificação do URI
+  original. Arquivos efetivos alterados: `/root/infra/piraiba/gateway.py` e
+  `/root/infra/piraiba/test_gateway.py`. Serviço `piraiba-access-gateway-1`
+  reiniciado. Fonte agora também em `deploy/sandbox/` neste repositório.
+- HTTPS real depois da correção: `/_next/image?url=%2Fhome%2Fhero-desktop.webp&w=640&q=75`
+  respondeu **200 image/jpeg**, arquivo com `?v=1` respondeu **200 image/webp**,
+  `/api/expeditions/?page=1` respondeu **200**. API sem cookie continuou **401**
+  tanto GET quanto POST. Sete testes de gateway passaram; revisão independente
+  do delta foi PASS.
+- **Upload implementado em código, ainda não publicado:** novo app
+  `backend/apps/media_library/`, dependência `Pillow==13.0.0`, tabela `MediaAsset`,
+  upload/listagem administrativa em `/api/operations/media/` e leitura de fotos
+  de divulgação em `/api/media/<uuid>/<variant>/`. JPEG/PNG/WebP estático,
+  10 MiB, 24 MP, limite de dimensão, orientação EXIF, remoção de metadados,
+  imagem WebP e miniatura. Validação de bytes e limpeza em falha de escrita/DB.
+- Componente `frontend/src/components/admin/media-picker.tsx` integrado aos
+  seletores de expedições/pousadas/equipamentos; acervo antigo preservado.
+  Capas/galerias `/api/media/` usam `unoptimized` porque o backend já processa.
+- Preparadas fontes versionadas da infraestrutura em `deploy/hosted/` e
+  `deploy/sandbox/`. `deploy/backups/create-backup.py` tem ajuste para metadata
+  de release por ambiente com fallback legado. **Esses ajustes de Compose e
+  backup ainda NÃO foram copiados para a infraestrutura efetiva.**
+
+### Validação concluída e limites
+
+- **76 testes backend PASS em PostgreSQL**, incluindo 12 testes novos de mídia
+  (banco temporário), e `makemigrations --check --dry-run`: sem alterações.
+- **Next typegen e TypeScript PASS** em container temporário da toolchain.
+- ESLint do componente novo passou. O lint do admin registrou seis erros de
+  hooks e dez avisos; a comparação com o baseline ficou **inconclusiva** porque
+  o comando `git show` foi executado fora do repositório e produziu arquivo
+  vazio. Não usar o resultado zero do baseline como evidência válida.
+- Build frontend **INTERROMPIDO por solicitação do usuário**, sem resultado
+  de build ou imagem final nova. Sem verificação visual em navegador.
+- Imagens Docker locais criadas: `piraiba-backend:estagio1-20261021` e
+  `piraiba-frontend-tools:estagio1`. O backend foi construído antes da adição
+  final dos testes; suíte usou bind mount do código atual. Reconstruir a imagem
+  final antes da publicação. A imagem frontend `estagio1-20261021` não teve
+  conclusão confirmada.
+- Nenhuma migração de mídia aplicada aos bancos ativos, nenhum upload real
+  feito, nenhum cadastro comercial criado, nenhuma cobrança/mensagem enviada.
+  Aplicação sandbox/produção permanece na release anterior; só o gateway mudou.
+- Alterações estão no working tree, **sem commit ou push**. Preservar todos os
+  arquivos modificados e novos; não executar reset/clean ou remover volumes.
+
+### Sequência para o próximo agente retomar
+
+1. Ler este bloco, Constituição, épica ativa, spec e
+   [`grill.md`](specs/active/Estagio1_Sandbox_Midia/grill.md). A autorização de
+   execução anterior foi «remova a estimastiva de dias, comece agora»; a pausa
+   nesta sessão é explícita. Continuar quando a tarefa for retomada.
+2. Concluir **Ponytail independente** do upload e integração. A revisão do agente
+   `/root/grill_estagio1` foi interrompida antes de emitir conclusão do upload;
+   somente o delta do gateway tem PASS final. Corrigir findings e registrar
+   evidências antes de declarar o estágio VALIDATED/ACCEPTED.
+3. Reproduzir corretamente o baseline de lint a partir de `/root/expedicaopiraiba`;
+   concluir lint proporcional e build frontend. Não instalar dependências no
+   host: a toolchain Docker já existe. Comandos de TypeScript exigem
+   `next typegen` antes de `tsc` por causa de `LayoutProps`.
+4. Preparar snapshot e publicar **somente no sandbox** após validação:
+   `/srv/piraiba/sandbox/media` exclusivo do backend, UID 1000, mount `/app/media`,
+   `MEDIA_HOST_DIR` no env privado. A raiz `/srv/piraiba` já integra o backup.
+   Criar diretórios/mount/env e conferir backup antes do primeiro upload real.
+5. Ao promover só o sandbox, preservar release de produção. Metadados por
+   ambiente e registry de backup precisam apontar para o snapshot real; usar o
+   ajuste preparado de `deploy/backups/create-backup.py`, ainda não aplicado.
+6. **Pendência imediata de rastreabilidade do gateway:** o manifesto
+   `/etc/piraiba/infra-release.json` e o artefato antigo ainda não foram
+   atualizados depois do hotfix. Preservar o histórico e gerar nova revisão/
+   hashes/artefato. SHA256 do gateway aplicado:
+   `140294f391d82e5dee2dbd0baa6c90ed0c66fb853e440df82709e1271b94a755`.
+   Rollback preservado em
+   `/srv/piraiba/artifacts/20261021T090825Z-previous-gateway.py` e
+   `/srv/piraiba/artifacts/20261021T090825Z-previous-test_gateway.py`.
+7. Verificar upload pelo domínio, associação a capa/galeria, persistência após
+   recriação e recuperação de arquivos. Conferir pré-condições da carga da
+   expedição aprovada; não sobrescrever pousada/logística ao forçar o comando.
+8. Atualizar matriz de aceite e documentação. Estágios 2/3 não foram iniciados;
+   as decisões financeiras pendentes estão na épica. Produção segue em manutenção.
+
+Artefatos de orientação: [auditoria](docs/AUDITORIA_OPERACIONAL_2026-10-21.md),
+[épica](specs/active/ENTREGA_OPERACIONAL_MVP.md),
+[spec do estágio 1](specs/active/Estagio1_Sandbox_Midia/spec.md).
+
+## Auditoria e plano de entrega — 21/10/2026
+
+- Diagnóstico atual em [`docs/AUDITORIA_OPERACIONAL_2026-10-21.md`](docs/AUDITORIA_OPERACIONAL_2026-10-21.md); épica em [`specs/active/ENTREGA_OPERACIONAL_MVP.md`](specs/active/ENTREGA_OPERACIONAL_MVP.md), com três estágios e critérios de saída. Rodrigo autorizou iniciar a execução em 21/10/2026 e solicitou retirar as estimativas. Não representa aceite comercial ou redução do escopo registrado de Pix, cartão, boleto, cancelamentos e devoluções.
+- Imagens: arquivo original e otimizador funcionam internamente. No domínio protegido, query strings causam 404 no gateway porque `self.path` compara `/check?…` com `/check`. A falha também atinge filtros da API. Correção diagnosticada, sem alteração/publicação da infraestrutura nesta auditoria.
+- Upload de imagens inexistente: seletor administrativo usa 22 fotos fixas e os modelos guardam URLs/caminhos. Upload persistente e biblioteca constam do primeiro estágio proposto.
+- Sandbox e produção têm catálogos básicos e migrações aplicadas, mas zero expedições, clientes, reservas e pagamentos. Presença de token Mercado Pago não comprova modo de teste; não iniciar cobrança real a partir desta auditoria.
+- Reproduções isoladas confirmaram sinal de duas pessoas cobrado como uma, ocupação administrativa duplicada com dois pagamentos, rollback do contador de OTP, token de convidado válido após substituição e webhook sem assinatura/validação de valor ou referência conseguindo confirmar pagamento em cenário com consulta do provedor mockada.
+- Fluxos simulados seguem acessíveis, mensageria de envio não está conectada, tralhas do cliente salvam resumo sem gerar adicionais e o manifesto/ficha precisam de alinhamento. Detalhes, fontes e conflitos normativos estão no diagnóstico.
+- Validação atual: 64 testes backend PASS em PostgreSQL (banco temporário), 2 testes frontend PASS em Node 24, requisições HTTP/HTTPS e consultas somente leitura nos ambientes. Sem novo build, inspeção visual em navegador, envio, cobrança ou restauração de backup. Serviços/views/serializers críticos comparados são iguais aos implantados; settings divergem em duas atribuições Meta/WhatsApp.
+
 ## Infraestrutura produção/sandbox — 18/10/2026
 
 Para uma passagem operacional ao Antigravity, incluindo estado de provedores e sequência de retomada, consulte [`ANTIGRAVITY_HANDOFF.md`](ANTIGRAVITY_HANDOFF.md).

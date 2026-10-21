@@ -1,5 +1,12 @@
 # Handoff para continuidade no Antigravity
 
+## Ponto de retomada mais recente — 21/10/2026
+
+**Ler primeiro o [HANDOFF.md](HANDOFF.md).** O Estágio 1 foi concluído tecnicamente,
+validado com Ponytail PASS independente e implantado no sandbox em HTTPS real (`sb.expedicaopiraiba.com.br`).
+Mídia persistente ativa em `/srv/piraiba/sandbox/media`, migrações aplicadas, build do Next.js
+concluído e testes de upload e vinculação de capas bem-sucedidos. Produção permanece intacta em manutenção.
+
 Atualizado em 18/10/2026. Este documento descreve o estado observado ao preparar a passagem. Ele não autoriza cobranças reais, mensagens a clientes nem publicação comercial.
 
 ## Comece por aqui

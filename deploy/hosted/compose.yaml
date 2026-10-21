@@ -1,0 +1,106 @@
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+x-app: &app
+  restart: unless-stopped
+  logging: *logging
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: ["ALL"]
+  user: "1000:1000"
+  read_only: true
+  tmpfs: ["/tmp:rw,nosuid,nodev,size=64m,mode=1777"]
+  pids_limit: 128
+
+services:
+  db:
+    image: ${POSTGRES_IMAGE:?}
+    restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    networks: [data]
+    mem_limit: ${DB_MEMORY:?}
+    cpus: ${DB_CPU:?}
+    pids_limit: 128
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    <<: *app
+    image: ${BACKEND_IMAGE:?}
+    env_file: ["${ENV_FILE:?}"]
+    environment:
+      DJANGO_SETTINGS_MODULE: config.hosted
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      MEDIA_ROOT: /app/media
+    volumes: ["${MEDIA_HOST_DIR:?}:/app/media"]
+    command: ["sh", "-c", "python manage.py migrate --noinput && exec gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --threads 2 --timeout 60"]
+    depends_on:
+      db: {condition: service_healthy}
+    networks: [data, app]
+    ports: ["127.0.0.1:${BACKEND_PORT:?}:8000"]
+    mem_limit: ${API_MEMORY:?}
+    cpus: ${API_CPU:?}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import django,urllib.request; django.setup(); from django.db import connection; connection.cursor().execute('SELECT 1'); urllib.request.urlopen('http://127.0.0.1:8000/api/health/',timeout=4).read()"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+
+  jobs:
+    <<: *app
+    image: ${BACKEND_IMAGE:?}
+    env_file: ["${ENV_FILE:?}"]
+    environment:
+      DJANGO_SETTINGS_MODULE: config.hosted
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+    command: ["sh", "-c", "while true; do python manage.py expire_holds || exit 1; sleep 60; done"]
+    depends_on:
+      backend: {condition: service_healthy}
+    networks: [data]
+    pids_limit: 64
+    mem_limit: ${JOBS_MEMORY:?}
+    cpus: ${JOBS_CPU:?}
+
+  frontend:
+    <<: *app
+    image: ${FRONTEND_IMAGE:?}
+    environment:
+      API_URL: http://backend:8000/api
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_TELEMETRY_DISABLED: "1"
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    tmpfs: ["/tmp:rw,nosuid,nodev,size=64m,mode=1777", "/app/.next/cache:rw,nosuid,nodev,size=64m,mode=1777"]
+    depends_on:
+      backend: {condition: service_healthy}
+    networks: [app]
+    ports: ["127.0.0.1:${FRONTEND_PORT:?}:3000"]
+    mem_limit: ${WEB_MEMORY:?}
+    cpus: ${WEB_CPU:?}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 10s
+      start_period: 20s
+      retries: 10
+
+networks:
+  data: {internal: true}
+  app: {}
+volumes:
+  postgres_data: {}

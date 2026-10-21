@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { MediaPicker } from "@/components/admin/media-picker";
 import Link from "next/link";
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, BarChart3, Beer, CalendarDays, Check, ChevronLeft, ChevronRight, Compass, Copy, Download, ExternalLink, FileText, Fish, House, ImageIcon, Layers, ListChecks, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, Sparkles, TicketCheck, Trash2, Users, X } from "lucide-react";
@@ -1133,85 +1134,15 @@ const GALLERY_PHOTOS = [
   { url: "/gallery/foto-12.jpg", label: "Foto Galeria 12" },
 ];
 
-function GalleryPickerModal({
-  currentUrl,
-  selectedUrls,
-  multiple = false,
-  onSelect,
-  close,
-}: {
+function GalleryPickerModal(props: {
+  token: string;
   currentUrl?: string;
   selectedUrls?: string[];
   multiple?: boolean;
   onSelect: (url: string) => void;
   close: () => void;
 }) {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/60 p-4">
-      <div className="my-5 flex w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <div className="flex items-center gap-2">
-            <ImageIcon className="size-5 text-brand-600" />
-            <h3 className="text-lg font-black text-ink-900">{multiple ? "Escolha as Fotos da Expedição" : "Escolha uma Imagem da Galeria"}</h3>
-          </div>
-          <button type="button" onClick={close} className="rounded-lg p-1 hover:bg-gray-100">
-            <X className="size-5" />
-          </button>
-        </div>
-        <div className="max-h-[70vh] overflow-y-auto p-6">
-          <p className="mb-4 text-xs text-ink-500">
-            {multiple ? "Clique nas fotos para incluir ou remover da galeria da expedição." : "Clique sobre a foto desejada para selecioná-la como imagem de capa."}
-          </p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
-            {GALLERY_PHOTOS.map((photo) => {
-              const isSelected = multiple ? Boolean(selectedUrls?.includes(photo.url)) : currentUrl === photo.url;
-              return (
-                <button
-                  key={photo.url}
-                  type="button"
-                  onClick={() => {
-                    onSelect(photo.url);
-                    if (!multiple) close();
-                  }}
-                  className={`group relative flex flex-col overflow-hidden rounded-xl border-2 text-left transition ${
-                    isSelected
-                      ? "border-brand-600 ring-2 ring-brand-500"
-                      : "border-gray-200 hover:border-brand-400"
-                  }`}
-                >
-                  <div className="relative aspect-video w-full overflow-hidden bg-gray-100">
-                    <img
-                      src={photo.url}
-                      alt={photo.label}
-                      className="size-full object-cover transition-transform group-hover:scale-105"
-                    />
-                    {isSelected && (
-                      <span className="absolute right-2 top-2 rounded-full bg-brand-600 p-1 text-white shadow">
-                        <Check className="size-3" />
-                      </span>
-                    )}
-                  </div>
-                  <div className="p-2">
-                    <p className="truncate text-xs font-bold text-ink-800">{photo.label}</p>
-                    <p className="truncate text-[10px] text-ink-400">{photo.url}</p>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="flex justify-end border-t px-6 py-3">
-          <button
-            type="button"
-            onClick={close}
-            className="rounded-lg border px-4 py-2 text-xs font-bold text-ink-700 hover:bg-gray-50"
-          >
-            {multiple ? "Concluir" : "Fechar"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return <MediaPicker {...props} legacyPhotos={GALLERY_PHOTOS} />;
 }
 
 function ExpeditionWizardModal({
@@ -2133,6 +2064,7 @@ function ExpeditionWizardModal({
 
       {showGalleryPicker && (
         <GalleryPickerModal
+          token={token}
           currentUrl={form.cover_image_url}
           selectedUrls={form.gallery_image_urls}
           multiple={showGalleryPicker === "gallery"}
@@ -2826,6 +2758,7 @@ function LodgeModal({
 
       {showGalleryPicker && (
         <GalleryPickerModal
+          token={token}
           currentUrl={form.cover_image_url}
           onSelect={(url) => setForm((prev) => ({ ...prev, cover_image_url: url }))}
           close={() => setShowGalleryPicker(false)}
@@ -5192,6 +5125,7 @@ function GearModal({
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
 
   function applyPreset(preset: typeof GEAR_PRESETS[number]) {
     setForm((prev) => ({
@@ -5365,14 +5299,16 @@ function GearModal({
           </label>
 
           <label className="text-xs font-bold">
-            URL da Imagem (opcional)
+            Foto do equipamento (opcional)
             <input
-              type="url"
+              type="text"
               value={form.image_url}
               onChange={(e) => setForm({ ...form, image_url: e.target.value })}
               placeholder="https://..."
               className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
             />
+            <button type="button" onClick={() => setShowMediaPicker(true)} className="mt-2 rounded-lg border px-3 py-2 text-xs font-bold">Escolher ou enviar foto</button>
+            {form.image_url && <Image src={form.image_url} alt={form.name || "Foto do equipamento"} width={240} height={160} unoptimized className="mt-2 h-32 w-48 rounded-lg object-cover" />}
           </label>
 
           <label className="text-xs font-bold sm:col-span-2">
@@ -5425,6 +5361,7 @@ function GearModal({
           </button>
         </div>
       </form>
+      {showMediaPicker && <GalleryPickerModal token={token} currentUrl={form.image_url} onSelect={url => setForm(previous => ({ ...previous, image_url: url }))} close={() => setShowMediaPicker(false)} />}
     </div>
   );
 }

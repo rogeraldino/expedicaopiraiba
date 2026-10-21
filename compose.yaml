@@ -21,6 +21,7 @@ services:
       CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       ADMIN_EMAIL: admin@expedicaopiraiba.com.br
       ADMIN_PASSWORD: admin-local-2026
+      MEDIA_ROOT: /app/media
       POSTGRES_DB: expedicao_piraiba
       POSTGRES_USER: expedicao_piraiba
       POSTGRES_PASSWORD: expedicao_piraiba

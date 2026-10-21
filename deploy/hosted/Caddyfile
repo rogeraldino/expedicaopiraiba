@@ -1,0 +1,73 @@
+expedicaopiraiba.com.br {
+	redir https://www.expedicaopiraiba.com.br{uri} permanent
+}
+
+www.expedicaopiraiba.com.br {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options "nosniff"
+	}
+	@webhooks path /api/webhooks/whatsapp /api/webhooks/whatsapp/* /api/webhooks/mercadopago /api/webhooks/mercadopago/*
+	handle @webhooks {
+		reverse_proxy 127.0.0.1:8001 {
+			header_up X-Real-IP {remote_host}
+			header_up Host {host}
+		}
+	}
+	handle {
+		header {
+			Retry-After "3600"
+			Cache-Control "no-store"
+		}
+		respond "Expedição Piraíba: site em preparação." 503
+	}
+}
+
+sb.expedicaopiraiba.com.br {
+	encode zstd gzip
+	header {
+		X-Robots-Tag "noindex, nofollow, noarchive"
+		X-Content-Type-Options "nosniff"
+		Cache-Control "no-store"
+	}
+	@webhooks path /api/webhooks/whatsapp /api/webhooks/whatsapp/* /api/webhooks/mercadopago /api/webhooks/mercadopago/*
+	handle @webhooks {
+		reverse_proxy 127.0.0.1:8002 {
+			header_up X-Real-IP {remote_host}
+			header_up Host {host}
+		}
+	}
+	@login path /__sandbox/login
+	handle @login {
+		reverse_proxy 127.0.0.1:8090 {
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-Method {method}
+			header_up X-Forwarded-Uri {uri}
+		}
+	}
+	handle {
+		route {
+			forward_auth 127.0.0.1:8090 {
+				uri /check
+				header_up X-Real-IP {remote_host}
+			}
+			@edgeBasic header Authorization Basic*
+			request_header @edgeBasic -Authorization
+			@backend path /api /api/* /admin-django /admin-django/*
+			reverse_proxy @backend 127.0.0.1:8002 {
+				header_up -X-Sandbox-User
+				header_up -Remote-User
+				header_up -X-Authenticated-User
+			}
+			reverse_proxy 127.0.0.1:3002 {
+				header_up -X-Sandbox-User
+				header_up -Remote-User
+				header_up -X-Authenticated-User
+			}
+		}
+	}
+}
+
+:80 {
+	respond "Host desconhecido." 404
+}
