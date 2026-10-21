@@ -9,12 +9,13 @@ O fluxo diário está no [Playbook](docs/sdd/PLAYBOOK.md). Em caso de conflito, 
 Leia somente o necessário, nesta ordem:
 
 1. `docs/sdd/CONSTITUTION.md`;
-2. especificação ativa em `specs/active/`;
-3. owners referenciados em `docs/sdd/NORMATIVE_INDEX.json`;
-4. documentação funcional e arquitetura relevante;
-5. código e testes afetados;
-6. `HANDOFF.md` como estado operacional;
-7. material histórico apenas como evidência.
+2. Cerimônias de branch e ambientes em `docs/RELEASE_CEREMONIES.md`;
+3. especificação ativa em `specs/active/`;
+4. owners referenciados em `docs/sdd/NORMATIVE_INDEX.json`;
+5. documentação funcional e arquitetura relevante;
+6. código e testes afetados;
+7. `HANDOFF.md` como estado operacional;
+8. material histórico apenas como evidência.
 
 `HANDOFF.md`, código e testes não criam comportamento normativo por conta própria.
 
