@@ -6,6 +6,8 @@ from .serializers import CancelHoldSerializer, HoldSerializer, IdentifySerialize
 
 
 class SerializerActionView(APIView):
+    authentication_classes = []
+    permission_classes = []
     serializer_class = None
 
     def post(self, request):

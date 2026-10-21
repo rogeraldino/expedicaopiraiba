@@ -15,8 +15,9 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.contrib.staticfiles.views import serve
 from django.http import JsonResponse
-from django.urls import include, path
+from django.urls import include, path, re_path
 
 
 from apps.expeditions.views import LodgeListView, TargetSpeciesListView
@@ -43,4 +44,5 @@ urlpatterns = [
     path("api/payments/", include("apps.payments.urls")),
     path("api/operations/", include("apps.operations.urls")),
     path('admin-django/', admin.site.urls),
+    re_path(r"^static/(?P<path>.*)$", serve, {"insecure": True}),
 ]
