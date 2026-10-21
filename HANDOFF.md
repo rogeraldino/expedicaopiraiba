@@ -1,6 +1,35 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
-## Retomada e Conclusão Técnica do Estágio 1 — 21/10/2026, 17:05 UTC
+## Release v0.2.1 — Correção de Pagamento PIX, Webhooks e Renderização de QR Code (21/10/2026, 22:45 UTC)
+
+### 1. Resumo das Ações Executadas:
+1. **Reconciliação Imediata do Pagamento Real em Produção:**
+   - Pagamento Mercado Pago ID `184392685521` (R$ 2,00) reconciliado via `process_paid_event`.
+   - Reserva `01744810-f917-415e-ac34-877f26ba140f` transitada para **`CONFIRMED`**.
+   - E-mail transacional de confirmação de pedido enviado com sucesso pelo Resend para `xinoro777@gmail.com` a partir de `reservas@expedicaopiraiba.com.br`.
+
+2. **Correção do Callback de Notificações do Mercado Pago (`notification_url`):**
+   - Corrigido `backend/apps/payments/gateways.py`: `create_pix`, `create_card_payment` e `create_boleto` agora enviam `notification_url` apontando para o webhook público.
+   - Variáveis configuradas em `/etc/piraiba/production.env` (`https://www.expedicaopiraiba.com.br/api/webhooks/mercadopago/`) e `/etc/piraiba/sandbox.env` (`https://sb.expedicaopiraiba.com.br/api/webhooks/mercadopago/`).
+   - Webhook atualizado para aceitar IPN (sem assinatura `x-signature`) validando diretamente via API autenticada com o Mercado Pago.
+
+3. **Auto-Heal Ativo no Polling de Status (`PaymentStatusView`):**
+   - No endpoint `GET /api/payments/{id}/status/`, enquanto o status local for `PENDING` ou `PROCESSING`, a API consulta diretamente o status no Mercado Pago (`timeout=3s`).
+   - Se o banco aprovou, a transação é reconciliada e confirmada instantaneamente no próprio polling, garantindo atualização em tempo real na tela mesmo se o webhook atrasar.
+
+4. **Renderização Visual do QR Code no Checkout:**
+   - Adicionado campo `pix_qr_code_base64` ao modelo `Payment` (migração `0004_payment_pix_qr_code_base64.py`) e ao `payment_payload`.
+   - Adicionada biblioteca `qrcode` no frontend para fallback gerador dinâmico de QR Code caso a imagem base64 não seja retornada pelo gateway.
+   - Interface redesenhada em `checkout-form.tsx` com imagem destacada do QR Code para leitura por celular, instruções passo a passo, caixa de Copia e Cola com feedback visual ("Copiado!"), e indicador animado de confirmação automática.
+
+5. **Deploy e Promoção Concluídos:**
+   - 100% dos testes Django aprovados (20 testes em `apps.payments`, 92 testes na suíte geral).
+   - Build Next.js compilado sem erros.
+   - Tag `v0.2.1` criada e push efetuado nas branches `main` e `production`.
+   - Script oficial `deploy/scripts/promote-to-prod.sh` executado para Produção (Release `20261021T223921Z-b4a359a7c91b`).
+   - Sandbox atualizado e com todos os containers saudáveis.
+
+---
 
 Rodrigo solicitou: «Continue o desenvolvimento». A sequência de 8 passos foi executada e concluída com sucesso:
 
