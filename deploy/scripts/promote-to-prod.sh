@@ -32,9 +32,8 @@ ARTIFACT="${ARTIFACT_DIR}/${RELEASE}.tar.gz"
 
 echo "Release ID: $RELEASE"
 
-echo "==> [3/7] Empacotando Snapshot do Código..."
-FILES=$(git -C "$REPO" ls-files -z --cached --others --exclude-standard)
-tar -czf "$ARTIFACT" -C "$REPO" --null -T <(echo -n "$FILES")
+echo "==> [3/7] Empacotando Snapshot do Código via Git Archive..."
+git -C "$REPO" archive --format=tar.gz -o "$ARTIFACT" HEAD
 CHECKSUM=$(sha256sum "$ARTIFACT" | cut -d' ' -f1)
 
 TARGET_DIR="/srv/piraiba/production/releases/${RELEASE}"
