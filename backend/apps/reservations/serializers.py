@@ -2,7 +2,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from apps.customers.services import customer_from_token, start_verification, verify_challenge
+from apps.customers.services import create_customer_session_token, customer_from_token, start_verification, verify_challenge
 
 from .services import create_hold, record_reservation_event
 from .models import Reservation, ReservationEvent
@@ -36,7 +36,11 @@ class VerifySerializer(serializers.Serializer):
 
     def create(self, validated_data):
         try:
-            return {"verification_token": verify_challenge(**validated_data)}
+            token = verify_challenge(**validated_data)
+            return {
+                "verification_token": token,
+                "customer_session_token": create_customer_session_token(customer_from_token(token)),
+            }
         except DjangoValidationError as error:
             raise serializers.ValidationError(error.messages)
 

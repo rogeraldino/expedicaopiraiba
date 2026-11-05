@@ -67,8 +67,20 @@ def start_verification(*, cpf, full_name, email, phone, channel=None):
     destination_email = customer.email if not created else clean_email
     destination_phone = customer.phone if not created else normalized_phone
 
-    # Revoke unconsumed challenges
-    VerificationChallenge.objects.filter(customer=customer, verified_at__isnull=True).delete()
+    now = timezone.now()
+    recent = VerificationChallenge.objects.filter(
+        customer=customer, created_at__gte=now - timedelta(minutes=15)
+    )
+    if recent.count() >= 5:
+        raise ValidationError("Limite de códigos atingido. Tente novamente em 15 minutos.")
+    latest = recent.order_by("-created_at").first()
+    if latest and latest.created_at > now - timedelta(seconds=30):
+        raise ValidationError("Aguarde 30 segundos antes de pedir outro código.")
+
+    # Keep prior challenges for durable throttling, while invalidating their codes.
+    VerificationChallenge.objects.filter(
+        customer=customer, verified_at__isnull=True
+    ).update(expires_at=now)
 
     code = f"{secrets.randbelow(1_000_000):06d}"
     challenge = VerificationChallenge.objects.create(
@@ -92,6 +104,10 @@ def start_verification(*, cpf, full_name, email, phone, channel=None):
             dispatched = send_otp_email(email=destination_email, code=code, full_name=customer.full_name)
             challenge.channel = VerificationChallenge.Channel.EMAIL
             challenge.save(update_fields=["channel"])
+
+    if not dispatched:
+        logger.error("OTP delivery failed for challenge %s", challenge.id)
+        raise ValidationError("Não foi possível enviar o código agora. Tente novamente em instantes.")
 
     destination = destination_email if challenge.channel == VerificationChallenge.Channel.EMAIL else destination_phone
     masked = mask_destination(destination, challenge.channel)

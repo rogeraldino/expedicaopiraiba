@@ -4,11 +4,12 @@ import { FormEvent, useEffect, useState } from "react";
 import { AlertCircle, ArrowLeft, CheckCircle2, Copy, CreditCard, ExternalLink, Loader2, LockKeyhole, QrCode, Receipt, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import QRCode from "qrcode";
+import { CardFields } from "./card-fields";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 const inputClass =
   "mt-2 h-11 w-full rounded-md border border-ink-900/15 bg-white px-3 text-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100";
-type Step = "FORM" | "OTP" | "PAYMENT" | "SUCCESS";
+type Step = "FORM" | "OTP" | "PAYMENT_FORM" | "PAYMENT" | "SUCCESS";
 type Method = "PIX" | "CREDIT_CARD" | "BOLETO";
 
 type ExpeditionProp = {
@@ -26,6 +27,7 @@ type ExpeditionProp = {
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 });
 
 function messageFrom(error: unknown) {
+  if (error instanceof Error) return error.message;
   if (!error || typeof error !== "object") return "Não foi possível continuar.";
   return Object.values(error as Record<string, unknown>).flat().join(" ") || "Não foi possível continuar.";
 }
@@ -39,7 +41,9 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   const [devCode, setDevCode] = useState("");
   const [code, setCode] = useState("");
   const [holdUntil, setHoldUntil] = useState("");
+  const [holdUntilRaw, setHoldUntilRaw] = useState("");
   const [verificationToken, setVerificationToken] = useState("");
+  const [customerSessionToken, setCustomerSessionToken] = useState("");
   const [paymentId, setPaymentId] = useState("");
   const [reservationId, setReservationId] = useState("");
   const [pixCode, setPixCode] = useState("");
@@ -49,11 +53,13 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   const [ticketUrl, setTicketUrl] = useState("");
   const [boletoBarcode, setBoletoBarcode] = useState("");
   const [amountDue, setAmountDue] = useState(0);
-  const [participantCount, setParticipantCount] = useState(2);
-  const [participants, setParticipants] = useState(["", ""]);
+  const initialParticipantCount = Math.min(2, Math.max(1, expedition.available_slots));
+  const [participantCount, setParticipantCount] = useState(initialParticipantCount);
+  const [participants, setParticipants] = useState(() => Array(initialParticipantCount).fill(""));
   const [identity, setIdentity] = useState({ cpf: "", full_name: "", phone: "", email: "" });
   const [paymentPlan, setPaymentPlan] = useState("DEPOSIT");
   const [paymentMethod, setPaymentMethod] = useState<Method>("PIX");
+  const [cardReady, setCardReady] = useState(false);
   const [terms, setTerms] = useState(false);
 
   // Address state for Boleto Bancário
@@ -67,18 +73,10 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     federal_unit: "",
   });
 
-  // Credit card state
-  const [cardData, setCardData] = useState({
-    cardholder_name: "",
-    card_number: "",
-    expiry: "",
-    cvv: "",
-    installments: 1,
-  });
-
   // Check Boleto window: allowed only if starts_at > 7 days from now
+  const [checkoutOpenedAt] = useState(() => Date.now());
   const daysUntilDeparture = expedition.starts_at
-    ? Math.ceil((new Date(expedition.starts_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    ? Math.ceil((new Date(expedition.starts_at).getTime() - checkoutOpenedAt) / (1000 * 60 * 60 * 24))
     : 30;
   const isBoletoAvailable = daysUntilDeparture > 7;
   const [isEditing, setIsEditing] = useState(false);
@@ -107,6 +105,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     } finally {
       setLoading(false);
       setReservationId("");
+      setHoldUntilRaw("");
       setPaymentId("");
       setPixCode("");
       setPixQrCodeBase64("");
@@ -142,7 +141,11 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     let active = true;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${api}/payments/${paymentId}/status/`);
+        const res = await fetch(`${api}/payments/${paymentId}/status/`, {
+          headers: customerSessionToken
+            ? { Authorization: `Bearer ${customerSessionToken}` }
+            : { "X-Verification-Token": verificationToken },
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (!active) return;
@@ -171,34 +174,13 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       active = false;
       clearInterval(interval);
     };
-  }, [step, paymentId, pixQrCodeBase64]);
+  }, [step, paymentId, pixQrCodeBase64, verificationToken, customerSessionToken]);
 
-  async function requestCode(event: FormEvent) {
-    event.preventDefault();
+  async function requestCode(event?: FormEvent) {
+    event?.preventDefault();
     setError("");
     if (!terms) return setError("Aceite os termos e a política de cancelamento para continuar.");
     if (participants.some((name) => !name.trim())) return setError("Informe o nome de todos os participantes.");
-
-    // Validate Boleto address
-    if (paymentMethod === "BOLETO") {
-      if (!isBoletoAvailable) {
-        return setError("Boleto bancário indisponível a menos de 7 dias do embarque.");
-      }
-      if (!address.zip_code.trim() || !address.street_name.trim() || !address.street_number.trim() || !address.city.trim() || !address.federal_unit.trim()) {
-        return setError("Preencha o endereço completo (CEP, rua, número, bairro, cidade e estado) para emissão do boleto.");
-      }
-    }
-
-    // Validate card data
-    if (paymentMethod === "CREDIT_CARD") {
-      const cleanCard = cardData.card_number.replace(/\D/g, "");
-      if (cleanCard.length < 13) {
-        return setError("Informe um número de cartão de crédito válido.");
-      }
-      if (!cardData.cardholder_name.trim()) {
-        return setError("Informe o nome impresso no cartão de crédito.");
-      }
-    }
 
     setLoading(true);
     try {
@@ -228,45 +210,11 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     }
   }
 
-  function fillDemoData() {
-    setIdentity({
-      cpf: "529.982.247-25",
-      full_name: "Rodrigo Geraldo",
-      phone: "(62) 98161-2128",
-      email: "rodrigo@alvor.lat",
-    });
-    setTerms(true);
-    setParticipants((prev) =>
-      prev.map((p, idx) => (p && p.trim() ? p : idx === 0 ? "Rodrigo Geraldo" : `Pescador Convidado ${idx + 1}`))
-    );
-    if (paymentMethod === "BOLETO") {
-      setAddress({
-        zip_code: "74000-000",
-        street_name: "Avenida Goiás",
-        street_number: "100",
-        complement: "Sala 2",
-        neighborhood: "Setor Central",
-        city: "Goiânia",
-        federal_unit: "GO",
-      });
-    }
-    if (paymentMethod === "CREDIT_CARD") {
-      setCardData({
-        cardholder_name: "RODRIGO GERALDO",
-        card_number: "4111 1111 1111 1111",
-        expiry: "12/28",
-        cvv: "123",
-        installments: 3,
-      });
-    }
-  }
-
   async function verifyAndHold(event: FormEvent) {
     event.preventDefault();
     setError("");
     setLoading(true);
     try {
-      // 1. Verify OTP challenge
       const verificationResponse = await fetch(`${api}/checkout/verify/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -275,37 +223,60 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       const verification = await verificationResponse.json();
       if (!verificationResponse.ok) throw verification;
 
-      // 2. Hold seats
-      const holdPayload: Record<string, unknown> = {
-        verification_token: verification.verification_token,
-        expedition_slug: expedition.slug,
-        participant_names: participants,
-        payment_plan: paymentPlan,
-      };
-      if (reservationId) {
-        holdPayload.replace_reservation_id = reservationId;
-      }
-      const holdResponse = await fetch(`${api}/checkout/hold/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(holdPayload),
-      });
-      const hold = await holdResponse.json();
-      if (!holdResponse.ok) throw hold;
+      setVerificationToken(verification.verification_token);
+      setCustomerSessionToken(verification.customer_session_token ?? "");
+      setStep("PAYMENT_FORM");
+    } catch (requestError) {
+      setError(messageFrom(requestError));
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      // 3. Create payment
+  async function submitPayment(card?: { token: string; paymentMethodId: string; installments: string }) {
+    setError("");
+    if (!verificationToken) return setError("Confirme o código antes de escolher o pagamento.");
+    if (paymentMethod === "BOLETO" && (!isBoletoAvailable || !address.zip_code.trim() || !address.street_name.trim() || !address.street_number.trim() || !address.neighborhood.trim() || !address.city.trim() || !address.federal_unit.trim())) {
+      return setError("Preencha o endereço completo para emitir o boleto.");
+    }
+    if (paymentMethod === "CREDIT_CARD" && (!card?.token || !card.paymentMethodId)) {
+      return setError("Confira os dados do cartão e tente novamente.");
+    }
+    setLoading(true);
+    try {
+      let currentReservationId = reservationId;
+      let heldUntil = holdUntilRaw;
+      if (!currentReservationId) {
+        const holdResponse = await fetch(`${api}/checkout/hold/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            verification_token: verificationToken,
+            expedition_slug: expedition.slug,
+            participant_names: participants,
+            payment_plan: paymentPlan,
+          }),
+        });
+        const hold = await holdResponse.json();
+        if (!holdResponse.ok) throw hold;
+        currentReservationId = hold.reservation_id;
+        heldUntil = hold.held_until;
+        setReservationId(currentReservationId);
+        setHoldUntilRaw(heldUntil);
+      }
+
       const paymentPayload: Record<string, unknown> = {
-        verification_token: verification.verification_token,
-        reservation_id: hold.reservation_id,
+        verification_token: verificationToken,
+        reservation_id: currentReservationId,
         method: paymentMethod,
       };
 
       if (paymentMethod === "BOLETO") {
         paymentPayload.address = address;
       } else if (paymentMethod === "CREDIT_CARD") {
-        paymentPayload.card_token = `tok_${cardData.card_number.replace(/\D/g, "")}`;
-        paymentPayload.installments = cardData.installments;
-        paymentPayload.payment_method_id = "visa";
+        paymentPayload.card_token = card!.token;
+        paymentPayload.installments = Number(card!.installments);
+        paymentPayload.payment_method_id = card!.paymentMethodId;
       }
 
       const paymentResponse = await fetch(`${api}/payments/`, {
@@ -316,15 +287,13 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       const payment = await paymentResponse.json();
       if (!paymentResponse.ok) throw payment;
 
-      setVerificationToken(verification.verification_token);
       setPaymentId(payment.payment_id);
-      setReservationId(hold.reservation_id);
       setAmountDue(payment.amount_cents);
 
       if (payment.expires_at) {
         setHoldUntil(new Date(payment.expires_at).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" }));
       } else {
-        setHoldUntil(new Date(hold.held_until).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
+        setHoldUntil(new Date(heldUntil).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }));
       }
 
       // Check if card payment was approved immediately
@@ -351,6 +320,11 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     } finally {
       setLoading(false);
     }
+  }
+
+  function submitPaymentForm(event: FormEvent) {
+    event.preventDefault();
+    if (paymentMethod !== "CREDIT_CARD") void submitPayment();
   }
 
   // Developer simulation helper for tests/staging
@@ -564,7 +538,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       <form onSubmit={verifyAndHold} className="rounded-2xl border border-ink-900/10 bg-white p-7 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-widest text-brand-600">Confirme seu contato</p>
         <h2 className="mt-2 text-2xl font-black text-brand-900">Digite o código de 6 números</h2>
-        <p className="mt-2 text-sm text-ink-500">Enviado para {destination}.</p>
+        <p className="mt-2 text-sm text-ink-500">Enviado para {destination}. Se este CPF já possui cadastro, usamos o contato registrado anteriormente. Se você não reconhece esse endereço, procure o suporte para atualizar seu cadastro.</p>
         {devCode && (
           <div className="mt-4 rounded-xl bg-sand-100 p-4 text-sm text-brand-900 border border-sand-300">
             <div className="flex items-center justify-between">
@@ -595,7 +569,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
           disabled={loading || code.length !== 6}
           className="mt-5 min-h-12 w-full rounded-lg bg-brand-600 font-bold text-white shadow hover:bg-brand-700 disabled:opacity-50"
         >
-          {loading ? "Verificando..." : "Confirmar código e prosseguir para pagamento"}
+          {loading ? "Verificando..." : "Confirmar código"}
         </button>
         <button
           type="button"
@@ -605,12 +579,15 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         >
           <ArrowLeft className="size-4" /> Voltar e corrigir dados
         </button>
+        <button type="button" onClick={() => void requestCode()} disabled={loading} className="mt-3 w-full text-sm font-bold text-brand-700 hover:underline disabled:opacity-50">
+          Reenviar código
+        </button>
       </form>
     );
 
   return (
-    <form onSubmit={requestCode} className="space-y-5">
-      {isEditing && (
+    <form key={`${step}-${paymentMethod}-${paymentPlan}`} id="payment-checkout-form" onSubmit={step === "PAYMENT_FORM" ? submitPaymentForm : requestCode} className="space-y-5">
+      {isEditing && step === "FORM" && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 shadow-sm">
           <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
           <div>
@@ -622,24 +599,8 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         </div>
       )}
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-brand-500/30 bg-brand-50/80 p-4 shadow-sm">
-        <div>
-          <span className="inline-block rounded bg-brand-700 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white">
-            Demonstração & Testes
-          </span>
-          <p className="mt-1 text-xs text-brand-950">
-            Clique para preencher todos os campos do formulário automaticamente e testar o onboarding completo.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={fillDemoData}
-          className="shrink-0 rounded-lg bg-brand-700 px-4 py-2 text-xs font-bold text-white shadow hover:bg-brand-800 transition"
-        >
-          Preencher dados de teste
-        </button>
-      </div>
-
+      {step === "FORM" && (<>
+        <p className="rounded-xl bg-brand-50 p-4 text-sm text-brand-900">Primeiro confirmaremos seu contato. Os dados de pagamento serão pedidos depois.</p>
       <fieldset className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
         <legend className="px-2 font-black text-brand-900">1. Dados do titular da reserva</legend>
         <div className="mt-2 grid gap-4 sm:grid-cols-2">
@@ -673,7 +634,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
             onChange={(event) => updateCount(Number(event.target.value))}
             className={inputClass}
           >
-            {[1, 2, 3, 4, 6].map((count) => (
+            {[1, 2, 3, 4, 6].filter((count) => count <= expedition.available_slots).map((count) => (
               <option key={count} value={count}>
                 {count} pescador{count > 1 ? "es" : ""} ({count} vaga{count > 1 ? "s" : ""})
               </option>
@@ -700,6 +661,10 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         </div>
       </fieldset>
 
+      </>)}
+
+      {step === "PAYMENT_FORM" && (<>
+        <p className="rounded-xl bg-brand-50 p-4 text-sm text-brand-900">Contato confirmado. Escolha como pagar para concluir a reserva.</p>
       <fieldset className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
         <legend className="px-2 font-black text-brand-900">3. Opção de pagamento</legend>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -894,76 +859,20 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
           </div>
         )}
 
-        {/* Credit Card inputs */}
-        {paymentMethod === "CREDIT_CARD" && (
-          <div className="mt-5 rounded-xl border border-brand-200 bg-brand-50/50 p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <CreditCard className="size-4 text-brand-700" />
-              <strong className="text-sm text-brand-950">Dados do Cartão de Crédito</strong>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-xs font-semibold text-ink-800 sm:col-span-2">
-                Nome impresso no cartão
-                <input
-                  required
-                  value={cardData.cardholder_name}
-                  onChange={(e) => setCardData({ ...cardData, cardholder_name: e.target.value })}
-                  placeholder="NOME COMO NO CARTÃO"
-                  className={inputClass}
-                />
-              </label>
-              <label className="text-xs font-semibold text-ink-800 sm:col-span-2">
-                Número do cartão
-                <input
-                  required
-                  value={cardData.card_number}
-                  onChange={(e) => setCardData({ ...cardData, card_number: e.target.value })}
-                  placeholder="0000 0000 0000 0000"
-                  className={inputClass}
-                />
-              </label>
-              <label className="text-xs font-semibold text-ink-800">
-                Validade (MM/AA)
-                <input
-                  required
-                  maxLength={5}
-                  value={cardData.expiry}
-                  onChange={(e) => setCardData({ ...cardData, expiry: e.target.value })}
-                  placeholder="MM/AA"
-                  className={inputClass}
-                />
-              </label>
-              <label className="text-xs font-semibold text-ink-800">
-                Código de Segurança (CVV)
-                <input
-                  required
-                  maxLength={4}
-                  value={cardData.cvv}
-                  onChange={(e) => setCardData({ ...cardData, cvv: e.target.value })}
-                  placeholder="123"
-                  className={inputClass}
-                />
-              </label>
-              <label className="text-xs font-semibold text-ink-800 sm:col-span-2">
-                Parcelamento
-                <select
-                  value={cardData.installments}
-                  onChange={(e) => setCardData({ ...cardData, installments: Number(e.target.value) })}
-                  className={inputClass}
-                >
-                  <option value={1}>1x de {money.format(paymentPlan === "DEPOSIT" ? depositTotal : fullTotal)} (à vista)</option>
-                  {[2, 3, 4, 5, 6, 10].map((n) => (
-                    <option key={n} value={n}>
-                      {n}x de {money.format((paymentPlan === "DEPOSIT" ? depositTotal : fullTotal) / n)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          </div>
-        )}
+        {paymentMethod === "CREDIT_CARD" && <CardFields
+          key={`${paymentPlan}-${participantCount}`}
+          amount={paymentPlan === "DEPOSIT" ? depositTotal : fullTotal}
+          email={identity.email}
+          cpf={identity.cpf.replace(/\D/g, "")}
+          onToken={(data) => void submitPayment(data)}
+          onReadyChange={setCardReady}
+        />}
       </fieldset>
 
+        <button type="button" onClick={cancelHoldAndGoBack} disabled={loading} className="w-full text-sm font-bold text-brand-700 hover:underline">Voltar e corrigir dados</button>
+      </>)}
+
+      {step === "FORM" && (
       <label className="flex items-start gap-2.5 rounded-2xl border border-ink-900/10 bg-white p-5 text-xs text-ink-700 shadow-sm">
         <input
           className="mt-0.5 accent-brand-600"
@@ -977,16 +886,18 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         </span>
       </label>
 
+      )}
+
       {error && <p className="rounded-lg bg-red-50 p-3.5 text-sm font-semibold text-red-700">{error}</p>}
 
       <button
-        disabled={loading}
+        disabled={loading || (step === "PAYMENT_FORM" && paymentMethod === "CREDIT_CARD" && !cardReady)}
         className="min-h-12 w-full rounded-xl bg-brand-600 px-6 font-black text-white shadow-md transition hover:bg-brand-700 disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {loading && <Loader2 className="size-4 animate-spin" />}
         {loading
           ? "Processando..."
-          : `Confirmar dados e pagar ${paymentPlan === "DEPOSIT" ? money.format(depositTotal) : money.format(fullTotal)}`}
+           : step === "FORM" ? "Enviar código de confirmação" : `Pagar ${paymentPlan === "DEPOSIT" ? money.format(depositTotal) : money.format(fullTotal)}`}
       </button>
 
       <p className="flex items-center justify-center gap-2 text-xs text-ink-500">

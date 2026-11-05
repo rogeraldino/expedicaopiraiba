@@ -5,10 +5,12 @@ from .views import (
     FakeWebhookView,
     MercadoPagoWebhookView,
     PaymentStatusView,
+    PaymentPublicConfigView,
     SimulateConfirmationView,
 )
 
 urlpatterns = [
+    path("config/", PaymentPublicConfigView.as_view(), name="payment-public-config"),
     path("", CreatePixView.as_view(), name="payment-create-pix"),
     path("<uuid:payment_id>/status/", PaymentStatusView.as_view(), name="payment-status"),
     path("<uuid:payment_id>/simulate-confirmation/", SimulateConfirmationView.as_view(), name="payment-simulate"),

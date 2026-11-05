@@ -15,7 +15,7 @@ from .services import expire_holds, transition_reservation
 class CheckoutApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.expedition = Expedition.objects.create(name="Rio Araguaia", destination="Luiz Alves/GO", starts_at=date(2026, 10, 18), ends_at=date(2026, 10, 22), capacity=3, price_per_person_cents=249000, deposit_cents=120000, status=Expedition.Status.PUBLISHED)
+        self.expedition = Expedition.objects.create(name="Rio Araguaia", destination="Luiz Alves/GO", starts_at=timezone.localdate() + timedelta(days=20), ends_at=timezone.localdate() + timedelta(days=24), capacity=3, price_per_person_cents=249000, deposit_cents=120000, status=Expedition.Status.PUBLISHED)
         self.identity = {"cpf": "529.982.247-25", "full_name": "João da Silva", "email": "joao@example.com", "phone": "(62) 99999-9999"}
 
     def identify_and_verify(self):

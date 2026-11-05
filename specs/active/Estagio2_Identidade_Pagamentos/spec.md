@@ -171,7 +171,7 @@ Isso garante que uma retentativa de envio da mesma cobrança não gere múltiplo
 - Acompanhamento: o checkout realiza polling suave a cada 4 segundos em `GET /api/payments/{payment_id}/status/` para detectar confirmação sem depender de botão manual de simulação.
 
 #### B) Cartão de Crédito
-- Token gerado de forma segura no frontend via SDK Mercado Pago JS (`mp.fields.createCardToken(...)`). O backend **NÃO RECEBE** número de cartão, validade ou CVV (PCI-DSS compliance).
+- Token gerado de forma segura no frontend via CardForm do MercadoPago.js, com campos PCI hospedados em iframes do provedor. O backend **NÃO RECEBE** número de cartão, validade ou CVV.
 - O backend recebe `token`, `installments`, `payment_method_id` e dados do comprador.
 - Status retornados pela API do Mercado Pago:
   - `approved`: o pagamento é imediatamente transicionado para `PAID`, a reserva para `CONFIRMED`/`PAID`, e o cliente avança para sucesso.
@@ -283,3 +283,22 @@ No endpoint `POST /api/webhooks/mercadopago/`:
 | **AC08** | Cartão de Crédito e Recusa/Aprovação | Teste com token de cartão de homologação MP | Transação com cartão aprovado transiciona reserva imediatamente; cartão recusado preserva hold para troca de forma de pagamento. |
 | **AC09** | Boleto Bancário com Endereço Condicional | Teste de contrato e UI de checkout | Seleção de Boleto exibe campos de endereço; payload ao MP inclui `payer.address`; resposta devolve linha digitável e link do boleto. |
 | **AC10** | Webhook Criptográfico e Reconciliação | Teste de webhook com e sem assinatura / divergência | Ausência de assinatura HMAC retorna 401; divergência de valor/moeda rejeita sem confirmar; evento repetido é idempotente; confirmação dispara e-mail transacional. |
+
+---
+
+## 11. Correção operacional do checkout — 05/11/2026
+
+Após teste em produção, o responsável solicitou que a confirmação do código anteceda qualquer coleta de dados de pagamento. A ordem visível é: identidade e participantes → envio do código → validação do código → escolha de plano e método de pagamento → criação de hold e cobrança. Nenhum dado de cartão ou endereço de boleto é solicitado antes da validação do código. O hold só é criado quando o comprador envia o pagamento; falha do gateway preserva o hold para nova tentativa até seu vencimento. Voltar à identidade cancela o hold existente.
+
+Para CPF já cadastrado, o OTP vai ao contato previamente registrado e a interface mostra o destino mascarado. Um novo pedido de código invalida o anterior, com intervalo mínimo de 30 segundos e limite de cinco códigos por CPF em 15 minutos. Se o envio falhar, a API retorna erro e preserva o desafio anterior válido. Uma aceitação SMTP significa apenas que o provedor recebeu a mensagem; comprovar entrega exige evidência da caixa de destino ou evento do provedor.
+
+O CardForm do MercadoPago.js hospeda número, validade e CVV em iframes e entrega um token de uso único. O backend recebe somente token, parcelas e método, rejeita tokens fabricados e usa chave de idempotência derivada da reserva e do token para cada tentativa. Trocar o método de pagamento remove o formulário anterior do DOM. A chave pública vem de `/api/payments/config/`; credenciais privadas continuam apenas no backend.
+
+O polling `GET /api/payments/{id}/status/` exige o token de verificação do titular ou sua sessão autenticada. Sem ele, ou com token de outro comprador, retorna 404 sem consultar o provedor. Após o OTP, a sessão longa do titular é emitida para permitir acompanhar boleto e Pix após a expiração do token curto; ela só é persistida no navegador quando o pagamento é confirmado.
+
+| ID | Critério adicional | Evidência atual | Estado |
+|---|---|---|---|
+| AC11 | Código antes de pagamento e destino claro | Teste no navegador com API de checkout interceptada; testes de erro de envio e limite por CPF | VALIDADO localmente |
+| AC12 | Token real e uma única requisição de cartão | Browser com chave de teste e cartão oficial: token emitido, uma chamada `/payments/`, PAN ausente do payload. Cobrança em sandbox bloqueada por par de credenciais incompatível para Payments API | VALIDADO na tokenização; aprovação/recusa real pendente |
+| AC13 | Entrega de OTP no contato correto | Conexão SMTP autenticada e desafios recentes confirmados; evento de entrega da última tentativa indisponível | PENDENTE de prova de entrega controlada |
+| AC14 | Sigilo do polling de pagamentos | Teste sem token, token de outro comprador e token do titular para pagamento aprovado | VALIDADO em testes de API; implantação pendente |

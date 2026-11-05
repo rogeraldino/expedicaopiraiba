@@ -190,17 +190,8 @@ class MercadoPagoPaymentGateway:
         if not card_token:
             raise ValidationError("Token do cartão de crédito não fornecido.")
 
-        if card_token.startswith("token_") or card_token.startswith("tok_"):
-            if self.access_token.startswith("TEST-") or getattr(settings, "PAYMENT_GATEWAY", "") != "MERCADOPAGO":
-                return FakePaymentGateway().create_card_payment(
-                    reservation_id=reservation_id,
-                    amount_cents=amount_cents,
-                    customer=customer,
-                    card_token=card_token,
-                    installments=installments,
-                    payment_method_id=payment_method_id,
-                    idempotency_key=idempotency_key,
-                )
+        if card_token.startswith(("token_", "tok_")):
+            raise ValidationError("Token do cartão inválido. Preencha novamente os dados do cartão.")
 
         amount_decimal = round(amount_cents / 100.0, 2)
         email = customer.email if customer and getattr(customer, "email", None) else "contato@expedicaopiraiba.com.br"
@@ -226,7 +217,11 @@ class MercadoPagoPaymentGateway:
                 "number": cpf,
             }
 
-        key = idempotency_key or generate_idempotency_key(reservation_id, "INITIAL", "CREDIT_CARD", amount_cents)
+        # A new card token represents a new attempt. Reusing the same token
+        # retains the same idempotency key for safe provider retries.
+        key = idempotency_key or hashlib.sha256(
+            f"{reservation_id}:CARD:{amount_cents}:{card_token}".encode("utf-8")
+        ).hexdigest()[:36]
         data = self._post("/v1/payments", payload, idempotency_key=key)
 
         external_id = str(data.get("id"))

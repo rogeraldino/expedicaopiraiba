@@ -1,5 +1,13 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Correção de checkout e investigação — 05/11/2026 (em validação)
+
+- Produção registrou dois OTPs confirmados às 23:05 e 23:06 UTC, um desafio não confirmado às 23:09 UTC e erro Mercado Pago `Invalid card_token_id` às 23:06:55 UTC. O frontend enviava `tok_` seguido do número do cartão. Na tentativa com e-mail novo para CPF existente, o OTP foi direcionado ao contato cadastrado anteriormente, conforme regra de proteção de conta.
+- Código local alterado para pedir pagamento após validar OTP, usar CardForm seguro do Mercado Pago, bloquear falso sucesso de envio, limitar reenvios (30 segundos, cinco por 15 minutos) e expor apenas a chave pública de cartão. Token de cartão passa a ser de uso único com chave de idempotência por tentativa. A expedição de teste de R$ 1,00 tem uma vaga; checkout agora inicia com uma vaga.
+- Revisão encontrou vazamento de `customer_session_token` no polling público de um pagamento aprovado. O endpoint agora exige token do titular e retorna 404 para terceiros. A sessão longa emitida após OTP permite acompanhar pagamentos cujo prazo excede 15 minutos.
+- Evidência: 96 testes de backend passaram em SQLite (1 skip) e PostgreSQL 17 do sandbox; teste adicional de sigilo do polling passou isoladamente; `makemigrations --check --dry-run` sem alterações; build Next.js, TypeScript e lint dos arquivos afetados passaram. Browser com chave pública de sandbox e cartão de teste gerou token real, emitiu uma única chamada de pagamento interceptada e não enviou PAN. A API do Mercado Pago respondeu 200 para consulta de meios de pagamento; SMTP autenticou e abriu conexão. Na tentativa de cobrança de cartão em sandbox, o token `TEST-` atual recebeu erro 2006 (card token não encontrado), e o token de teste retornado pelo MCP recebeu 401 (uso de credenciais live). A configuração original do sandbox foi restaurada. É preciso obter um par público/privado de teste compatível com a Payments API antes de comprovar aprovação/recusa. A entrega da última mensagem na caixa de destino permanece sem prova.
+- Próximos gates: revisão Ponytail final, aceite humano de Stage2 e promoção de release antes de declarar produção corrigida. O código modificado ainda não foi publicado.
+
 ## Release v0.2.1 — Correção de Pagamento PIX, Webhooks e Renderização de QR Code (21/10/2026, 22:45 UTC)
 
 ### 1. Resumo das Ações Executadas:

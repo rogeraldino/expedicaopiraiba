@@ -30,7 +30,7 @@ from apps.reservations.models import ParticipantProductChoice, Reservation, Rese
 class OperationsApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.expedition = Expedition.objects.create(name="Rio Araguaia", destination="Luiz Alves/GO", starts_at=date(2026, 10, 18), ends_at=date(2026, 10, 22), capacity=12, price_per_person_cents=249000, deposit_cents=120000, status=Expedition.Status.PUBLISHED)
+        self.expedition = Expedition.objects.create(name="Rio Araguaia", destination="Luiz Alves/GO", starts_at=timezone.localdate() + timedelta(days=20), ends_at=timezone.localdate() + timedelta(days=24), capacity=12, price_per_person_cents=249000, deposit_cents=120000, status=Expedition.Status.PUBLISHED)
 
     def login(self):
         response = self.client.post("/api/operations/login/", {"email": "admin@example.com", "password": "safe-test-password"}, format="json")

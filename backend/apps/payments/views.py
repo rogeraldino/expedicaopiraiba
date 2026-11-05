@@ -24,7 +24,7 @@ from .serializers import (
     payment_payload,
 )
 from .services import create_balance_payment, process_paid_event, simulate_paid_event
-from apps.customers.services import customer_from_session_token
+from apps.customers.services import customer_from_session_token, customer_from_token
 from apps.reservations.customer_views import authenticated_customer, reservation_payload
 from apps.reservations.models import Reservation
 
@@ -42,6 +42,17 @@ class CreatePixView(APIView):
         return Response(serializer.create(serializer.validated_data), status=status.HTTP_201_CREATED)
 
 
+class PaymentPublicConfigView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def get(self, request):
+        return Response({
+            "mercadopago_public_key": settings.MERCADOPAGO_PUBLIC_KEY
+            if settings.PAYMENT_GATEWAY == "MERCADOPAGO" else "",
+        })
+
+
 class PaymentStatusView(APIView):
     authentication_classes = []
     permission_classes = []
@@ -52,6 +63,19 @@ class PaymentStatusView(APIView):
                 id=payment_id
             )
         except Payment.DoesNotExist:
+            return Response({"detail": "Pagamento não encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        customer = None
+        verification_token = request.headers.get("X-Verification-Token", "")
+        bearer = request.headers.get("Authorization", "")
+        try:
+            if verification_token:
+                customer = customer_from_token(verification_token)
+            elif bearer.startswith("Bearer "):
+                customer = customer_from_session_token(bearer[7:])
+        except DjangoValidationError:
+            pass
+        if not customer or customer.id != payment.reservation.customer_id:
             return Response({"detail": "Pagamento não encontrado."}, status=status.HTTP_404_NOT_FOUND)
 
         # Active auto-heal reconciliation during polling: check gateway directly if still pending

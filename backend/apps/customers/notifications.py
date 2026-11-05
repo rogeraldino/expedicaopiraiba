@@ -32,10 +32,14 @@ def send_otp_email(*, email: str, code: str, full_name: str = "") -> bool:
     from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "Expedição Piraíba <expedicaopiraiba@gmail.com>")
     html_message = render_otp_email_html(code=code, full_name=full_name)
 
-    # If SMTP password is not set (e.g. running mock unit tests), log and succeed
+    # Local tests can exercise the flow without a provider. Hosted environments
+    # must never claim delivery when SMTP is not configured.
     if not getattr(settings, "EMAIL_HOST_PASSWORD", ""):
-        logger.info("[MOCK/LOCAL] OTP code %s generated for email %s", code, email)
-        return True
+        if getattr(settings, "DEBUG", False) and getattr(settings, "EXPOSE_DEV_CODE", False):
+            logger.info("[MOCK/LOCAL] OTP code generated for email %s", email)
+            return True
+        logger.error("OTP email provider is not configured")
+        return False
 
     try:
         send_mail(

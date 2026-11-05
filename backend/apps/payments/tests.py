@@ -1,4 +1,6 @@
-from datetime import date
+from datetime import timedelta
+
+from django.utils import timezone
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -16,7 +18,7 @@ class PaymentApiTests(TestCase):
         self.client = APIClient()
         self.expedition = Expedition.objects.create(
             name="Rio Araguaia", destination="Luiz Alves/GO",
-            starts_at=date(2026, 10, 18), ends_at=date(2026, 10, 22),
+            starts_at=timezone.localdate() + timedelta(days=20), ends_at=timezone.localdate() + timedelta(days=24),
             capacity=8, price_per_person_cents=249000, deposit_cents=120000,
             status=Expedition.Status.PUBLISHED,
         )
@@ -156,7 +158,7 @@ class PaymentApiTests(TestCase):
         mock_cm.__exit__.return_value = False
 
         with patch("urllib.request.urlopen", return_value=mock_cm):
-            resp = self.client.get(f"/api/payments/{payment.id}/status/")
+            resp = self.client.get(f"/api/payments/{payment.id}/status/", HTTP_X_VERIFICATION_TOKEN=self.token)
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.data["status"], "PAID")
             self.assertEqual(resp.data["reservation_status"], "CONFIRMED")

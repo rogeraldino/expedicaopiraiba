@@ -70,6 +70,72 @@ class Stage2IdentidadePagamentosTests(TestCase):
         self.assertEqual(challenge.pending_full_name, "Hacker Impostor")
         self.assertEqual(challenge.pending_email, "hacker@attack.com")
 
+    @patch("apps.customers.services.send_otp_email", return_value=False)
+    def test_identify_reports_delivery_failure_without_leaving_challenge(self, _send):
+        response = self.client.post("/api/checkout/identify/", {
+            "cpf": self.customer.cpf,
+            "full_name": self.customer.full_name,
+            "email": self.customer.email,
+            "phone": self.customer.phone,
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(VerificationChallenge.objects.filter(customer=self.customer).exists())
+
+    @override_settings(PAYMENT_GATEWAY="MERCADOPAGO", MERCADOPAGO_PUBLIC_KEY="APP_USR-public-test")
+    def test_payment_config_exposes_only_public_key(self):
+        response = self.client.get("/api/payments/config/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"mercadopago_public_key": "APP_USR-public-test"})
+
+    def test_identify_limits_code_resends_and_invalidates_old_code(self):
+        payload = {
+            "cpf": self.customer.cpf,
+            "full_name": self.customer.full_name,
+            "email": self.customer.email,
+            "phone": self.customer.phone,
+        }
+        first = self.client.post("/api/checkout/identify/", payload, format="json")
+        self.assertEqual(first.status_code, 201)
+        self.assertEqual(self.client.post("/api/checkout/identify/", payload, format="json").status_code, 400)
+        VerificationChallenge.objects.filter(id=first.data["challenge_id"]).update(
+            created_at=timezone.now() - timedelta(seconds=31)
+        )
+        second = self.client.post("/api/checkout/identify/", payload, format="json")
+        self.assertEqual(second.status_code, 201)
+        old = VerificationChallenge.objects.get(id=first.data["challenge_id"])
+        self.assertLessEqual(old.expires_at, timezone.now())
+
+        for _ in range(3):
+            VerificationChallenge.objects.filter(id=second.data["challenge_id"]).update(
+                created_at=timezone.now() - timedelta(seconds=31)
+            )
+            second = self.client.post("/api/checkout/identify/", payload, format="json")
+            self.assertEqual(second.status_code, 201)
+        VerificationChallenge.objects.filter(id=second.data["challenge_id"]).update(
+            created_at=timezone.now() - timedelta(seconds=31)
+        )
+        self.assertEqual(self.client.post("/api/checkout/identify/", payload, format="json").status_code, 400)
+        self.assertEqual(VerificationChallenge.objects.filter(customer=self.customer).count(), 5)
+
+    def test_failed_resend_keeps_previous_valid_code(self):
+        payload = {
+            "cpf": self.customer.cpf,
+            "full_name": self.customer.full_name,
+            "email": self.customer.email,
+            "phone": self.customer.phone,
+        }
+        first = self.client.post("/api/checkout/identify/", payload, format="json")
+        self.assertEqual(first.status_code, 201)
+        VerificationChallenge.objects.filter(id=first.data["challenge_id"]).update(
+            created_at=timezone.now() - timedelta(seconds=31)
+        )
+        with patch("apps.customers.services.send_otp_email", return_value=False):
+            failed = self.client.post("/api/checkout/identify/", payload, format="json")
+        self.assertEqual(failed.status_code, 400)
+        old = VerificationChallenge.objects.get(id=first.data["challenge_id"])
+        self.assertGreater(old.expires_at, timezone.now())
+        self.assertEqual(VerificationChallenge.objects.filter(customer=self.customer).count(), 1)
+
     def test_wrong_otp_attempts_durably_incremented(self):
         """
         AUTH-02: Incorrect OTP attempts must be persisted without transaction rollback bug.
@@ -391,11 +457,47 @@ class Stage2IdentidadePagamentosTests(TestCase):
             status=Payment.Status.PENDING,
         )
 
-        resp = self.client.get(f"/api/payments/{payment.id}/status/")
+        self.assertEqual(self.client.get(f"/api/payments/{payment.id}/status/").status_code, 404)
+        resp = self.client.get(
+            f"/api/payments/{payment.id}/status/",
+            HTTP_AUTHORIZATION=f"Bearer {create_customer_session_token(self.customer)}",
+        )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["payment_id"], str(payment.id))
         self.assertEqual(resp.data["status"], "PENDING")
         self.assertEqual(resp.data["pix_copy_paste"], "000201FAKEPIX")
+
+    def test_paid_payment_status_never_exposes_customer_session_without_owner_token(self):
+        reservation = Reservation.objects.create(
+            customer=self.customer,
+            expedition=self.expedition,
+            participant_count=1,
+            status=Reservation.Status.CONFIRMED,
+            unit_price_cents=250000,
+            total_price_cents=250000,
+            deposit_cents=50000,
+        )
+        payment = Payment.objects.create(
+            reservation=reservation,
+            provider="FAKE",
+            method=Payment.Method.PIX,
+            external_id="fake_paid_status",
+            amount_cents=50000,
+            status=Payment.Status.PAID,
+        )
+        url = f"/api/payments/{payment.id}/status/"
+        self.assertEqual(self.client.get(url).status_code, 404)
+        other = Customer.objects.create(
+            cpf="52998224725", full_name="Outra Pessoa", email="other@example.com", phone="62999999999"
+        )
+        self.assertEqual(self.client.get(
+            url, HTTP_AUTHORIZATION=f"Bearer {create_customer_session_token(other)}"
+        ).status_code, 404)
+        owner = self.client.get(
+            url, HTTP_AUTHORIZATION=f"Bearer {create_customer_session_token(self.customer)}"
+        )
+        self.assertEqual(owner.status_code, 200)
+        self.assertIn("customer_session_token", owner.data)
 
     def test_portal_reaccess_flow(self):
         """

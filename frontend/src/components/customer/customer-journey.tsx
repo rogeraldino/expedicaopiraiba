@@ -1730,7 +1730,7 @@ function Payment({
     let active = true;
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API}/payments/${charge.id}/status/`);
+        const res = await fetch(`${API}/payments/${charge.id}/status/`, { headers: headers() });
         if (!res.ok) return;
         const data = await res.json();
         if (!active) return;
