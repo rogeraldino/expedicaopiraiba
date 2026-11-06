@@ -1,5 +1,11 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Expiração de expedições e cards — 06/11/2026
+
+- Rodrigo autorizou publicação direta das mudanças e pediu o encerramento automático após o último dia da viagem. A expedição de 28–31/10/2026 foi encerrada em produção pelo serviço de transição em 06/11; a API pública passou a retornar apenas a expedição fictícia de teste.
+- O código filtra lista e detalhe públicos por `ends_at >= timezone.localdate()` e o job de 60 segundos fecha viagens `PUBLISHED` ou `SOLD_OUT` vencidas com lock. Os cards mostram datas, vagas e preço em tamanho maior, com CTA de oferta e indicação separada para esgotadas e para a compra fictícia.
+- Evidência: 99 testes Django passaram no PostgreSQL 17 do sandbox, `makemigrations --check --dry-run` sem alterações, build Next.js, lint dos cards, `make check-docs` e `git diff --check` passaram. Spec: `specs/active/expedition-expiry-and-offer-cards-2026-11-06.md`.
+
 ## Correção de checkout e investigação — 05/11/2026 (em validação)
 
 - Produção registrou dois OTPs confirmados às 23:05 e 23:06 UTC, um desafio não confirmado às 23:09 UTC e erro Mercado Pago `Invalid card_token_id` às 23:06:55 UTC. O frontend enviava `tok_` seguido do número do cartão. Na tentativa com e-mail novo para CPF existente, o OTP foi direcionado ao contato cadastrado anteriormente, conforme regra de proteção de conta.

@@ -1,4 +1,5 @@
 from rest_framework import generics
+from django.utils import timezone
 
 from .models import Expedition, Lodge, TargetSpecies
 from .serializers import ExpeditionSerializer, LodgeSerializer, TargetSpeciesSerializer
@@ -9,7 +10,7 @@ class PublishedExpeditionList(generics.ListAPIView):
 
     def get_queryset(self):
         return (
-            Expedition.objects.filter(status=Expedition.Status.PUBLISHED)
+            Expedition.objects.filter(status=Expedition.Status.PUBLISHED, ends_at__gte=timezone.localdate())
             .select_related("lodge__river")
             .prefetch_related("reservations", "expedition_species__species", "lodge__amenities_structured")
         )
@@ -21,7 +22,7 @@ class PublishedExpeditionDetail(generics.RetrieveAPIView):
 
     def get_queryset(self):
         return (
-            Expedition.objects.filter(status=Expedition.Status.PUBLISHED)
+            Expedition.objects.filter(status=Expedition.Status.PUBLISHED, ends_at__gte=timezone.localdate())
             .select_related("lodge__river")
             .prefetch_related("reservations", "expedition_species__species", "lodge__amenities_structured")
         )

@@ -13,7 +13,7 @@ from apps.customers.models import Customer
 from apps.reservations.models import Reservation
 
 from .models import Amenity, BeveragePackageItem, Expedition, ExpeditionProduct, Lodge, Product, River, TargetSpecies
-from .services import transition_expedition
+from .services import close_expired_expeditions, transition_expedition
 
 
 class PublishedExpeditionApiTests(TestCase):
@@ -22,8 +22,8 @@ class PublishedExpeditionApiTests(TestCase):
         self.expedition = Expedition.objects.create(
             name="Rio Araguaia",
             destination="Luiz Alves/GO",
-            starts_at=date(2026, 10, 18),
-            ends_at=date(2026, 10, 22),
+            starts_at=timezone.localdate() + timedelta(days=20),
+            ends_at=timezone.localdate() + timedelta(days=24),
             capacity=5,
             price_per_person_cents=249000,
             deposit_cents=120000,
@@ -61,6 +61,30 @@ class PublishedExpeditionApiTests(TestCase):
         response = self.client.get("/api/expeditions/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 1)
+
+    def test_trip_disappears_after_last_day_and_is_closed_by_job(self):
+        today = timezone.localdate()
+        self.expedition.ends_at = today
+        self.expedition.save(update_fields=("ends_at",))
+        self.assertEqual(len(self.client.get("/api/expeditions/").json()), 1)
+        self.assertEqual(close_expired_expeditions(today=today), 0)
+        self.expedition.ends_at = today - timedelta(days=1)
+        self.expedition.save(update_fields=("ends_at",))
+        self.assertEqual(self.client.get("/api/expeditions/").json(), [])
+        self.assertEqual(self.client.get(f"/api/expeditions/{self.expedition.slug}/").status_code, 404)
+        self.assertEqual(close_expired_expeditions(today=today), 1)
+        self.assertEqual(close_expired_expeditions(today=today), 0)
+        self.expedition.refresh_from_db()
+        self.assertEqual(self.expedition.status, Expedition.Status.CLOSED)
+
+    def test_sold_out_trip_is_closed_after_last_day(self):
+        self.expedition.status = Expedition.Status.SOLD_OUT
+        self.expedition.ends_at = timezone.localdate() - timedelta(days=1)
+        self.expedition.save(update_fields=("status", "ends_at"))
+        self.assertEqual(close_expired_expeditions(), 1)
+        self.assertEqual(close_expired_expeditions(), 0)
+        self.expedition.refresh_from_db()
+        self.assertEqual(self.expedition.status, Expedition.Status.CLOSED)
 
     def test_availability_counts_confirmed_and_active_holds(self):
         self.reservation(status=Reservation.Status.CONFIRMED, participants=2)

@@ -76,14 +76,14 @@ body {
 .home-expedition-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 @media (min-width: 1280px) {
-  .home-expedition-grid { grid-template-columns: minmax(275px, 1.55fr) repeat(4, minmax(0, 1fr)); }
+  .home-expedition-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (max-width: 767px) {
   .home-shell { width: min(100% - 2rem, 1280px); }
   .home-hero .home-shell { padding-block: 4.5rem 2.5rem; }
   .home-hero-shade { background: linear-gradient(90deg, rgba(4,23,17,.88), rgba(4,23,17,.45)), linear-gradient(0deg, rgba(4,23,17,.85), transparent 62%); }
   .home-expedition-grid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 1rem; padding-bottom: 1rem; margin-right: -1rem; scrollbar-width: thin; }
-  .home-expedition-grid > article { flex: 0 0 min(78vw, 290px); scroll-snap-align: start; }
+  .home-expedition-grid > article { flex: 0 0 min(85vw, 340px); scroll-snap-align: start; }
 }
 @media (prefers-reduced-motion: reduce) {
   .home-button, .home-card, .home-card img { transition: none; }
