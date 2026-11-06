@@ -34,7 +34,7 @@ type Configuration = { meeting?: Meeting; meeting_instructions?: string; departu
 type ConsolidationDetail = { reservation_id?: string; customer_name?: string; participant_id?: string; participant_name: string };
 type ConsolidationRow = { offer_id: string; product: string; unit: string; people: number; standard_quantity_per_participant: number; total: number; package_size: number | null; full_packages: number | null; remainder: number | null; updated_at: string; details?: ConsolidationDetail[] };
 type Consolidation = { generated_at: string; items: ConsolidationRow[]; text?: string };
-type PassengerManifest = { id: string; name: string; cpf: string; phone: string; birth_date: string; emergency_contact_name: string; emergency_contact_phone: string; operational_notes: string; onboarding_status: string; dietary_restrictions: string[]; dietary_details: string; reservation_id: string; customer_name: string; customer_phone: string; reservation_status: string; gear_addons?: { id: string; gear_name: string; category: string; modality: string; quantity: number; delivered: boolean }[] };
+type PassengerManifest = { id: string; name: string; cpf: string; phone: string; birth_date: string; emergency_contact_name: string; emergency_contact_phone: string; operational_notes: string; onboarding_status: string; dietary_restrictions: string[]; dietary_details: string; reservation_id: string; customer_name: string; customer_cpf: string; customer_phone: string; reservation_status: string; gear_addons?: { id: string; gear_name: string; category: string; modality: string; quantity: number; delivered: boolean }[] };
 type ManifestData = { expedition: { id: string; name: string; slug: string; destination: string; departure_location: string; lodge_name: string; starts_at: string; ends_at: string; capacity: number; total_passengers: number }; passengers: PassengerManifest[]; gear_summary?: { gear_product_id: string; name: string; category: string; modality: string; total_quantity: number; delivered_quantity: number }[]; generated_at: string };
 
 const money = (value = 0) => (value / 100).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -4751,8 +4751,8 @@ function ManifestPanel({ token, unauthorized }: { token: string; unauthorized: (
                       <td className="px-4 py-3 font-bold text-ink-500">{idx + 1}</td>
                       <td>
                         <strong>{p.name}</strong>
-                        {p.customer_name && p.customer_name !== p.name && (
-                          <span className="block text-[11px] text-ink-500">Reserva de {p.customer_name}</span>
+                        {(p.customer_name || p.customer_cpf || p.customer_phone) && (
+                          <span className="block text-[11px] text-ink-500">Titular da reserva: {p.customer_name} · CPF {p.customer_cpf || "pendente"} · {p.customer_phone || "telefone pendente"}</span>
                         )}
                       </td>
                       <td>

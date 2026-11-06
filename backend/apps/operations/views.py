@@ -976,6 +976,7 @@ class ExpeditionManifestView(OperationsView):
                     "dietary_details": p.dietary_details,
                     "reservation_id": str(res.id),
                     "customer_name": res.customer.full_name,
+                    "customer_cpf": res.customer.cpf,
                     "customer_phone": res.customer.phone,
                     "reservation_status": res.status,
                     "gear_addons": p_gear,
@@ -1048,6 +1049,7 @@ class ExpeditionManifestView(OperationsView):
             "Detalhes da Restrição",
             "Status da Ficha",
             "Titular da Reserva",
+            "CPF do Titular",
             "Telefone do Titular",
             "Tralhas / Equipamentos",
         ))
@@ -1066,6 +1068,7 @@ class ExpeditionManifestView(OperationsView):
                 safe_csv(p["dietary_details"]),
                 safe_csv(p["onboarding_status"]),
                 safe_csv(p["customer_name"]),
+                safe_csv(p["customer_cpf"]),
                 safe_csv(p["customer_phone"]),
                 safe_csv(gear_str),
             ))

@@ -295,6 +295,9 @@ class OperationsApiTests(TestCase):
         self.assertEqual(json_res.status_code, 200)
         self.assertEqual(json_res.data["expedition"]["name"], "Rio Araguaia")
         self.assertTrue(len(json_res.data["passengers"]) >= 1)
+        passenger = json_res.data["passengers"][0]
+        self.assertEqual(passenger["customer_cpf"], "52998224725")
+        self.assertEqual(passenger["customer_phone"], "(62) 99999-8888")
 
         # 2. Manifest CSV
         csv_res = self.client.get(f"/api/operations/expeditions/{self.expedition.id}/manifest.csv", **auth)
@@ -303,6 +306,8 @@ class OperationsApiTests(TestCase):
         content = csv_res.content.decode("utf-8")
         self.assertTrue(content.startswith("\ufeff"))  # UTF-8 BOM
         self.assertIn("Nome Completo", content)
+        self.assertIn("CPF do Titular", content)
+        self.assertIn("52998224725", content)
         # Verifica se o valor com = foi neutralizado com aspas/apóstrofo
         self.assertIn("'=CMD('calc')", content)
 
