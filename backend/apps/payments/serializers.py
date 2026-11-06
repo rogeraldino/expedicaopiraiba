@@ -13,6 +13,8 @@ def payment_payload(payment):
         "status": payment.status,
         "method": payment.method,
         "amount_cents": payment.amount_cents,
+        "base_amount_cents": payment.base_amount_cents,
+        "fee_amount_cents": payment.fee_amount_cents,
         "pix_copy_paste": payment.pix_copy_paste,
         "pix_qr_code_base64": payment.pix_qr_code_base64,
         "ticket_url": payment.boleto_url,
@@ -40,6 +42,17 @@ class AddressSerializer(serializers.Serializer):
     federal_unit = serializers.CharField(max_length=2, required=False, allow_blank=True)
 
 
+class FeeQuoteSerializer(serializers.Serializer):
+    verification_token = serializers.CharField()
+    reservation_id = serializers.UUIDField(required=False)
+    card_bin = serializers.RegexField(r"^\d{6,8}$", required=False, allow_blank=True)
+    expedition_slug = serializers.SlugField()
+    participant_names = serializers.ListField(child=serializers.CharField(max_length=160), min_length=1, max_length=12)
+    payment_plan = serializers.ChoiceField(choices=("DEPOSIT", "FULL"))
+    method = serializers.ChoiceField(choices=Payment.Method.choices)
+    installments = serializers.IntegerField(min_value=1, max_value=10, default=1)
+
+
 class CreatePaymentSerializer(serializers.Serializer):
     verification_token = serializers.CharField()
     reservation_id = serializers.UUIDField()
@@ -47,7 +60,10 @@ class CreatePaymentSerializer(serializers.Serializer):
     card_token = serializers.CharField(required=False, allow_blank=True)
     installments = serializers.IntegerField(required=False, default=1, min_value=1, max_value=12)
     payment_method_id = serializers.CharField(required=False, default="visa", allow_blank=True)
+    issuer_id = serializers.CharField(required=False, allow_blank=True)
     address = AddressSerializer(required=False)
+    quote_id = serializers.UUIDField(required=False)
+    contract_accepted = serializers.BooleanField(required=False, default=False)
 
     def create(self, validated_data):
         try:
@@ -59,7 +75,10 @@ class CreatePaymentSerializer(serializers.Serializer):
                 card_token=validated_data.get("card_token"),
                 installments=validated_data.get("installments", 1),
                 payment_method_id=validated_data.get("payment_method_id", "visa"),
+                issuer_id=validated_data.get("issuer_id", ""),
                 address_data=validated_data.get("address"),
+                quote_id=validated_data.get("quote_id"),
+                contract_accepted=validated_data.get("contract_accepted", False),
             )
         except DjangoValidationError as error:
             messages = getattr(error, "messages", [str(error)])

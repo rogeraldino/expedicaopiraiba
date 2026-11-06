@@ -1,4 +1,5 @@
 from datetime import timedelta
+from django.conf import settings
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -16,7 +17,7 @@ ALLOWED_TRANSITIONS = {
     Reservation.Status.PARTIALLY_PAID: {Reservation.Status.CONFIRMED, Reservation.Status.PAID, Reservation.Status.EXPIRED, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
     Reservation.Status.CONFIRMED: {Reservation.Status.PAID, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
     Reservation.Status.PAID: {Reservation.Status.CONFIRMED, Reservation.Status.CANCELLED, Reservation.Status.REFUNDED},
-    Reservation.Status.EXPIRED: set(),
+    Reservation.Status.EXPIRED: {Reservation.Status.CANCELLED},
     Reservation.Status.CANCELLED: {Reservation.Status.REFUNDED},
     Reservation.Status.REFUNDED: set(),
 }
@@ -130,7 +131,7 @@ def expire_holds(*, now=None):
 
 
 @transaction.atomic
-def create_hold(*, customer, expedition_slug, participant_names, payment_plan, replace_reservation_id=None):
+def create_hold(*, customer, expedition_slug, participant_names, payment_plan, replace_reservation_id=None, quote_id=None, contract_accepted=False):
     try:
         expedition = Expedition.objects.select_for_update().get(slug=expedition_slug, status=Expedition.Status.PUBLISHED)
     except Expedition.DoesNotExist:
@@ -167,6 +168,24 @@ def create_hold(*, customer, expedition_slug, participant_names, payment_plan, r
         raise ValidationError("Não há vagas suficientes para esta reserva.")
     total = expedition.price_per_person_cents * len(names)
     amount_due = (expedition.deposit_cents * len(names)) if payment_plan == "DEPOSIT" else total
+    quote = None
+    if quote_id:
+        from apps.payments.models import FeeQuote, FeeRate
+        try:
+            quote = FeeQuote.objects.select_for_update().get(id=quote_id, customer=customer)
+        except FeeQuote.DoesNotExist:
+            raise ValidationError("Cotação não encontrada.")
+        if quote.expires_at <= timezone.now() or quote.used_at or quote.expedition_id != expedition.id or quote.participant_names != names or quote.payment_plan != payment_plan or quote.base_cents != amount_due:
+            raise ValidationError("Cotação expirada ou diferente da reserva. Confirme o valor novamente.")
+        rate = FeeRate.objects.get(method=quote.method, installments=quote.installments)
+        if quote.rate_snapshot["version"] in rate.revoked_versions:
+            raise ValidationError("Cotação revogada. Confirme o valor novamente.")
+    elif getattr(settings, "PAYMENT_GATEWAY", "FAKE") == "MERCADOPAGO":
+        raise ValidationError("Confirme o valor e as taxas antes de reservar.")
+    if getattr(settings, "PAYMENT_GATEWAY", "FAKE") == "MERCADOPAGO" and not contract_accepted:
+        raise ValidationError("Aceite o contrato antes de continuar.")
+    from .contracts import current_contract
+    contract_version, contract_hash, contract_content = current_contract() if contract_accepted else ("", "", "")
     balance_due_at = expedition.starts_at - timedelta(days=expedition.balance_due_days_before) if payment_plan == "DEPOSIT" and amount_due < total else None
     reservation = Reservation.objects.create(
         customer=customer,
@@ -179,7 +198,32 @@ def create_hold(*, customer, expedition_slug, participant_names, payment_plan, r
         deposit_cents=amount_due,
         payment_plan=payment_plan,
         balance_due_at=balance_due_at,
+        contract_version=contract_version,
+        contract_hash=contract_hash,
+        contract_content=contract_content,
+        contract_accepted_at=timezone.now() if contract_accepted else None,
+        accepted_offer_snapshot={
+            "expedition_id": str(expedition.id), "name": expedition.name, "destination": expedition.destination,
+            "starts_at": expedition.starts_at.isoformat(), "ends_at": expedition.ends_at.isoformat(),
+            "summary": expedition.summary, "inclusions": expedition.inclusions,
+            "exclusions": "Itens não indicados expressamente como incluídos na oferta não integram o preço da expedição.",
+            "departure_location": expedition.departure_location,
+            "meeting_instructions": expedition.meeting_instructions,
+            "unit_price_cents": expedition.price_per_person_cents,
+            "total_price_cents": total, "deposit_cents": amount_due,
+            "balance_due_at": balance_due_at.isoformat() if balance_due_at else None,
+            "cancellation_policy": "Contrato de prestação de serviços turísticos, versão 1.0, cláusulas 7 a 10.",
+            "participant_names": names, "payment_plan": payment_plan,
+        } if contract_accepted else {},
+        accepted_quote_snapshot={
+            "quote_id": str(quote.id), "base_cents": quote.base_cents, "fee_cents": quote.fee_cents,
+            "total_cents": quote.total_cents, "method": quote.method,
+            "installments": quote.installments, "rate": quote.rate_snapshot,
+        } if quote and contract_accepted else {},
     )
+    if quote:
+        quote.reservation = reservation
+        quote.save(update_fields=["reservation"])
     ReservationParticipant.objects.bulk_create([ReservationParticipant(reservation=reservation, full_name=name) for name in names])
     record_reservation_event(reservation=reservation, event_type="RESERVATION_HELD", actor_type=ReservationEvent.ActorType.CUSTOMER, actor_identifier=str(customer.id), new_status=Reservation.Status.HELD, payload={"participant_count": len(names), "payment_plan": payment_plan, "held_until": reservation.held_until.isoformat()})
     return reservation

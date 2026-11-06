@@ -222,6 +222,8 @@ class Product(models.Model):
 
     name = models.CharField(max_length=120, unique=True)
     category = models.CharField(max_length=60, default="BEBIDA")
+    description = models.TextField(blank=True)
+    image_url = models.CharField(max_length=500, blank=True)
     unit = models.CharField(max_length=20, choices=Unit.choices)
     package_size = models.PositiveIntegerField(null=True, blank=True)
     aliases = models.JSONField(default=list, blank=True)

@@ -6,13 +6,19 @@ import logging
 from typing import Optional, Protocol
 import urllib.error
 import urllib.request
+import urllib.parse
 import uuid
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+
+class GatewayUncertainError(ValidationError):
+    """The provider may have accepted a request whose response was lost."""
 
 
 def generate_idempotency_key(reservation_id, purpose="INITIAL", method="PIX", amount_cents=0, attempt=1):
@@ -37,14 +43,15 @@ class GatewayPayment:
 
 
 class PaymentGateway(Protocol):
-    def create_pix(self, *, reservation_id, amount_cents, customer=None, idempotency_key=None) -> GatewayPayment: ...
-    def create_card_payment(self, *, reservation_id, amount_cents, customer=None, card_token=None, installments=1, payment_method_id="visa", idempotency_key=None) -> GatewayPayment: ...
-    def create_boleto(self, *, reservation_id, amount_cents, customer=None, address_data=None, expires_at=None, idempotency_key=None) -> GatewayPayment: ...
-    def refund_payment(self, *, external_id, amount_cents=None) -> dict: ...
+    def create_pix(self, *, reservation_id, amount_cents, customer=None, idempotency_key=None, external_reference=None) -> GatewayPayment: ...
+    def create_card_payment(self, *, reservation_id, amount_cents, customer=None, card_token=None, installments=1, payment_method_id="visa", issuer_id="", idempotency_key=None, external_reference=None) -> GatewayPayment: ...
+    def create_boleto(self, *, reservation_id, amount_cents, customer=None, address_data=None, expires_at=None, idempotency_key=None, external_reference=None) -> GatewayPayment: ...
+    def refund_payment(self, *, external_id, amount_cents=None, idempotency_key=None) -> dict: ...
+    def get_refunds(self, *, external_id) -> list: ...
 
 
 class FakePaymentGateway:
-    def create_pix(self, *, reservation_id, amount_cents, customer=None, idempotency_key=None):
+    def create_pix(self, *, reservation_id, amount_cents, customer=None, idempotency_key=None, external_reference=None):
         external_id = f"fake_{uuid.uuid4().hex}"
         code = f"000201FAKEPIX|reservation={reservation_id}|amount={amount_cents}|id={external_id}"
         return GatewayPayment(
@@ -57,7 +64,7 @@ class FakePaymentGateway:
             provider="FAKE",
         )
 
-    def create_card_payment(self, *, reservation_id, amount_cents, customer=None, card_token=None, installments=1, payment_method_id="visa", idempotency_key=None):
+    def create_card_payment(self, *, reservation_id, amount_cents, customer=None, card_token=None, installments=1, payment_method_id="visa", issuer_id="", idempotency_key=None, external_reference=None):
         external_id = f"fake_card_{uuid.uuid4().hex}"
         is_rejected = card_token == "token_rejected"
         return GatewayPayment(
@@ -71,7 +78,7 @@ class FakePaymentGateway:
             provider="FAKE",
         )
 
-    def create_boleto(self, *, reservation_id, amount_cents, customer=None, address_data=None, expires_at=None, idempotency_key=None):
+    def create_boleto(self, *, reservation_id, amount_cents, customer=None, address_data=None, expires_at=None, idempotency_key=None, external_reference=None):
         external_id = f"fake_bol_{uuid.uuid4().hex}"
         exp = expires_at or (timezone.now() + timedelta(days=3))
         return GatewayPayment(
@@ -84,13 +91,66 @@ class FakePaymentGateway:
             provider="FAKE",
         )
 
-    def refund_payment(self, *, external_id, amount_cents=None):
-        return {"status": "refunded", "id": external_id, "amount_cents": amount_cents}
+    def refund_payment(self, *, external_id, amount_cents=None, idempotency_key=None):
+        return {"status": "approved", "id": f"fake-refund-{idempotency_key or external_id}", "amount": (amount_cents or 0) / 100}
+
+    def get_refunds(self, *, external_id):
+        return []
 
 
 class MercadoPagoPaymentGateway:
     def __init__(self, access_token: Optional[str] = None):
         self.access_token = access_token or getattr(settings, "MERCADOPAGO_ACCESS_TOKEN", "")
+
+    def verify_quote_installments(self, *, bin_digits, installments, amount_cents, payment_method_id="", issuer_id=""):
+        """Validate the selected card terms before displaying an accept-ready quote."""
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        def read(path):
+            request = urllib.request.Request(f"https://api.mercadopago.com{path}", headers=headers)
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return json.loads(response.read().decode("utf-8"))
+        try:
+            if not bin_digits or not str(bin_digits).isdigit():
+                raise ValidationError("Não foi possível validar as parcelas deste cartão.")
+            params = urllib.parse.urlencode({
+                "amount": f"{amount_cents / 100:.2f}", "bin": bin_digits,
+                **({"payment_method_id": payment_method_id} if payment_method_id else {}),
+                **({"issuer.id": issuer_id} if issuer_id else {}),
+            })
+            options = read(f"/v1/payment_methods/installments?{params}")
+            totals = []
+            for group in options if isinstance(options, list) else []:
+                if payment_method_id and group.get("payment_method_id") != payment_method_id:
+                    continue
+                for cost in group.get("payer_costs") or []:
+                    if cost.get("installments") == installments:
+                        totals.append(round(float(cost["total_amount"]) * 100))
+            if not totals or any(total != amount_cents for total in totals):
+                raise ValidationError("O Mercado Pago informou parcelas ou total diferentes. Escolha outra opção e confirme o valor novamente.")
+            return str(bin_digits)
+        except ValidationError:
+            raise
+        except Exception as error:
+            logger.warning("Could not verify MP card installment total: %s", error)
+            raise ValidationError("Não foi possível validar as parcelas deste cartão agora.")
+
+    def verify_card_installments(self, *, card_token, payment_method_id, issuer_id, installments, amount_cents):
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        try:
+            request = urllib.request.Request(
+                f"https://api.mercadopago.com/v1/card_tokens/{urllib.parse.quote(card_token, safe='')}",
+                headers=headers,
+            )
+            with urllib.request.urlopen(request, timeout=10) as response:
+                token = json.loads(response.read().decode("utf-8"))
+        except Exception as error:
+            logger.warning("Could not inspect MP card token: %s", error)
+            raise ValidationError("Não foi possível validar este cartão agora.")
+        bin_digits = token.get("first_eight_digits") or token.get("first_six_digits")
+        return self.verify_quote_installments(
+            bin_digits=bin_digits, payment_method_id=payment_method_id,
+            issuer_id=issuer_id, installments=installments, amount_cents=amount_cents,
+        )
 
     def _post(self, path: str, payload: dict, idempotency_key: Optional[str] = None) -> dict:
         headers = {
@@ -116,12 +176,17 @@ class MercadoPagoPaymentGateway:
                 msg = err_json.get("message") or err_json.get("error", "Erro ao processar pagamento no Mercado Pago.")
             except Exception:
                 msg = "Não foi possível processar a cobrança no gateway Mercado Pago."
+            if e.code >= 500:
+                raise GatewayUncertainError("Cobrança em verificação no Mercado Pago. Aguarde antes de tentar novamente.")
             raise ValidationError(msg)
         except urllib.error.URLError as e:
             logger.error("Mercado Pago connection error on %s: %s", path, e)
-            raise ValidationError("Erro de conexão com o Mercado Pago. Tente novamente.")
+            raise GatewayUncertainError("Cobrança em verificação no Mercado Pago. Aguarde antes de tentar novamente.")
+        except TimeoutError as e:
+            logger.error("Mercado Pago timeout on %s: %s", path, e)
+            raise GatewayUncertainError("Cobrança em verificação no Mercado Pago. Aguarde antes de tentar novamente.")
 
-    def create_pix(self, *, reservation_id, amount_cents, customer=None, idempotency_key=None) -> GatewayPayment:
+    def create_pix(self, *, reservation_id, amount_cents, customer=None, idempotency_key=None, external_reference=None) -> GatewayPayment:
         if not self.access_token:
             logger.warning("Mercado Pago access token not configured, falling back to FakePaymentGateway")
             return FakePaymentGateway().create_pix(reservation_id=reservation_id, amount_cents=amount_cents, customer=customer)
@@ -138,7 +203,7 @@ class MercadoPagoPaymentGateway:
             "transaction_amount": amount_decimal,
             "description": f"Expedição Piraíba - Reserva {reservation_id}",
             "payment_method_id": "pix",
-            "external_reference": str(reservation_id),
+            "external_reference": str(external_reference or reservation_id),
             "payer": {
                 "email": email,
                 "first_name": first_name,
@@ -182,7 +247,7 @@ class MercadoPagoPaymentGateway:
             ticket_url=ticket_url,
         )
 
-    def create_card_payment(self, *, reservation_id, amount_cents, customer=None, card_token=None, installments=1, payment_method_id="visa", idempotency_key=None) -> GatewayPayment:
+    def create_card_payment(self, *, reservation_id, amount_cents, customer=None, card_token=None, installments=1, payment_method_id="visa", issuer_id="", idempotency_key=None, external_reference=None) -> GatewayPayment:
         if not self.access_token:
             logger.warning("Mercado Pago access token not configured, falling back to FakePaymentGateway")
             return FakePaymentGateway().create_card_payment(reservation_id=reservation_id, amount_cents=amount_cents, customer=customer, card_token=card_token, installments=installments, payment_method_id=payment_method_id)
@@ -204,7 +269,8 @@ class MercadoPagoPaymentGateway:
             "description": f"Expedição Piraíba - Reserva {reservation_id}",
             "installments": int(installments or 1),
             "payment_method_id": payment_method_id,
-            "external_reference": str(reservation_id),
+            **({"issuer_id": issuer_id} if issuer_id else {}),
+            "external_reference": str(external_reference or reservation_id),
             "payer": {
                 "email": email,
             },
@@ -248,7 +314,7 @@ class MercadoPagoPaymentGateway:
             provider="MERCADOPAGO",
         )
 
-    def create_boleto(self, *, reservation_id, amount_cents, customer=None, address_data=None, expires_at=None, idempotency_key=None) -> GatewayPayment:
+    def create_boleto(self, *, reservation_id, amount_cents, customer=None, address_data=None, expires_at=None, idempotency_key=None, external_reference=None) -> GatewayPayment:
         if not self.access_token:
             logger.warning("Mercado Pago access token not configured, falling back to FakePaymentGateway")
             return FakePaymentGateway().create_boleto(reservation_id=reservation_id, amount_cents=amount_cents, customer=customer, address_data=address_data, expires_at=expires_at)
@@ -264,7 +330,7 @@ class MercadoPagoPaymentGateway:
         zip_clean = "".join(filter(str.isdigit, address.get("zip_code", "")))
 
         exp_date = expires_at or (timezone.now() + timedelta(days=3))
-        exp_iso = exp_date.strftime("%Y-%m-%dT%H:%M:%S.000-03:00")
+        exp_iso = exp_date.astimezone(ZoneInfo("America/Sao_Paulo")).isoformat(timespec="seconds")
 
         notification_url = getattr(settings, "MERCADOPAGO_NOTIFICATION_URL", "")
         payload = {
@@ -272,7 +338,7 @@ class MercadoPagoPaymentGateway:
             "description": f"Expedição Piraíba - Boleto Reserva {reservation_id}",
             "payment_method_id": "bolbradesco",
             "date_of_expiration": exp_iso,
-            "external_reference": str(reservation_id),
+            "external_reference": str(external_reference or reservation_id),
             "payer": {
                 "email": email,
                 "first_name": first_name,
@@ -315,15 +381,24 @@ class MercadoPagoPaymentGateway:
             provider="MERCADOPAGO",
         )
 
-    def refund_payment(self, *, external_id, amount_cents=None) -> dict:
+    def refund_payment(self, *, external_id, amount_cents=None, idempotency_key=None) -> dict:
         if not self.access_token:
-            return FakePaymentGateway().refund_payment(external_id=external_id, amount_cents=amount_cents)
+            return FakePaymentGateway().refund_payment(external_id=external_id, amount_cents=amount_cents, idempotency_key=idempotency_key)
 
         path = f"/v1/payments/{external_id}/refunds"
         payload = {}
         if amount_cents:
             payload["amount"] = round(amount_cents / 100.0, 2)
-        return self._post(path, payload)
+        return self._post(path, payload, idempotency_key=idempotency_key)
+
+    def get_refunds(self, *, external_id) -> list:
+        request = urllib.request.Request(
+            f"https://api.mercadopago.com/v1/payments/{external_id}/refunds",
+            headers={"Authorization": f"Bearer {self.access_token}"}, method="GET",
+        )
+        with urllib.request.urlopen(request, timeout=15) as response:
+            result = json.loads(response.read().decode("utf-8"))
+        return result if isinstance(result, list) else []
 
 
 def get_payment_gateway() -> PaymentGateway:

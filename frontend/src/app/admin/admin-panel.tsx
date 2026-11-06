@@ -4,10 +4,12 @@ import Image from "next/image";
 import { MediaPicker } from "@/components/admin/media-picker";
 import Link from "next/link";
 import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, BarChart3, Beer, CalendarDays, Check, ChevronLeft, ChevronRight, Compass, Copy, Download, ExternalLink, FileText, Fish, House, ImageIcon, Layers, ListChecks, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, Sparkles, TicketCheck, Trash2, Users, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Beer, CalendarDays, Check, ChevronLeft, ChevronRight, Compass, Copy, CreditCard, Download, ExternalLink, FileText, Fish, House, ImageIcon, Layers, ListChecks, LogOut, Menu, Package, Pencil, Plus, Printer, RefreshCw, Search, Share2, ShieldCheck, ShoppingCart, Sparkles, TicketCheck, Trash2, Users, X } from "lucide-react";
 
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
-type Section = "overview" | "reservations" | "expeditions" | "lodges" | "rivers" | "species" | "packages" | "gear" | "customers" | "manifest" | "configuration" | "shopping";
+type Section = "overview" | "reservations" | "expeditions" | "lodges" | "rivers" | "species" | "packages" | "gear" | "customers" | "manifest" | "configuration" | "shopping" | "fees";
+type FeeRate = { id: number; method: string; installments: number; percent: string; fixed_cents: number; estimated: boolean; active: boolean; version: number; source: string; source_checked_at?: string | null; valid_until?: string | null };
+type RefundRecord = { id: string; payment_id: string; amount_cents: number; status: string; basis: string; reason: string; provider_refund_id: string; proof_reference: string; created_at: string };
 type Amenity = { id: string; name: string; category: string; category_display: string; icon_key?: string; description?: string; display_order: number; active: boolean };
 type RiverSpecies = { id: string; species: string; species_name: string; species_slug: string; scientific_name?: string; category?: string; is_native: boolean; is_trophy: boolean; best_season?: string };
 type River = { id: string; name: string; slug: string; basin: string; basin_display: string; states: string[]; description?: string; regulations?: string; active: boolean; species_count?: number; lodges_count?: number; created_at?: string; updated_at?: string };
@@ -24,9 +26,9 @@ type Expedition = { id: string; name: string; slug: string; destination: string;
 type Participant = { id: string; name: string; cpf?: string; phone: string; birth_date?: string | null; emergency_contact_name?: string; emergency_contact_phone?: string; operational_notes?: string; onboarding_status: string; preferences_confirmed?: boolean; dietary_confirmed?: boolean; checklist_completed?: boolean; selected_offers?: { id: string; name: string }[]; dietary_restrictions?: string[]; dietary_details?: string };
 type OperationalAlert = { id?: string; type?: string; level?: string; title?: string; message: string; reservation_id?: string; expedition_id?: string };
 type ExpeditionIndicator = { expedition_id?: string; id?: string; expedition_name?: string; name?: string; capacity: number; held_slots?: number; confirmed_slots?: number; occupied_slots?: number; available_slots: number; sold_cents?: number; received_cents?: number; outstanding_cents?: number; pending_preferences?: number; pending_checklists?: number; restrictions?: number };
-type Reservation = { id: string; status: string; participant_count: number; total_price_cents: number; payment_plan: string; paid_amount_cents: number; remaining_balance_cents: number; balance_due_at: string | null; held_until: string | null; created_at: string; alerts?: (string | OperationalAlert)[]; customer: { name: string; cpf: string; email: string; phone: string }; expedition: { id: string; name: string; slug?: string; starts_at: string }; participants: Participant[]; gear_addons?: ReservationGearAddon[]; payments: { id: string; amount_cents: number; status: string; paid_at: string | null }[]; events: { id: string; event_type: string; reason: string; created_at: string }[] };
+type Reservation = { id: string; status: string; participant_count: number; total_price_cents: number; payment_plan: string; paid_amount_cents: number; remaining_balance_cents: number; balance_due_at: string | null; held_until: string | null; created_at: string; alerts?: (string | OperationalAlert)[]; customer: { name: string; cpf: string; email: string; phone: string }; expedition: { id: string; name: string; slug?: string; starts_at: string }; participants: Participant[]; gear_addons?: ReservationGearAddon[]; payments: { id: string; method: string; provider: string; amount_cents: number; base_amount_cents: number; fee_amount_cents: number; provider_fee_cents?: number | null; provider_net_received_cents?: number | null; status: string; paid_at: string | null; requires_refund?: boolean }[]; events: { id: string; event_type: string; reason: string; created_at: string }[] };
 type Overview = { revenue_cents: number; sold_cents: number; outstanding_cents: number; incomplete_participants: number; reservations: { total: number; confirmed: number; awaiting: number }; alerts?: OperationalAlert[]; expedition_indicators?: ExpeditionIndicator[]; expeditions?: ExpeditionIndicator[]; upcoming_expeditions: Expedition[]; recent_reservations: Reservation[] };
-type Product = { id: string; name: string; category?: string; unit: string; package_size?: number | null; aliases?: string[]; active?: boolean };
+type Product = { id: string; name: string; category?: string; description?: string; image_url?: string; unit: string; package_size?: number | null; aliases?: string[]; active?: boolean };
 type Offer = { id?: string; product_id: string; name?: string; standard_quantity_per_participant: number; display_order: number; note: string; active: boolean };
 type ChecklistItem = { id?: string; title: string; description: string; required: boolean; active: boolean; display_order: number };
 type Meeting = { location: string; date: string; time: string; instructions: string };
@@ -102,17 +104,58 @@ function State({ loading, error, retry }: { loading: boolean; error: string; ret
 function Empty({ children }: { children: ReactNode }) { return <p className="p-8 text-center text-sm text-ink-500">{children}</p>; }
 function Header({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) { return <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-2xl font-black">{title}</h2><p className="mt-1 text-sm text-ink-500">{subtitle}</p></div>{action}</div>; }
 
+function FeeRatesPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
+  const inputClass = "mt-2 h-11 w-full rounded-lg border px-3 text-sm";
+  const list = useData<FeeRate[]>("payment-fees/", token, unauthorized);
+  const intents = useData<{ id: string; reservation_id: string; method: string; amount_cents: number; status: string; age_seconds: number }[]>("payment-intents/", token, unauthorized);
+  const [editing, setEditing] = useState<FeeRate | null>(null);
+  const [percent, setPercent] = useState("");
+  const [fixed, setFixed] = useState("");
+  const [active, setActive] = useState(true);
+  const [estimated, setEstimated] = useState(true);
+  const [source, setSource] = useState("");
+  const [sourceChecked, setSourceChecked] = useState("");
+  const [validUntil, setValidUntil] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  function begin(rate: FeeRate) {
+    setEditing(rate); setPercent(rate.percent); setFixed((rate.fixed_cents / 100).toFixed(2)); setActive(rate.active); setEstimated(rate.estimated); setSource(rate.source); setSourceChecked(rate.source_checked_at?.slice(0, 10) ?? ""); setValidUntil(rate.valid_until?.slice(0, 10) ?? ""); setError("");
+  }
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (!editing) return;
+    setSaving(true); setError("");
+    try {
+      await request(`payment-fees/${editing.id}/`, token, { method: "PATCH", body: JSON.stringify({
+        percent: Number(percent.replace(",", ".")), fixed_cents: Math.round(Number(fixed.replace(",", ".")) * 100), active, estimated, source,
+        source_checked_at: sourceChecked ? `${sourceChecked}T12:00:00-03:00` : null,
+        valid_until: validUntil ? `${validUntil}T23:59:59-03:00` : null,
+      }) });
+      setEditing(null); await list.load();
+    } catch (failure) { setError(errorMessage(failure)); }
+    finally { setSaving(false); }
+  }
+  return <div>
+    <Header title="Taxas de pagamento" subtitle="Estimativas iniciais do Mercado Pago. Confira o custo real de cada meio e parcela na sua conta." />
+    <p className="mt-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">As taxas iniciais são estimativas públicas. O total mostrado ao cliente é o valor efetivamente cobrado; o custo real do Mercado Pago pode ser diferente.</p>
+    <div className="mt-5 rounded-xl border bg-white p-4"><div className="flex items-center justify-between gap-3"><h3 className="font-bold">Cobranças em verificação</h3><button type="button" className="rounded border px-3 py-2 text-sm font-bold" onClick={() => void request("payment-intents/", token, { method: "POST" }).then(() => intents.load())}>Conciliar tentativas</button></div><p className="mt-1 text-xs text-ink-600">A conciliação consulta o Mercado Pago e pode reemitir Pix ou boleto pendente com a mesma chave, somente durante o prazo da reserva. Cartão sem resultado permanece bloqueado para revisão operacional.</p><State loading={intents.loading} error={intents.error} retry={() => void intents.load()} />{intents.data?.length === 0 && <p className="mt-3 text-sm text-ink-500">Nenhuma cobrança pendente de conciliação.</p>}{intents.data?.map(intent => <p key={intent.id} className="mt-3 rounded bg-amber-50 p-3 text-xs"><strong>{intent.method} · {money(intent.amount_cents)} · {intent.status}</strong><br />Reserva {intent.reservation_id} · referência MP {intent.id} · há {Math.floor(intent.age_seconds / 60)} min</p>)}</div>
+    <State loading={list.loading} error={list.error} retry={() => void list.load()} />
+    {list.data && <div className="mt-5 overflow-x-auto rounded-xl bg-white shadow-sm"><table className="w-full text-left text-sm"><thead className="bg-brand-50 text-brand-900"><tr><th className="p-3">Meio</th><th className="p-3">Parcelas</th><th className="p-3">Percentual</th><th className="p-3">Fixo</th><th className="p-3">Origem</th><th className="p-3">Estado</th><th className="p-3" /></tr></thead><tbody>{list.data.map(rate => <tr key={rate.id} className="border-t"><td className="p-3 font-bold">{rate.method === "CREDIT_CARD" ? "Cartão" : rate.method === "PIX" ? "Pix" : "Boleto"}</td><td className="p-3">{rate.installments}x</td><td className="p-3">{Number(rate.percent).toFixed(2)}%</td><td className="p-3">{money(rate.fixed_cents)}</td><td className="p-3">{rate.estimated ? "Estimativa" : "Conferida"}</td><td className="p-3">{rate.active ? "Ativa" : "Inativa"}</td><td className="p-3"><button type="button" onClick={() => begin(rate)} className="rounded-lg border px-3 py-2 font-bold">Editar</button></td></tr>)}</tbody></table></div>}
+    {editing && <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"><form onSubmit={event => void save(event)} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"><h3 className="text-xl font-black">{editing.method} · {editing.installments}x</h3><p className="mt-2 text-xs text-ink-500">Versão atual: {editing.version}. A alteração vale para novas cotações.</p><div className="mt-5 grid grid-cols-2 gap-3"><label className="text-sm font-bold">Percentual (%)<input required inputMode="decimal" value={percent} onChange={event => setPercent(event.target.value)} className={inputClass} /></label><label className="text-sm font-bold">Valor fixo (R$)<input required inputMode="decimal" value={fixed} onChange={event => setFixed(event.target.value)} className={inputClass} /></label></div><label className="mt-4 block text-sm font-bold">Fonte da tarifa<input value={source} onChange={event => setSource(event.target.value)} className={inputClass} placeholder="https://..." /></label><div className="mt-4 grid grid-cols-2 gap-3"><label className="text-sm font-bold">Conferida em<input type="date" value={sourceChecked} onChange={event => setSourceChecked(event.target.value)} className={inputClass} /></label><label className="text-sm font-bold">Válida até<input type="date" value={validUntil} onChange={event => setValidUntil(event.target.value)} className={inputClass} /></label></div><label className="mt-5 flex gap-2 text-sm"><input type="checkbox" checked={estimated} onChange={event => setEstimated(event.target.checked)} />Ainda é estimativa pública</label><label className="mt-3 flex gap-2 text-sm"><input type="checkbox" checked={active} onChange={event => setActive(event.target.checked)} />Disponível no checkout</label>{error && <p className="mt-3 text-sm text-red-700">{error}</p>}<div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setEditing(null)} className="rounded-lg border px-4 py-2">Cancelar</button><button disabled={saving} className="rounded-lg bg-brand-700 px-4 py-2 font-bold text-white disabled:opacity-50">{saving ? "Salvando..." : "Salvar taxa"}</button></div></form></div>}
+  </div>;
+}
+
 export function AdminPanel() {
   const [token, setToken] = useState<string | null>(null); const [ready, setReady] = useState(false); const [section, setSection] = useState<Section>("overview"); const [menu, setMenu] = useState(false);
   useEffect(() => { const task = window.setTimeout(() => { setToken(sessionStorage.getItem("operations-token")); setReady(true); }, 0); return () => window.clearTimeout(task); }, []);
   const logout = useCallback(() => { sessionStorage.removeItem("operations-token"); setToken(null); }, []);
   if (!ready) return <div className="min-h-screen bg-brand-900" />;
   if (!token) return <Login onLogin={value => { sessionStorage.setItem("operations-token", value); setToken(value); }} />;
-  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["species", "Catálogo de Peixes", Fish], ["packages", "Pacotes & Cardápios", Layers], ["gear", "Tralhas & Loja", Package], ["customers", "CRM Pescadores", Users], ["manifest", "Manifesto", FileText], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
+  const nav = [["overview", "Visão geral", BarChart3], ["reservations", "Reservas", TicketCheck], ["expeditions", "Expedições", CalendarDays], ["lodges", "Pousadas", House], ["species", "Catálogo de Peixes", Fish], ["packages", "Pacotes & Cardápios", Layers], ["gear", "Tralhas & Loja", Package], ["customers", "CRM Pescadores", Users], ["manifest", "Manifesto", FileText], ["fees", "Taxas de pagamento", CreditCard], ["configuration", "Configuração", ListChecks], ["shopping", "Lista de compras", ShoppingCart]] as const;
   return <div className="min-h-screen bg-[#f4f6f2] lg:grid lg:grid-cols-[260px_1fr]">
     <aside className={`fixed inset-y-0 left-0 z-40 w-[260px] bg-brand-900 text-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${menu ? "translate-x-0" : "-translate-x-full"}`}><div className="flex h-full flex-col p-5"><div className="flex items-center gap-3 border-b border-white/10 pb-5"><Image src="/brand/logo-expedicao-piraiba.png" alt="" width={48} height={48} className="size-12 rounded-full" /><div><strong className="block text-sm">EXPEDIÇÃO PIRAÍBA</strong><span className="text-[10px] tracking-[.2em] text-white/60">PAINEL OPERACIONAL</span></div><button aria-label="Fechar menu" onClick={() => setMenu(false)} className="ml-auto lg:hidden"><X /></button></div><nav className="mt-6 space-y-2">{nav.map(([value,label,Icon]) => <button key={value} onClick={() => { setSection(value); setMenu(false); }} className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-bold ${section === value ? "bg-white text-brand-900" : "text-white/75 hover:bg-white/10"}`}><Icon className="size-5" />{label}</button>)}</nav><Link href="/" className="mt-auto flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><Fish className="size-5" />Ver site</Link><button onClick={logout} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold text-white/70"><LogOut className="size-5" />Sair</button></div></aside>
     {menu && <button aria-label="Fechar menu" className="fixed inset-0 z-30 bg-black/40 lg:hidden" onClick={() => setMenu(false)} />}
-    <main className="min-w-0"><header className="flex min-h-16 items-center border-b bg-white px-5 lg:px-8"><button aria-label="Abrir menu" onClick={() => setMenu(true)} className="mr-4 lg:hidden"><Menu /></button><div><p className="text-xs font-bold uppercase tracking-widest text-brand-600">Área administrativa</p><h1 className="text-xl font-black">{nav.find(item => item[0] === section)?.[1]}</h1></div><div className="ml-auto flex items-center gap-2 text-sm text-ink-500"><ShieldCheck className="size-5 text-brand-600" /><span className="hidden sm:inline">Sessão protegida</span></div></header><div className="p-5 lg:p-8">{section === "overview" && <OverviewPanel token={token} unauthorized={logout} go={setSection} />}{section === "reservations" && <ReservationsPanel token={token} unauthorized={logout} />}{section === "expeditions" && <ExpeditionsPanel token={token} unauthorized={logout} />}{section === "lodges" && <LodgesPanel token={token} unauthorized={logout} />}{section === "rivers" && <RiversPanel token={token} unauthorized={logout} />}{section === "species" && <SpeciesPanel token={token} unauthorized={logout} />}{section === "packages" && <PackagesPanel token={token} unauthorized={logout} />}{section === "gear" && <GearPanel token={token} unauthorized={logout} />}{section === "customers" && <CustomersPanel token={token} unauthorized={logout} />}{section === "manifest" && <ManifestPanel token={token} unauthorized={logout} />}{section === "configuration" && <ConfigurationPanel token={token} unauthorized={logout} />}{section === "shopping" && <ShoppingPanel token={token} unauthorized={logout} />}</div></main>
+    <main className="min-w-0"><header className="flex min-h-16 items-center border-b bg-white px-5 lg:px-8"><button aria-label="Abrir menu" onClick={() => setMenu(true)} className="mr-4 lg:hidden"><Menu /></button><div><p className="text-xs font-bold uppercase tracking-widest text-brand-600">Área administrativa</p><h1 className="text-xl font-black">{nav.find(item => item[0] === section)?.[1]}</h1></div><div className="ml-auto flex items-center gap-2 text-sm text-ink-500"><ShieldCheck className="size-5 text-brand-600" /><span className="hidden sm:inline">Sessão protegida</span></div></header><div className="p-5 lg:p-8">{section === "overview" && <OverviewPanel token={token} unauthorized={logout} go={setSection} />}{section === "reservations" && <ReservationsPanel token={token} unauthorized={logout} />}{section === "expeditions" && <ExpeditionsPanel token={token} unauthorized={logout} />}{section === "lodges" && <LodgesPanel token={token} unauthorized={logout} />}{section === "rivers" && <RiversPanel token={token} unauthorized={logout} />}{section === "species" && <SpeciesPanel token={token} unauthorized={logout} />}{section === "packages" && <PackagesPanel token={token} unauthorized={logout} />}{section === "gear" && <GearPanel token={token} unauthorized={logout} />}{section === "customers" && <CustomersPanel token={token} unauthorized={logout} />}{section === "manifest" && <ManifestPanel token={token} unauthorized={logout} />}{section === "fees" && <FeeRatesPanel token={token} unauthorized={logout} />}{section === "configuration" && <ConfigurationPanel token={token} unauthorized={logout} />}{section === "shopping" && <ShoppingPanel token={token} unauthorized={logout} />}</div></main>
   </div>;
 }
 
@@ -434,6 +477,8 @@ function ReservationDrawer({
             <p>Vencimento: {shortDate(item.balance_due_at)}</p>
           </Box>
         </div>
+        <Box title="Cobranças e taxas"><div className="space-y-2 text-sm">{item.payments.length ? item.payments.map(payment => <div key={payment.id} className="rounded-lg border p-3"><strong>{payment.method} · {payment.status}</strong><p>Valor {money(payment.base_amount_cents)} + taxas {money(payment.fee_amount_cents)} = {money(payment.amount_cents)}</p>{payment.provider_fee_cents != null && <p className="text-xs text-ink-600">Tarifa efetiva do provedor: {money(payment.provider_fee_cents)} · diferença da estimativa: {money(payment.provider_fee_cents - payment.fee_amount_cents)}</p>}{payment.requires_refund && <p className="text-xs font-bold text-amber-700">Cobrança excedente: devolver pelo pagamento original.</p>}</div>) : <p className="text-ink-500">Nenhuma cobrança.</p>}</div></Box>
+        {(item.status === "CANCELLED" || item.status === "REFUNDED" || item.payments.some(payment => payment.requires_refund)) && <ReservationRefunds item={item} token={token} changed={changed} />}
         <Box title="Participantes e preparação">
           {item.participants.map((person) => (
             <div key={person.id} className="mt-3 rounded-lg border bg-[#fafbfc] p-3 shadow-xs">
@@ -622,6 +667,42 @@ function ReservationDrawer({
       )}
     </div>
   );
+}
+
+function ReservationRefunds({ item, token, changed }: { item: Reservation; token: string; changed: () => Promise<void> }) {
+  const records = useData<RefundRecord[]>(`reservations/${item.id}/refunds/`, token, () => {});
+  const refundable = item.payments.filter(payment => payment.status === "PAID" && (item.status === "CANCELLED" || payment.requires_refund));
+  const [paymentId, setPaymentId] = useState(refundable[0]?.id ?? "");
+  const selected = refundable.find(payment => payment.id === paymentId);
+  const [amount, setAmount] = useState(selected ? (selected.amount_cents / 100).toFixed(2) : "");
+  const [basis, setBasis] = useState(refundable[0]?.requires_refund ? "OVERPAYMENT" : "DESISTENCIA");
+  const [reason, setReason] = useState("");
+  const [calculation, setCalculation] = useState("");
+  const [proof, setProof] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function createRefund(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError("");
+    try {
+      await request(`reservations/${item.id}/refunds/`, token, { method: "POST", body: JSON.stringify({
+        payment_id: paymentId, amount_cents: Math.round(Number(amount.replace(",", ".")) * 100), basis, reason, calculation,
+      }) });
+      await records.load(); await changed();
+    } catch (failure) { setError(errorMessage(failure)); } finally { setBusy(false); }
+  }
+  async function act(id: string, action: string) {
+    setBusy(true); setError("");
+    try {
+      await request(`refunds/${id}/action/`, token, { method: "POST", body: JSON.stringify({ action, proof_reference: proof }) });
+      await records.load(); await changed();
+    } catch (failure) { setError(errorMessage(failure)); } finally { setBusy(false); }
+  }
+  return <Box title="Reembolsos">
+    <p className="text-xs text-ink-600">Solicite a devolução pelo pagamento original; cobrança excedente pode ser devolvida sem cancelar a reserva.</p>
+    <State loading={records.loading} error={records.error} retry={() => void records.load()} />
+    {records.data?.map(record => <div key={record.id} className="mt-3 rounded-lg border bg-white p-3 text-xs"><div className="flex justify-between gap-2"><strong>{money(record.amount_cents)} · {record.basis}</strong><span>{record.status}</span></div><p className="mt-1">{record.reason}</p>{record.provider_refund_id && <p className="mt-1 text-ink-500">ID Mercado Pago: {record.provider_refund_id}</p>}{["UNKNOWN", "SUBMITTED"].includes(record.status) && <button disabled={busy} onClick={() => void act(record.id, "reconcile")} className="mt-2 rounded border px-3 py-1 font-bold">Consultar provedor</button>}{record.status === "UNKNOWN" && <button disabled={busy} onClick={() => void act(record.id, "retry_same_key")} className="ml-2 mt-2 rounded border px-3 py-1 font-bold">Reenviar mesma solicitação</button>}{record.status === "MANUAL_PENDING" && <div className="mt-2"><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Referência do comprovante de transferência" className="w-full rounded border px-2 py-1" /><button disabled={busy || !proof.trim()} onClick={() => void act(record.id, "confirm_manual")} className="mt-2 rounded border px-3 py-1 font-bold">Confirmar transferência</button></div>}</div>)}
+    {refundable.length > 0 && <form onSubmit={event => void createRefund(event)} className="mt-4 space-y-3 rounded-lg border bg-white p-4"><h4 className="font-bold">Solicitar reembolso</h4><label className="block text-xs font-bold">Pagamento<select value={paymentId} onChange={event => { setPaymentId(event.target.value); const next = refundable.find(payment => payment.id === event.target.value); setAmount(next ? (next.amount_cents / 100).toFixed(2) : ""); setBasis(next?.requires_refund ? "OVERPAYMENT" : "DESISTENCIA"); }} className="mt-1 w-full rounded border p-2">{refundable.map(payment => <option key={payment.id} value={payment.id}>{payment.method} · {money(payment.amount_cents)} (taxas {money(payment.fee_amount_cents)}){payment.requires_refund ? " · excedente" : ""}</option>)}</select></label><label className="block text-xs font-bold">Valor bruto a devolver (R$)<input required type="number" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-xs font-bold">Fundamento<select value={basis} onChange={event => setBasis(event.target.value)} className="mt-1 w-full rounded border p-2">{selected?.requires_refund ? <option value="OVERPAYMENT">Cobrança excedente</option> : <><option value="DESISTENCIA">Desistência após prazo legal</option><option value="ARREPENDIMENTO">Arrependimento legal</option><option value="ORGANIZADOR">Cancelamento pela organização</option></>}</select></label><label className="block text-xs font-bold">Motivo<textarea required value={reason} onChange={event => setReason(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>{basis === "DESISTENCIA" && <label className="block text-xs font-bold">Memória de cálculo da retenção<textarea value={calculation} onChange={event => setCalculation(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>}{error && <p className="text-xs text-red-700">{error}</p>}<button disabled={busy} className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? "Enviando..." : "Solicitar devolução"}</button></form>}
+  </Box>;
 }
 
 function ManualReservationModal({
@@ -3680,16 +3761,16 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
             </div>
           )}
 
-          {/* Catálogo Geral de Bebidas Cadastradas */}
+          {/* Catálogo de produtos cadastrados */}
           <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-xs">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
               <div>
                 <h3 className="text-base font-black text-ink-900 flex items-center gap-2">
                   <Beer className="size-5 text-amber-600" />
-                  Catálogo de Bebidas Cadastradas ({productsList.data?.length ?? 0})
+                  Catálogo de Produtos ({productsList.data?.length ?? 0})
                 </h3>
                 <p className="text-xs text-ink-500">
-                  Todas as bebidas cadastradas no sistema disponíveis para os cardápios das expedições.
+                  Cadastre foto, categoria e descrição. As bebidas podem ser usadas nos cardápios das expedições.
                 </p>
               </div>
               <button
@@ -3698,7 +3779,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
                 className="rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-bold text-white shadow-xs hover:bg-brand-700"
               >
                 <Plus className="mr-1.5 inline size-3.5" />
-                Cadastrar nova bebida
+                Cadastrar produto
               </button>
             </div>
 
@@ -3711,8 +3792,11 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
                       key={prod.id}
                       className="flex items-center justify-between rounded-xl border border-gray-100 bg-[#f7f8f4] p-3 text-xs"
                     >
+                      {prod.image_url && <img src={prod.image_url} alt="" className="mr-2 h-12 w-12 shrink-0 rounded-lg object-cover" />}
                       <div className="min-w-0 pr-2">
                         <strong className="block truncate text-ink-900 font-bold">{prod.name}</strong>
+                        <span className="text-[10px] font-bold text-brand-700">{prod.category || "BEBIDA"}</span>
+                        {prod.description && <p className="mt-1 line-clamp-2 text-[11px] text-ink-600">{prod.description}</p>}
                         <div className="mt-1 flex items-center gap-1.5 text-[10px] text-ink-500">
                           <span className="rounded bg-white px-1.5 py-0.5 border font-semibold">{prod.unit}</span>
                           {prod.package_size && <span>Pack {prod.package_size}</span>}
@@ -3722,7 +3806,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
                         <button
                           type="button"
                           onClick={() => setEditingProduct(prod)}
-                          title="Editar bebida"
+                          title="Editar produto"
                           className="rounded border bg-white p-1.5 hover:bg-gray-100"
                         >
                           <Pencil className="size-3.5 text-ink-600" />
@@ -3730,7 +3814,7 @@ function PackagesPanel({ token, unauthorized }: { token: string; unauthorized: (
                       </div>
                     </div>
                   ))}
-                  {!productsList.data.length && <Empty>Nenhuma bebida cadastrada.</Empty>}
+                  {!productsList.data.length && <Empty>Nenhum produto cadastrado.</Empty>}
                 </div>
               )}
             </div>
@@ -4501,6 +4585,10 @@ function ProductModal({
   const [name, setName] = useState(item?.name ?? "");
   const [unit, setUnit] = useState(item?.unit ?? "lata");
   const [packageSize, setPackageSize] = useState<number | "">(item?.package_size ?? 12);
+  const [category, setCategory] = useState(item?.category ?? "BEBIDA");
+  const [description, setDescription] = useState(item?.description ?? "");
+  const [imageUrl, setImageUrl] = useState(item?.image_url ?? "");
+  const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const [active, setActive] = useState(item?.active ?? true);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -4519,8 +4607,9 @@ function ProductModal({
           method: "PATCH",
           body: JSON.stringify({
             name: name.trim(),
-            unit,
-            package_size: packageSize === "" ? null : Number(packageSize),
+            category,
+            description,
+            image_url: imageUrl,
             active,
           }),
         });
@@ -4529,7 +4618,9 @@ function ProductModal({
           method: "POST",
           body: JSON.stringify({
             name: name.trim(),
-            category: "BEBIDA",
+            category,
+            description,
+            image_url: imageUrl,
             unit,
             package_size: packageSize === "" ? null : Number(packageSize),
           }),
@@ -4558,7 +4649,7 @@ function ProductModal({
 
         <div className="mt-4 space-y-3.5">
           <label className="block text-xs font-bold text-ink-800">
-            Nome da Bebida
+            Nome do produto
             <input
               type="text"
               required
@@ -4569,7 +4660,17 @@ function ProductModal({
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-3">
+          <label className="block text-xs font-bold text-ink-800">Categoria
+            <select value={category} onChange={event => setCategory(event.target.value)} className="mt-1 h-10 w-full rounded-lg border bg-white px-3 text-sm">
+              <option value="BEBIDA">Bebida</option><option value="ALIMENTO">Alimento</option><option value="OUTRO">Outro</option>
+            </select>
+          </label>
+          <label className="block text-xs font-bold text-ink-800">Descrição
+            <textarea value={description} onChange={event => setDescription(event.target.value)} className="mt-1 min-h-20 w-full rounded-lg border px-3 py-2 text-sm" placeholder="Descreva o produto" />
+          </label>
+          <div><p className="text-xs font-bold text-ink-800">Foto</p><button type="button" onClick={() => setShowPhotoPicker(true)} className="mt-1 rounded-lg border px-3 py-2 text-xs font-bold">{imageUrl ? "Trocar foto" : "Cadastrar foto"}</button>{imageUrl && <img src={imageUrl} alt={name || "Foto do produto"} className="mt-2 h-28 w-40 rounded-lg object-cover" />}</div>
+
+          <details><summary className="cursor-pointer text-xs font-bold text-ink-700">Configuração de embalagem</summary><div className="mt-3 grid grid-cols-2 gap-3">
             <label className="block text-xs font-bold text-ink-800">
               Unidade / Embalagem
               <select
@@ -4596,7 +4697,7 @@ function ProductModal({
                 className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
               />
             </label>
-          </div>
+          </div></details>
 
           {item && (
             <label className="flex items-center gap-2 text-xs font-bold text-ink-800 pt-1">
@@ -4606,7 +4707,7 @@ function ProductModal({
                 onChange={(e) => setActive(e.target.checked)}
                 className="size-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"
               />
-              Bebida ativa no catálogo
+              Produto ativo no catálogo
             </label>
           )}
         </div>
@@ -4626,6 +4727,7 @@ function ProductModal({
           </button>
         </div>
       </form>
+      {showPhotoPicker && <MediaPicker token={token} legacyPhotos={[]} currentUrl={imageUrl} onSelect={setImageUrl} close={() => setShowPhotoPicker(false)} />}
     </div>
   );
 }

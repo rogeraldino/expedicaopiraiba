@@ -2,11 +2,15 @@ import hashlib
 import hmac
 import json
 import logging
+from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import urllib.error
 import urllib.request
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
+from django.utils import timezone
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -15,7 +19,8 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Payment, PaymentTransaction
+from .models import Payment, PaymentIntent, PaymentTransaction
+from .pricing import create_balance_quote, create_fee_quote, quote_payload
 from .serializers import (
     CreatePaymentSerializer,
     CreatePixSerializer,
@@ -29,6 +34,95 @@ from apps.reservations.customer_views import authenticated_customer, reservation
 from apps.reservations.models import Reservation
 
 logger = logging.getLogger(__name__)
+
+
+def _money_cents(value):
+    try:
+        return int((Decimal(str(value)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _store_provider_financials(payment, data):
+    details = data.get("transaction_details") or {}
+    net = _money_cents(details.get("net_received_amount"))
+    fee = max(payment.amount_cents - net, 0) if net is not None else None
+    if fee is None and isinstance(data.get("fee_details"), list):
+        pieces = [_money_cents(item.get("amount")) for item in data["fee_details"] if isinstance(item, dict)]
+        if pieces and all(piece is not None for piece in pieces):
+            fee = sum(pieces)
+    changes = []
+    if net is not None and payment.provider_net_received_cents != net:
+        payment.provider_net_received_cents = net
+        changes.append("provider_net_received_cents")
+    if fee is not None and payment.provider_fee_cents != fee:
+        payment.provider_fee_cents = fee
+        changes.append("provider_fee_cents")
+    if changes:
+        payment.save(update_fields=[*changes, "updated_at"])
+
+
+def _recover_unknown_intent(data_id, data):
+    reference = str(data.get("external_reference") or "")
+    with transaction.atomic():
+        try:
+            candidate = PaymentIntent.objects.filter(id=reference).values("reservation_id").first() if reference else None
+        except (ValueError, DjangoValidationError):
+            candidate = None
+        if not candidate:
+            return None
+        Reservation.objects.select_for_update().get(id=candidate["reservation_id"])
+        intent = PaymentIntent.objects.select_for_update().filter(id=reference).first()
+        if not intent:
+            return None
+        if data.get("currency_id") != "BRL" or _money_cents(data.get("transaction_amount")) != intent.amount_cents:
+            logger.error("Payment intent %s has mismatched provider amount or currency", intent.id)
+            return None
+        if intent.payment_id:
+            return Payment.objects.select_related("reservation__expedition").get(id=intent.payment_id)
+        if intent.status not in ("SUBMITTING", "UNKNOWN"):
+            return None
+        poi = (data.get("point_of_interaction") or {}).get("transaction_data") or {}
+        details = data.get("transaction_details") or {}
+        card = data.get("card") or {}
+        expiration = None
+        if data.get("date_of_expiration"):
+            try:
+                expiration = datetime.fromisoformat(data["date_of_expiration"])
+                if timezone.is_naive(expiration):
+                    expiration = timezone.make_aware(expiration)
+            except (ValueError, TypeError):
+                expiration = None
+        payment = Payment.objects.create(
+            reservation=intent.reservation, provider="MERCADOPAGO", external_id=str(data_id),
+            method=intent.method, purpose=intent.quote.purpose if intent.quote_id else Payment.Purpose.INITIAL,
+            amount_cents=intent.amount_cents,
+            base_amount_cents=intent.base_amount_cents, fee_amount_cents=intent.fee_amount_cents,
+            fee_snapshot=intent.fee_snapshot, installments=intent.installments,
+            idempotency_key=intent.idempotency_key, status=Payment.Status.PENDING,
+            pix_copy_paste=poi.get("qr_code") or "", pix_qr_code_base64=poi.get("qr_code_base64") or "",
+            boleto_url=details.get("external_resource_url") or poi.get("ticket_url") or "",
+            card_brand=data.get("payment_method_id") or "", card_last_four=card.get("last_four_digits") or "",
+            expires_at=expiration,
+        )
+        intent.payment = payment
+        intent.status = "COMPLETE"
+        intent.save(update_fields=["payment", "status", "updated_at"])
+        if intent.quote_id:
+            intent.quote.used_at = intent.quote.used_at or timezone.now()
+            intent.quote.save(update_fields=["used_at"])
+        reservation = intent.reservation
+        if reservation.status == Reservation.Status.HELD:
+            previous_status = reservation.status
+            reservation.status = Reservation.Status.AWAITING_PAYMENT
+            if expiration and intent.method == Payment.Method.BOLETO:
+                reservation.held_until = expiration
+            reservation.save(update_fields=["status", "held_until", "updated_at"])
+            from apps.reservations.services import record_reservation_event
+            record_reservation_event(reservation=reservation, event_type="PAYMENT_RECOVERED",
+                previous_status=previous_status, new_status=reservation.status,
+                payload={"payment_id": str(payment.id), "intent_id": str(intent.id)})
+        return payment
 
 
 class CreatePixView(APIView):
@@ -51,6 +145,54 @@ class PaymentPublicConfigView(APIView):
             "mercadopago_public_key": settings.MERCADOPAGO_PUBLIC_KEY
             if settings.PAYMENT_GATEWAY == "MERCADOPAGO" else "",
         })
+
+
+class FeeQuoteView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request):
+        from .serializers import FeeQuoteSerializer
+        serializer = FeeQuoteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            customer = customer_from_token(serializer.validated_data["verification_token"])
+            quote = create_fee_quote(
+                customer=customer,
+                expedition_slug=serializer.validated_data["expedition_slug"],
+                participant_names=serializer.validated_data["participant_names"],
+                payment_plan=serializer.validated_data["payment_plan"],
+                method=serializer.validated_data["method"],
+                installments=serializer.validated_data["installments"],
+                reservation_id=serializer.validated_data.get("reservation_id"),
+                card_bin=serializer.validated_data.get("card_bin", ""),
+            )
+        except DjangoValidationError as error:
+            return Response({"detail": error.messages}, status=400)
+        return Response(quote_payload(quote), status=201)
+
+
+class BalanceFeeQuoteView(APIView):
+    authentication_classes = []
+    permission_classes = []
+
+    def post(self, request, reservation_id):
+        customer = authenticated_customer(request)
+        if not customer:
+            return Response({"detail": "Sessão inválida ou expirada."}, status=401)
+        try:
+            reservation = Reservation.objects.get(id=reservation_id, customer=customer)
+            from .reconciliation import refresh_pending_balance_payment
+            refresh_pending_balance_payment(reservation)
+            active = reservation.payments.filter(purpose=Payment.Purpose.BALANCE,
+                status__in=(Payment.Status.PENDING, Payment.Status.PROCESSING)).order_by("-created_at").first()
+            if active:
+                return Response({"existing_payment": payment_payload(active)})
+            return Response(quote_payload(create_balance_quote(customer=customer, reservation_id=reservation_id)), status=201)
+        except Reservation.DoesNotExist:
+            return Response({"detail": "Reserva não encontrada."}, status=404)
+        except DjangoValidationError as error:
+            return Response({"detail": error.messages}, status=400)
 
 
 class PaymentStatusView(APIView):
@@ -96,6 +238,7 @@ class PaymentStatusView(APIView):
                         if resp.status == 200:
                             data = json.loads(resp.read().decode("utf-8"))
                             mp_status = data.get("status")
+                            _store_provider_financials(payment, data)
 
                             # Backfill qr_code_base64 if missing on model
                             poi = data.get("point_of_interaction", {}).get("transaction_data", {})
@@ -171,7 +314,7 @@ class BalancePaymentView(APIView):
         if not customer:
             return Response({"detail": "Sessão inválida ou expirada."}, status=401)
         try:
-            payment = create_balance_payment(customer=customer, reservation_id=reservation_id)
+            payment = create_balance_payment(customer=customer, reservation_id=reservation_id, quote_id=request.data.get("quote_id"))
         except Reservation.DoesNotExist:
             return Response({"detail": "Reserva não encontrada."}, status=404)
         except DjangoValidationError as error:
@@ -312,13 +455,16 @@ class MercadoPagoWebhookView(View):
                                     external_id=str(data_id)
                                 )
                             except Payment.DoesNotExist:
-                                logger.warning("Payment with external_id %s not found in DB.", data_id)
-                                return JsonResponse({"status": "ignored_unknown_payment"}, status=200)
+                                payment = _recover_unknown_intent(data_id, payment_data)
+                                if not payment:
+                                    logger.warning("Payment with external_id %s not reconciled yet.", data_id)
+                                    return JsonResponse({"status": "awaiting_local_reconciliation"}, status=503)
+                            _store_provider_financials(payment, payment_data)
 
                             # Reconcile currency, external_reference and amount (PAY-03)
                             if (
                                 currency != "BRL"
-                                or ext_ref != str(payment.reservation_id)
+                                or ext_ref not in (str(payment.reservation_id), str(payment.paymentintent.id) if hasattr(payment, "paymentintent") else "")
                                 or round(amount, 2) != round(payment.amount_cents / 100.0, 2)
                             ):
                                 logger.error(
@@ -365,7 +511,8 @@ class MercadoPagoWebhookView(View):
                                             "payload": payment_data,
                                         },
                                     )
-                                    return JsonResponse({"status": "overbooking_requires_refund"}, status=200)
+                                    # Keep the money in the ledger even when the seat
+                                    # cannot be restored; operations must refund it.
 
                             logger.info("Mercado Pago payment %s approved. Processing...", data_id)
                             process_paid_event(
@@ -374,6 +521,14 @@ class MercadoPagoWebhookView(View):
                                 payload=payment_data,
                             )
                         else:
+                            payment = Payment.objects.filter(external_id=str(data_id)).first()
+                            if not payment:
+                                payment = _recover_unknown_intent(data_id, payment_data)
+                            if not payment:
+                                return JsonResponse({"status": "awaiting_local_reconciliation"}, status=503)
+                            if status_name in ("rejected", "cancelled") and payment.status not in (Payment.Status.PAID, Payment.Status.REFUNDED):
+                                payment.status = Payment.Status.FAILED if status_name == "rejected" else Payment.Status.CANCELLED
+                                payment.save(update_fields=["status", "updated_at"])
                             logger.info(
                                 "Mercado Pago payment %s status is %s (not approved).",
                                 data_id,

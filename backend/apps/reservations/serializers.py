@@ -16,12 +16,11 @@ class IdentifySerializer(serializers.Serializer):
 
     def create(self, validated_data):
         try:
-            challenge, code, masked = start_verification(**validated_data)
+            challenge, code, _masked = start_verification(**validated_data)
         except DjangoValidationError as error:
             raise serializers.ValidationError(error.messages)
         result = {
             "challenge_id": str(challenge.id),
-            "masked_destination": masked,
             "channel": challenge.channel,
             "expires_in_seconds": settings.OTP_EXPIRY_MINUTES * 60,
         }
@@ -37,9 +36,12 @@ class VerifySerializer(serializers.Serializer):
     def create(self, validated_data):
         try:
             token = verify_challenge(**validated_data)
+            from apps.customers.models import VerificationChallenge
+            challenge = VerificationChallenge.objects.get(id=validated_data["challenge_id"])
             return {
                 "verification_token": token,
                 "customer_session_token": create_customer_session_token(customer_from_token(token)),
+                "customer_status": "EXISTING" if challenge.is_existing_customer else "NEW",
             }
         except DjangoValidationError as error:
             raise serializers.ValidationError(error.messages)
@@ -51,6 +53,8 @@ class HoldSerializer(serializers.Serializer):
     participant_names = serializers.ListField(child=serializers.CharField(max_length=160), min_length=1, max_length=12)
     payment_plan = serializers.ChoiceField(choices=("DEPOSIT", "FULL"))
     replace_reservation_id = serializers.UUIDField(required=False, allow_null=True)
+    quote_id = serializers.UUIDField(required=False)
+    contract_accepted = serializers.BooleanField(required=False, default=False)
 
     def create(self, validated_data):
         try:

@@ -1,12 +1,17 @@
 import csv
 import io
 import math
+import re
+from decimal import Decimal, InvalidOperation
+from uuid import UUID
 from datetime import timedelta
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.db.models import Case, Count, F, IntegerField, OuterRef, Q, Subquery, Sum, Value, When
 from django.http import HttpResponse
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -28,8 +33,11 @@ from apps.expeditions.models import (
     RiverSpecies,
     TargetSpecies,
 )
-from apps.payments.models import Payment
+from apps.payments.models import Payment, PaymentIntent, FeeQuote, FeeRate, FeeRateAudit, RefundEvent, RefundRequest
+from apps.payments.pricing import rate_payload
+from apps.payments.refunds import confirm_manual_refund, reconcile_refund, refund_payload, request_refund, submit_refund
 from apps.payments.models import PaymentTransaction
+from apps.media_library.models import MediaAsset
 from apps.customers.models import Customer, CustomerProfile, VerificationChallenge
 from apps.reservations.models import DietaryRestriction, ParticipantProductChoice, Reservation, ReservationEvent, ReservationGearAddon, ReservationParticipant
 from apps.reservations.services import recalculate_reservation_financials, record_reservation_event, transition_locked_reservation
@@ -106,6 +114,10 @@ class ClearDevelopmentDataView(APIView):
             reservations = Reservation.objects.count()
             customers = Customer.objects.count()
             PaymentTransaction.objects.all().delete()
+            RefundEvent.objects.all().delete()
+            RefundRequest.objects.all().delete()
+            PaymentIntent.objects.all().delete()
+            FeeQuote.objects.all().delete()
             Payment.objects.all().delete()
             Reservation.objects.all().delete()
             VerificationChallenge.objects.all().delete()
@@ -120,7 +132,7 @@ class OperationsView(APIView):
 
 class OverviewView(OperationsView):
     def get(self, request):
-        paid = Payment.objects.filter(status=Payment.Status.PAID).aggregate(total=Coalesce(Sum("amount_cents"), 0), count=Count("id"))
+        paid_count = Payment.objects.filter(status=Payment.Status.PAID).count()
         reservations = Reservation.objects.aggregate(total=Count("id"), confirmed=Count("id", filter=Q(status__in=ACTIVE_RESERVATIONS)), awaiting=Count("id", filter=Q(status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT))))
         commercial = Reservation.objects.filter(status__in=ACTIVE_RESERVATIONS).aggregate(sold=Coalesce(Sum("total_price_cents"), 0))
         incomplete_participants = ReservationParticipant.objects.filter(reservation__status__in=ACTIVE_RESERVATIONS).exclude(onboarding_status=ReservationParticipant.OnboardingStatus.COMPLETED).count()
@@ -131,14 +143,15 @@ class OverviewView(OperationsView):
         for item in active_reservations:
             if item.remaining_balance_cents and item.balance_due_at and item.balance_due_at < timezone.localdate(): alerts.append({"id": f"balance-{item.id}", "type": "OVERDUE_BALANCE", "level": "warning", "title": "Saldo vencido", "message": "Reserva com saldo vencido.", "reservation_id": str(item.id), "expedition_id": str(item.expedition_id)})
             if item.participants.filter(dietary_restrictions__restriction__is_none=False).exists(): alerts.append({"id": f"diet-{item.id}", "type": "DIETARY", "level": "warning", "title": "Restrição alimentar", "message": "Reserva possui restrição alimentar.", "reservation_id": str(item.id), "expedition_id": str(item.expedition_id)})
+        received_total = sum(item.paid_amount_cents for item in active_reservations)
         indicators = []
         for expedition in expeditions_with_occupancy().order_by("starts_at"):
             eligible = Reservation.objects.filter(expedition=expedition, status__in=ACTIVE_RESERVATIONS)
             sold = eligible.aggregate(value=Coalesce(Sum("total_price_cents"), 0))["value"]
-            received = Payment.objects.filter(reservation__expedition=expedition, status=Payment.Status.PAID).aggregate(value=Coalesce(Sum("amount_cents"), 0))["value"]
+            received = sum(item.paid_amount_cents for item in eligible.prefetch_related("payments"))
             people = ReservationParticipant.objects.filter(reservation__in=eligible)
             indicators.append({"expedition_id": str(expedition.id), "expedition_name": expedition.name, "capacity": expedition.capacity, "occupied_slots": expedition.occupied_slots, "confirmed_slots": eligible.aggregate(value=Coalesce(Sum("participant_count"), 0))["value"], "held_slots": Reservation.objects.filter(expedition=expedition, status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT), held_until__gt=timezone.now()).aggregate(value=Coalesce(Sum("participant_count"), 0))["value"], "available_slots": max(expedition.capacity-expedition.occupied_slots, 0), "sold_cents": sold, "received_cents": received, "outstanding_cents": max(sold-received, 0), "pending_preferences": people.filter(Q(product_choices_confirmed_at__isnull=True)|Q(dietary_confirmed_at__isnull=True)).distinct().count(), "pending_checklists": sum(1 for p in people.prefetch_related("checklist_completions", "reservation__expedition__checklist_items") if not set(expedition.checklist_items.filter(active=True, required=True).values_list("id", flat=True)).issubset(set(p.checklist_completions.filter(completed=True).values_list("item_id", flat=True)))), "restrictions": people.filter(dietary_restrictions__restriction__is_none=False).distinct().count()})
-        return Response({"revenue_cents": paid["total"], "sold_cents": commercial["sold"], "outstanding_cents": max(commercial["sold"] - paid["total"], 0), "paid_payments": paid["count"], "incomplete_participants": incomplete_participants, "reservations": reservations, "alerts": alerts, "expedition_indicators": indicators, "upcoming_expeditions": OperationsExpeditionSerializer(upcoming, many=True).data, "recent_reservations": OperationsReservationSerializer(recent, many=True).data})
+        return Response({"revenue_cents": received_total, "sold_cents": commercial["sold"], "outstanding_cents": max(commercial["sold"] - received_total, 0), "paid_payments": paid_count, "incomplete_participants": incomplete_participants, "reservations": reservations, "alerts": alerts, "expedition_indicators": indicators, "upcoming_expeditions": OperationsExpeditionSerializer(upcoming, many=True).data, "recent_reservations": OperationsReservationSerializer(recent, many=True).data})
 
 
 class ReservationListView(OperationsView):
@@ -563,6 +576,17 @@ class BeveragePackageItemView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+def valid_product_image_url(value):
+    match = re.fullmatch(r"/api/media/([0-9a-fA-F-]{36})/image/", value)
+    if not match:
+        return False
+    try:
+        asset_id = UUID(match.group(1))
+    except ValueError:
+        return False
+    return MediaAsset.objects.filter(id=asset_id).exists()
+
+
 class ProductListView(APIView):
     authentication_classes = [OperationsAuthentication]
     permission_classes = [permissions.IsAuthenticated]
@@ -579,6 +603,8 @@ class ProductListView(APIView):
                 "id": p.id,
                 "name": p.name,
                 "category": p.category,
+                "description": p.description,
+                "image_url": p.image_url,
                 "unit": p.unit,
                 "package_size": p.package_size,
                 "active": p.active,
@@ -589,8 +615,13 @@ class ProductListView(APIView):
     def post(self, request):
         name = str(request.data.get("name", "")).strip()
         if not name:
-            return Response({"detail": "Nome da bebida é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "Nome do produto é obrigatório."}, status=status.HTTP_400_BAD_REQUEST)
         category = str(request.data.get("category", "BEBIDA")).strip() or "BEBIDA"
+        if category not in {"BEBIDA", "ALIMENTO", "OUTRO"}:
+            return Response({"detail": "Categoria inválida."}, status=status.HTTP_400_BAD_REQUEST)
+        image_url = str(request.data.get("image_url", "")).strip()
+        if image_url and not valid_product_image_url(image_url):
+            return Response({"detail": "Selecione uma foto da biblioteca de mídia."}, status=status.HTTP_400_BAD_REQUEST)
         unit = str(request.data.get("unit", Product.Unit.CAN)).strip()
         valid_units = {choice[0] for choice in Product.Unit.choices}
         if unit not in valid_units:
@@ -602,25 +633,30 @@ class ProductListView(APIView):
             except (ValueError, TypeError):
                 package_size = None
 
-        product, created = Product.objects.update_or_create(
+        product, created = Product.objects.get_or_create(
             name=name,
             defaults={
                 "category": category,
+                "description": str(request.data.get("description", "")).strip(),
+                "image_url": image_url,
                 "unit": unit,
                 "package_size": package_size,
-                "active": True,
             },
         )
+        if not created:
+            return Response({"detail": "Já existe um produto com esse nome. Edite o cadastro existente."}, status=status.HTTP_409_CONFLICT)
         return Response(
             {
                 "id": product.id,
                 "name": product.name,
                 "category": product.category,
+                "description": product.description,
+                "image_url": product.image_url,
                 "unit": product.unit,
                 "package_size": product.package_size,
                 "active": product.active,
             },
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -640,8 +676,16 @@ class ProductDetailView(APIView):
                 product.name = name
         if "category" in request.data:
             category = str(request.data["category"]).strip()
-            if category:
-                product.category = category
+            if category not in {"BEBIDA", "ALIMENTO", "OUTRO"}:
+                return Response({"detail": "Categoria inválida."}, status=status.HTTP_400_BAD_REQUEST)
+            product.category = category
+        if "description" in request.data:
+            product.description = str(request.data["description"]).strip()
+        if "image_url" in request.data:
+            image_url = str(request.data["image_url"]).strip()
+            if image_url and not valid_product_image_url(image_url):
+                return Response({"detail": "Selecione uma foto da biblioteca de mídia."}, status=status.HTTP_400_BAD_REQUEST)
+            product.image_url = image_url
         if "unit" in request.data:
             unit = str(request.data["unit"]).strip()
             if unit in {choice[0] for choice in Product.Unit.choices}:
@@ -659,6 +703,8 @@ class ProductDetailView(APIView):
             "id": product.id,
             "name": product.name,
             "category": product.category,
+            "description": product.description,
+            "image_url": product.image_url,
             "unit": product.unit,
             "package_size": product.package_size,
             "active": product.active,
@@ -702,7 +748,7 @@ class ManualPaymentView(OperationsView):
             return Response({"detail": "Estado da reserva não aceita pagamento manual."}, status=409)
         if reservation.status == Reservation.Status.HELD:
             transition_locked_reservation(reservation=reservation, target_status=Reservation.Status.AWAITING_PAYMENT, event_type="MANUAL_PAYMENT_STARTED", actor_type=ReservationEvent.ActorType.ADMIN, actor_identifier="operations", reason=reason)
-        payment = Payment.objects.create(reservation=reservation, purpose=Payment.Purpose.MANUAL, provider="ADMIN", method=str(request.data.get("method", "MANUAL"))[:20], external_id=f"manual-{reservation.id}-{timezone.now().timestamp()}", amount_cents=amount)
+        payment = Payment.objects.create(reservation=reservation, purpose=Payment.Purpose.MANUAL, provider="ADMIN", method=str(request.data.get("method", "MANUAL"))[:20], external_id=f"manual-{reservation.id}-{timezone.now().timestamp()}", amount_cents=amount, base_amount_cents=amount)
         payment, processed = process_paid_event(external_event_id=f"manual-event-{payment.id}", external_payment_id=payment.external_id, payload={"source": "operations", "reason": reason})
         record_reservation_event(reservation=reservation, event_type="MANUAL_PAYMENT_RECORDED", actor_type=ReservationEvent.ActorType.ADMIN, actor_identifier="operations", reason=reason, payload={"payment_id": str(payment.id), "amount_cents": amount, "processed": processed})
         return Response({"payment_id": payment.id, "status": payment.status}, status=201)
@@ -722,6 +768,125 @@ class CancelReservationView(OperationsView):
         except Exception as error:
             return Response({"detail": str(error)}, status=400)
         return Response({"id": reservation.id, "status": reservation.status})
+
+
+class PaymentIntentReviewView(OperationsView):
+    def get(self, request):
+        return Response([{
+            "id": str(intent.id), "reservation_id": str(intent.reservation_id),
+            "method": intent.method, "amount_cents": intent.amount_cents,
+            "status": intent.status, "created_at": intent.created_at,
+            "age_seconds": int((timezone.now() - intent.created_at).total_seconds()),
+        } for intent in PaymentIntent.objects.filter(status__in=("SUBMITTING", "UNKNOWN"))
+            .order_by("created_at")[:100]])
+
+    def post(self, request):
+        from apps.payments.reconciliation import reconcile_unknown_intents
+        count = reconcile_unknown_intents()
+        return Response({"reconciled": count})
+
+
+class PaymentFeeRateView(OperationsView):
+    def get(self, request):
+        return Response([{
+            **rate_payload(rate), "id": rate.id, "active": rate.active,
+            "valid_until": rate.valid_until, "updated_by": rate.updated_by,
+            "updated_at": rate.updated_at,
+        } for rate in FeeRate.objects.order_by("method", "installments")])
+
+    @transaction.atomic
+    def patch(self, request, rate_id):
+        try:
+            rate = FeeRate.objects.select_for_update().get(id=rate_id)
+        except FeeRate.DoesNotExist:
+            return Response({"detail": "Taxa não encontrada."}, status=404)
+        before = {**rate_payload(rate), "active": rate.active, "valid_until": str(rate.valid_until)}
+        try:
+            percent = Decimal(str(request.data.get("percent", rate.percent)))
+            fixed_cents = int(request.data.get("fixed_cents", rate.fixed_cents))
+        except (InvalidOperation, ValueError, TypeError):
+            return Response({"detail": "Taxa inválida."}, status=400)
+        if percent < 0 or percent >= 100 or fixed_cents < 0:
+            return Response({"detail": "Taxa fora do limite permitido."}, status=400)
+        rate.percent = percent
+        rate.fixed_cents = fixed_cents
+        rate.active = bool(request.data.get("active", rate.active))
+        rate.estimated = bool(request.data.get("estimated", rate.estimated))
+        if "source" in request.data:
+            source = str(request.data["source"]).strip()
+            if source and not source.startswith("https://"):
+                return Response({"detail": "Informe uma fonte HTTPS."}, status=400)
+            rate.source = source
+        if "valid_until" in request.data:
+            raw = request.data["valid_until"]
+            parsed = parse_datetime(raw) if isinstance(raw, str) and raw else None
+            if raw and not parsed:
+                return Response({"detail": "Vigência inválida."}, status=400)
+            rate.valid_until = timezone.make_aware(parsed) if parsed and timezone.is_naive(parsed) else parsed
+        if "source_checked_at" in request.data:
+            raw = request.data["source_checked_at"]
+            parsed = parse_datetime(raw) if isinstance(raw, str) and raw else None
+            if raw and not parsed:
+                return Response({"detail": "Data de conferência inválida."}, status=400)
+            rate.source_checked_at = timezone.make_aware(parsed) if parsed and timezone.is_naive(parsed) else parsed
+        if not rate.estimated:
+            rate.source_checked_at = rate.source_checked_at or timezone.now()
+        rate.version += 1
+        if request.data.get("revoke_previous_version") is True:
+            rate.revoked_versions = [*rate.revoked_versions, rate.version - 1]
+        rate.updated_by = getattr(request.user, "email", "operations")
+        rate.save()
+        after = {**rate_payload(rate), "active": rate.active, "valid_until": str(rate.valid_until)}
+        FeeRateAudit.objects.create(rate=rate, before=before, after=after, actor=rate.updated_by)
+        return Response({**after, "id": rate.id})
+
+
+class ReservationRefundView(OperationsView):
+    def get(self, request, reservation_id):
+        if not Reservation.objects.filter(id=reservation_id).exists():
+            return Response({"detail": "Reserva não encontrada."}, status=404)
+        return Response([refund_payload(item) for item in RefundRequest.objects.filter(payment__reservation_id=reservation_id).order_by("created_at")])
+
+    def post(self, request, reservation_id):
+        try:
+            payment = Payment.objects.get(id=request.data.get("payment_id"), reservation_id=reservation_id)
+        except (Payment.DoesNotExist, ValueError, TypeError):
+            return Response({"detail": "Pagamento não encontrado nesta reserva."}, status=404)
+        try:
+            amount_cents = int(request.data.get("amount_cents", 0))
+            refund = request_refund(
+                payment_id=payment.id, amount_cents=amount_cents,
+                basis=str(request.data.get("basis", "")),
+                reason=str(request.data.get("reason", "")),
+                calculation=str(request.data.get("calculation", "")),
+                actor=getattr(request.user, "email", "operations"),
+            )
+            if refund.status == RefundRequest.Status.REQUESTED:
+                refund = submit_refund(refund.id)
+        except (ValidationError, ValueError, TypeError) as error:
+            detail = error.messages if hasattr(error, "messages") else str(error)
+            return Response({"detail": detail}, status=400)
+        return Response(refund_payload(refund), status=201)
+
+
+class RefundActionView(OperationsView):
+    def post(self, request, refund_id):
+        action = str(request.data.get("action", ""))
+        try:
+            if action == "confirm_manual":
+                refund = confirm_manual_refund(refund_id=refund_id, proof_reference=str(request.data.get("proof_reference", "")), actor=getattr(request.user, "email", "operations"))
+            elif action == "reconcile":
+                refund = reconcile_refund(refund_id)
+            elif action == "retry_same_key":
+                refund = submit_refund(refund_id)
+            else:
+                return Response({"detail": "Ação inválida."}, status=400)
+        except RefundRequest.DoesNotExist:
+            return Response({"detail": "Reembolso não encontrado."}, status=404)
+        except (ValidationError, ValueError) as error:
+            detail = error.messages if hasattr(error, "messages") else str(error)
+            return Response({"detail": detail}, status=400)
+        return Response(refund_payload(refund))
 
 
 def configuration_payload(expedition):

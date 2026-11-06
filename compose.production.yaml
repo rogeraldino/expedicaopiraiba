@@ -45,7 +45,7 @@ services:
       DEBUG: "false"
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
-    command: sh -c "while true; do python manage.py expire_holds; sleep 60; done"
+    command: sh -c "while true; do python manage.py expire_holds; python manage.py reconcile_payment_intents; sleep 60; done"
     depends_on:
       db:
         condition: service_healthy

@@ -31,6 +31,12 @@ class Reservation(models.Model):
     payment_plan = models.CharField(max_length=12, choices=PaymentPlan.choices, default=PaymentPlan.DEPOSIT)
     balance_due_at = models.DateField(null=True, blank=True)
     beverage_preferences = models.JSONField(default=dict, blank=True)
+    contract_version = models.CharField(max_length=20, blank=True)
+    contract_hash = models.CharField(max_length=64, blank=True)
+    contract_content = models.TextField(blank=True)
+    contract_accepted_at = models.DateTimeField(null=True, blank=True)
+    accepted_offer_snapshot = models.JSONField(default=dict, blank=True)
+    accepted_quote_snapshot = models.JSONField(default=dict, blank=True)
     legacy_preferences_review_required = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -43,13 +49,21 @@ class Reservation(models.Model):
 
     @property
     def paid_amount_cents(self):
+        from apps.payments.models import PaymentTransaction, RefundRequest
+        excess_ids = set(PaymentTransaction.objects.filter(payment__reservation=self,
+            new_status="REJECTED_OVERPAYMENT").values_list("payment_id", flat=True))
         prefetched = getattr(self, "_prefetched_objects_cache", {}).get("payments")
         if prefetched is not None:
-            return sum(payment.amount_cents for payment in prefetched if payment.status == "PAID")
-        return self.payments.filter(status="PAID").aggregate(total=Sum("amount_cents"))["total"] or 0
+            base_paid = sum(payment.base_amount_cents or payment.amount_cents for payment in prefetched if payment.status in ("PAID", "REFUNDED") and payment.id not in excess_ids)
+        else:
+            base_paid = sum(p.base_amount_cents or p.amount_cents for p in self.payments.filter(status__in=("PAID", "REFUNDED")).exclude(id__in=excess_ids).only("base_amount_cents", "amount_cents"))
+        service_refunded = RefundRequest.objects.filter(payment__reservation=self, status="CONFIRMED").exclude(payment_id__in=excess_ids).aggregate(total=Sum("service_refund_cents"))["total"] or 0
+        return max(base_paid - service_refunded, 0)
 
     @property
     def remaining_balance_cents(self):
+        if self.status in (self.Status.CANCELLED, self.Status.REFUNDED, self.Status.EXPIRED):
+            return 0
         return max(self.total_price_cents - self.paid_amount_cents, 0)
 
 

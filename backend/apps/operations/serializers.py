@@ -462,9 +462,14 @@ class OperationsExpeditionSerializer(serializers.ModelSerializer):
 
 
 class OperationsPaymentSerializer(serializers.ModelSerializer):
+    requires_refund = serializers.SerializerMethodField()
+
+    def get_requires_refund(self, obj):
+        return obj.transactions.filter(new_status="REJECTED_OVERPAYMENT").exists()
+
     class Meta:
         model = Payment
-        fields = ("id", "method", "provider", "amount_cents", "status", "paid_at", "created_at")
+        fields = ("id", "method", "provider", "amount_cents", "base_amount_cents", "fee_amount_cents", "provider_fee_cents", "provider_net_received_cents", "status", "paid_at", "created_at", "requires_refund")
 
 
 class OperationsReservationEventSerializer(serializers.ModelSerializer):

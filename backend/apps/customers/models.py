@@ -34,6 +34,7 @@ class VerificationChallenge(models.Model):
     pending_email = models.EmailField(blank=True)
     pending_phone = models.CharField(max_length=20, blank=True)
     pending_full_name = models.CharField(max_length=160, blank=True)
+    is_existing_customer = models.BooleanField(default=False)
     verified_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField()
     consumed_at = models.DateTimeField(null=True, blank=True)

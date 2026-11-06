@@ -72,10 +72,10 @@ def start_verification(*, cpf, full_name, email, phone, channel=None):
         customer=customer, created_at__gte=now - timedelta(minutes=15)
     )
     if recent.count() >= 5:
-        raise ValidationError("Limite de códigos atingido. Tente novamente em 15 minutos.")
+        raise ValidationError("Não foi possível enviar o código agora. Tente novamente mais tarde.")
     latest = recent.order_by("-created_at").first()
     if latest and latest.created_at > now - timedelta(seconds=30):
-        raise ValidationError("Aguarde 30 segundos antes de pedir outro código.")
+        raise ValidationError("Não foi possível enviar o código agora. Tente novamente mais tarde.")
 
     # Keep prior challenges for durable throttling, while invalidating their codes.
     VerificationChallenge.objects.filter(
@@ -88,6 +88,7 @@ def start_verification(*, cpf, full_name, email, phone, channel=None):
         channel=chosen_channel,
         code_digest=make_password(code),
         pending_full_name=clean_name if not created else "",
+        is_existing_customer=not created,
         pending_email=clean_email if not created else "",
         pending_phone=normalized_phone if not created else "",
         expires_at=timezone.now() + timedelta(minutes=settings.OTP_EXPIRY_MINUTES),

@@ -23,6 +23,7 @@ from apps.expeditions.models import (
     WaterBasin,
 )
 from apps.payments.models import Payment
+from apps.media_library.models import MediaAsset
 from apps.reservations.models import ParticipantProductChoice, Reservation, ReservationGearAddon, ReservationParticipant
 
 
@@ -40,6 +41,30 @@ class OperationsApiTests(TestCase):
     def test_private_endpoints_require_login(self):
         self.assertEqual(self.client.get("/api/operations/overview/").status_code, 403)
         self.assertEqual(self.client.get("/api/operations/reservations/").status_code, 403)
+
+    def test_product_photo_and_description_preserve_legacy_packaging(self):
+        auth = self.login()
+        asset = MediaAsset.objects.create(original_name="produto.webp", width=400, height=300, byte_size=1000, created_by="admin@example.com")
+        image_url = f"/api/media/{asset.id}/image/"
+        created = self.client.post("/api/operations/products/", {
+            "name": "Isca de teste", "category": "OUTRO", "description": "Descrição de teste", "image_url": image_url,
+        }, format="json", **auth)
+        self.assertEqual(created.status_code, 201)
+        product = Product.objects.get(id=created.data["id"])
+        product.unit = Product.Unit.BOTTLE
+        product.package_size = 24
+        product.save(update_fields=["unit", "package_size"])
+        edited = self.client.patch(f"/api/operations/products/{product.id}/", {
+            "description": "Descrição atualizada", "image_url": image_url,
+        }, format="json", **auth)
+        self.assertEqual(edited.status_code, 200)
+        product.refresh_from_db()
+        self.assertEqual((product.description, product.image_url, product.unit, product.package_size),
+                         ("Descrição atualizada", image_url, Product.Unit.BOTTLE, 24))
+        self.assertEqual(self.client.post("/api/operations/products/", {"name": product.name}, format="json", **auth).status_code, 409)
+        self.assertEqual(self.client.patch(f"/api/operations/products/{product.id}/", {
+            "image_url": "https://example.com/untrusted.png",
+        }, format="json", **auth).status_code, 400)
 
     def test_admin_can_log_in_with_password_only(self):
         response = self.client.post("/api/operations/login/", {"password": "safe-test-password"}, format="json")

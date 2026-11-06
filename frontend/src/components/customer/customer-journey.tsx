@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
@@ -90,6 +91,8 @@ type Data = {
   status: string;
   total_price_cents: number;
   paid_amount_cents: number;
+  accepted_contract?: { version: string; hash: string; content: string; accepted_at: string } | null;
+  payments?: { id: string; method: string; status: string; base_cents: number; fee_cents: number; total_cents: number; refunded_cents: number }[];
   remaining_balance_cents: number;
   balance_due_at: string | null;
   participants: Person[];
@@ -170,6 +173,7 @@ export function CustomerJourney({
   const [failure, setFailure] = useState("");
   const [personId, setPersonId] = useState("");
   const [activeTab, setActiveTab] = useState<"FICHA" | "BEVERAGES" | "GEAR" | "CHECKLIST" | "LOGISTICS">("FICHA");
+  const [contractOpen, setContractOpen] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -303,11 +307,13 @@ export function CustomerJourney({
           <Rows
             values={[
               ["Valor Total", money(data.total_price_cents)],
-              ["Sinal Pago (PIX)", money(data.paid_amount_cents)],
+              ["Serviço quitado", money(data.paid_amount_cents)],
               ["Saldo Restante", money(data.remaining_balance_cents)],
               ["Vencimento do Saldo", data.balance_due_at ? date(data.balance_due_at) : "Quitado"],
             ]}
           />
+          {data.payments?.filter(payment => payment.status === "PAID" || payment.status === "REFUNDED").map(payment => <div key={payment.id} className="mt-3 rounded-lg bg-sand-50 p-3 text-xs"><strong>{payment.method === "CREDIT_CARD" ? "Cartão" : payment.method === "PIX" ? "Pix" : "Boleto"}</strong><p>Valor: {money(payment.base_cents)} + taxas: {money(payment.fee_cents)}</p><p>Total cobrado: {money(payment.total_cents)}</p>{payment.refunded_cents > 0 && <p>Devolvido: {money(payment.refunded_cents)}</p>}</div>)}
+          {data.accepted_contract && <button type="button" onClick={() => setContractOpen(true)} className="mt-3 text-xs font-bold text-brand-700 underline">Ver contrato aceito (v{data.accepted_contract.version})</button>}
           {data.remaining_balance_cents > 0 && (
             <Payment id={data.id} amount={data.remaining_balance_cents} saved={setData} />
           )}
@@ -456,6 +462,7 @@ export function CustomerJourney({
           </Link>
         </div>
       )}
+      {contractOpen && data.accepted_contract && <div role="dialog" aria-modal="true" aria-label="Contrato aceito" className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"><div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl"><div className="flex justify-between gap-4"><h2 className="text-xl font-black">Contrato aceito · versão {data.accepted_contract.version}</h2><button type="button" onClick={() => setContractOpen(false)} aria-label="Fechar contrato" className="font-bold">✕</button></div><p className="mt-1 text-xs text-ink-500">Aceito em {new Date(data.accepted_contract.accepted_at).toLocaleString("pt-BR")}. Identificador: {data.accepted_contract.hash.slice(0, 12)}</p><article className="mt-5 text-sm [&_h1]:my-5 [&_h1]:text-2xl [&_h1]:font-black [&_h2]:mb-2 [&_h2]:mt-7 [&_h2]:text-lg [&_h2]:font-bold [&_p]:mb-3 [&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-6"><ReactMarkdown>{data.accepted_contract.content}</ReactMarkdown></article></div></div>}
     </section>
   );
 }
@@ -1678,6 +1685,24 @@ function Payment({
   const [failure, setFailure] = useState("");
   const [copied, setCopied] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [balanceQuote, setBalanceQuote] = useState<{ quote_id: string; base_cents: number; fee_cents: number; total_cents: number; expires_at: string } | null>(null);
+
+  const loadBalanceQuote = useCallback(async () => {
+    setFailure(""); setBalanceQuote(null);
+    try {
+      const response = await fetch(`${API}/payments/balance-quote/${id}/`, { method: "POST", headers: headers() });
+      const data = await response.json();
+      if (!response.ok) throw data;
+      if (data.existing_payment) {
+        setCharge({ id: data.existing_payment.payment_id, pix_copy_paste: data.existing_payment.pix_copy_paste,
+          amount_cents: data.existing_payment.amount_cents });
+        return;
+      }
+      setBalanceQuote(data);
+    } catch (reason) { setFailure(errorMsg(reason)); }
+  }, [id]);
+
+  useEffect(() => { void loadBalanceQuote(); }, [loadBalanceQuote]);
 
   const refreshReservation = useCallback(async () => {
     try {
@@ -1695,12 +1720,17 @@ function Payment({
   }, [id, saved]);
 
   async function initiatePayment() {
+    if (!balanceQuote || new Date(balanceQuote.expires_at).getTime() <= Date.now()) {
+      setFailure("Cotação expirada. Atualize o valor antes de pagar.");
+      return;
+    }
     setBusy(true);
     setFailure("");
     try {
       const res = await fetch(`${API}/me/reservations/${id}/balance-payment/`, {
         method: "POST",
         headers: { ...headers(), "Content-Type": "application/json" },
+        body: JSON.stringify({ quote_id: balanceQuote.quote_id }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -1793,9 +1823,10 @@ function Payment({
   if (!charge) {
     return (
       <div className="mt-4">
+        {balanceQuote && <div className="mb-3 rounded-lg bg-sand-50 p-3 text-xs text-ink-700"><p>Saldo: {money(balanceQuote.base_cents)}</p><p>Taxas: {money(balanceQuote.fee_cents)}</p><strong>Total no Pix: {money(balanceQuote.total_cents)}</strong></div>}
         <button
           onClick={initiatePayment}
-          disabled={busy}
+          disabled={busy || !balanceQuote}
           className="w-full rounded-xl bg-brand-600 p-3 font-bold text-white hover:bg-brand-700 transition shadow text-xs inline-flex items-center justify-center gap-2"
         >
           {busy ? (
@@ -1804,10 +1835,11 @@ function Payment({
               Gerando chave PIX...
             </>
           ) : (
-            `Pagar Saldo Restante (${money(amount)}) via PIX`
+            `Pagar Saldo Restante (${money(balanceQuote?.total_cents ?? amount)}) via PIX`
           )}
         </button>
         {failure && <p className="mt-2 text-xs font-bold text-red-700">{failure}</p>}
+        {!balanceQuote && <button type="button" onClick={() => void loadBalanceQuote()} className="mt-2 text-xs font-bold text-brand-700 underline">Atualizar cotação</button>}
       </div>
     );
   }

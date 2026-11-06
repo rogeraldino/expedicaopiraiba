@@ -11,6 +11,7 @@ const inputClass =
   "mt-2 h-11 w-full rounded-md border border-ink-900/15 bg-white px-3 text-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100";
 type Step = "FORM" | "OTP" | "PAYMENT_FORM" | "PAYMENT" | "SUCCESS";
 type Method = "PIX" | "CREDIT_CARD" | "BOLETO";
+type Quote = { quote_id: string; base_cents: number; fee_cents: number; total_cents: number; method: Method; installments: number; card_bin?: string; expires_at: string };
 
 type ExpeditionProp = {
   id: string;
@@ -37,7 +38,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [challengeId, setChallengeId] = useState("");
-  const [destination, setDestination] = useState("");
+  const [customerStatus, setCustomerStatus] = useState<"EXISTING" | "NEW" | "">("");
   const [devCode, setDevCode] = useState("");
   const [code, setCode] = useState("");
   const [holdUntil, setHoldUntil] = useState("");
@@ -59,6 +60,11 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   const [identity, setIdentity] = useState({ cpf: "", full_name: "", phone: "", email: "" });
   const [paymentPlan, setPaymentPlan] = useState("DEPOSIT");
   const [paymentMethod, setPaymentMethod] = useState<Method>("PIX");
+  const [cardInstallments, setCardInstallments] = useState(1);
+  const [cardBin, setCardBin] = useState("");
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [quoteError, setQuoteError] = useState("");
+  const [quoteLoading, setQuoteLoading] = useState(false);
   const [cardReady, setCardReady] = useState(false);
   const [terms, setTerms] = useState(false);
 
@@ -80,6 +86,26 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     : 30;
   const isBoletoAvailable = daysUntilDeparture > 7;
   const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (step !== "PAYMENT_FORM" || !verificationToken) return;
+    const controller = new AbortController();
+    setTerms(false);
+    setQuoteLoading(true);
+    const task = window.setTimeout(async () => {
+      setQuoteError(""); setQuoteLoading(true);
+      try {
+        const response = await fetch(`${api}/payments/quote/`, { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
+          body: JSON.stringify({ verification_token: verificationToken, reservation_id: reservationId || undefined, expedition_slug: expedition.slug, participant_names: participants, payment_plan: paymentPlan, method: paymentMethod, installments: paymentMethod === "CREDIT_CARD" ? cardInstallments : 1, card_bin: paymentMethod === "CREDIT_CARD" ? cardBin : "" }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw data;
+        if (!controller.signal.aborted) setQuote(data as Quote);
+      } catch (reason) { if (!controller.signal.aborted) setQuoteError(messageFrom(reason)); }
+      finally { if (!controller.signal.aborted) setQuoteLoading(false); }
+    }, 150);
+    return () => { window.clearTimeout(task); controller.abort(); };
+  }, [step, verificationToken, reservationId, expedition.slug, participants, paymentPlan, paymentMethod, cardInstallments, cardBin]);
 
   function updateCount(count: number) {
     setParticipantCount(count);
@@ -179,7 +205,6 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   async function requestCode(event?: FormEvent) {
     event?.preventDefault();
     setError("");
-    if (!terms) return setError("Aceite os termos e a política de cancelamento para continuar.");
     if (participants.some((name) => !name.trim())) return setError("Informe o nome de todos os participantes.");
 
     setLoading(true);
@@ -197,7 +222,6 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       const data = await response.json();
       if (!response.ok) throw data;
       setChallengeId(data.challenge_id);
-      setDestination(data.masked_destination);
       setDevCode(data.dev_code ?? "");
       if (data.dev_code) {
         setCode(data.dev_code);
@@ -210,8 +234,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     }
   }
 
-  async function verifyAndHold(event: FormEvent) {
-    event.preventDefault();
+  async function verifyAndHold() {
     setError("");
     setLoading(true);
     try {
@@ -225,6 +248,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
 
       setVerificationToken(verification.verification_token);
       setCustomerSessionToken(verification.customer_session_token ?? "");
+      setCustomerStatus(verification.customer_status === "EXISTING" ? "EXISTING" : "NEW");
       setStep("PAYMENT_FORM");
     } catch (requestError) {
       setError(messageFrom(requestError));
@@ -233,14 +257,21 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     }
   }
 
-  async function submitPayment(card?: { token: string; paymentMethodId: string; installments: string }) {
+  async function submitPayment(card?: { token: string; paymentMethodId: string; issuerId?: string; installments: string; amount: string }) {
     setError("");
     if (!verificationToken) return setError("Confirme o código antes de escolher o pagamento.");
+    if (!terms) return setError("Leia e aceite o contrato de serviço para pagar.");
+    if (quoteError) return setError(quoteError);
+    if (!quote || new Date(quote.expires_at).getTime() <= Date.now()) return setError("A cotação expirou. Escolha o pagamento novamente.");
+    if (paymentMethod === "CREDIT_CARD" && (!cardBin || quote.card_bin !== cardBin)) return setError("Aguarde a validação das parcelas para este cartão.");
     if (paymentMethod === "BOLETO" && (!isBoletoAvailable || !address.zip_code.trim() || !address.street_name.trim() || !address.street_number.trim() || !address.neighborhood.trim() || !address.city.trim() || !address.federal_unit.trim())) {
       return setError("Preencha o endereço completo para emitir o boleto.");
     }
     if (paymentMethod === "CREDIT_CARD" && (!card?.token || !card.paymentMethodId)) {
       return setError("Confira os dados do cartão e tente novamente.");
+    }
+    if (paymentMethod === "CREDIT_CARD" && (Number(card?.installments) !== cardInstallments || (card?.amount && Math.round(Number(card.amount) * 100) !== quote.total_cents))) {
+      return setError(`Selecione ${cardInstallments}x no formulário seguro. O total confirmado é ${money.format(quote.total_cents / 100)}.`);
     }
     setLoading(true);
     try {
@@ -255,6 +286,8 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
             expedition_slug: expedition.slug,
             participant_names: participants,
             payment_plan: paymentPlan,
+            quote_id: quote.quote_id,
+            contract_accepted: true,
           }),
         });
         const hold = await holdResponse.json();
@@ -269,6 +302,8 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         verification_token: verificationToken,
         reservation_id: currentReservationId,
         method: paymentMethod,
+        quote_id: quote.quote_id,
+        contract_accepted: true,
       };
 
       if (paymentMethod === "BOLETO") {
@@ -277,6 +312,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         paymentPayload.card_token = card!.token;
         paymentPayload.installments = Number(card!.installments);
         paymentPayload.payment_method_id = card!.paymentMethodId;
+        paymentPayload.issuer_id = card!.issuerId;
       }
 
       const paymentResponse = await fetch(`${api}/payments/`, {
@@ -533,12 +569,12 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       </div>
     );
 
-  if (step === "OTP")
-    return (
-      <form onSubmit={verifyAndHold} className="rounded-2xl border border-ink-900/10 bg-white p-7 shadow-sm">
+  const otpModal = step === "OTP" ? (
+    <div role="dialog" aria-modal="true" aria-label="Confirmar código" className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md rounded-2xl border border-ink-900/10 bg-white p-7 shadow-xl">
         <p className="text-xs font-bold uppercase tracking-widest text-brand-600">Confirme seu contato</p>
         <h2 className="mt-2 text-2xl font-black text-brand-900">Digite o código de 6 números</h2>
-        <p className="mt-2 text-sm text-ink-500">Enviado para {destination}. Se este CPF já possui cadastro, usamos o contato registrado anteriormente. Se você não reconhece esse endereço, procure o suporte para atualizar seu cadastro.</p>
+        <p className="mt-2 text-sm text-ink-500">Se os dados puderem ser verificados, você receberá um código no contato cadastrado. Confira também a caixa de spam.</p>
         {devCode && (
           <div className="mt-4 rounded-xl bg-sand-100 p-4 text-sm text-brand-900 border border-sand-300">
             <div className="flex items-center justify-between">
@@ -565,7 +601,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
           autoFocus
         />
         {error && <p className="mt-3 text-sm font-semibold text-red-700">{error}</p>}
-        <button
+        <button type="button" onClick={() => void verifyAndHold()}
           disabled={loading || code.length !== 6}
           className="mt-5 min-h-12 w-full rounded-lg bg-brand-600 font-bold text-white shadow hover:bg-brand-700 disabled:opacity-50"
         >
@@ -573,7 +609,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         </button>
         <button
           type="button"
-          onClick={cancelHoldAndGoBack}
+          onClick={() => { setChallengeId(""); setCode(""); setStep("FORM"); setError(""); }}
           disabled={loading}
           className="mt-3 flex items-center justify-center gap-1.5 w-full text-sm font-bold text-brand-700 hover:underline disabled:opacity-50"
         >
@@ -582,11 +618,12 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         <button type="button" onClick={() => void requestCode()} disabled={loading} className="mt-3 w-full text-sm font-bold text-brand-700 hover:underline disabled:opacity-50">
           Reenviar código
         </button>
-      </form>
-    );
+      </div>
+    </div>
+  ) : null;
 
   return (
-    <form key={`${step}-${paymentMethod}-${paymentPlan}`} id="payment-checkout-form" onSubmit={step === "PAYMENT_FORM" ? submitPaymentForm : requestCode} className="space-y-5">
+    <><form key={`${step}-${paymentMethod}-${paymentPlan}`} id="payment-checkout-form" onSubmit={step === "PAYMENT_FORM" ? submitPaymentForm : requestCode} className="space-y-5">
       {isEditing && step === "FORM" && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 shadow-sm">
           <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />
@@ -599,7 +636,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         </div>
       )}
 
-      {step === "FORM" && (<>
+      {(step === "FORM" || step === "OTP") && (<>
         <p className="rounded-xl bg-brand-50 p-4 text-sm text-brand-900">Primeiro confirmaremos seu contato. Os dados de pagamento serão pedidos depois.</p>
       <fieldset className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
         <legend className="px-2 font-black text-brand-900">1. Dados do titular da reserva</legend>
@@ -664,7 +701,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       </>)}
 
       {step === "PAYMENT_FORM" && (<>
-        <p className="rounded-xl bg-brand-50 p-4 text-sm text-brand-900">Contato confirmado. Escolha como pagar para concluir a reserva.</p>
+        <p className="rounded-xl bg-brand-50 p-4 text-sm text-brand-900">{customerStatus === "EXISTING" ? "Encontramos seu cadastro e confirmamos seu contato." : "Seu primeiro contato foi confirmado."} Escolha como pagar para concluir a reserva.</p>
       <fieldset className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
         <legend className="px-2 font-black text-brand-900">3. Opção de pagamento</legend>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
@@ -777,6 +814,17 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
           </label>
         </div>
 
+        {paymentMethod === "CREDIT_CARD" && <label className="mt-5 block max-w-xs text-sm font-bold text-ink-800">Parcelas
+          <select value={cardInstallments} onChange={event => setCardInstallments(Number(event.target.value))} className={inputClass}>
+            {Array.from({ length: 10 }, (_, index) => index + 1).map(value => <option key={value} value={value}>{value}x</option>)}
+          </select>
+          <span className="mt-1 block text-xs font-normal text-ink-500">Escolha a mesma parcela nos dados do cartão.</span>
+        </label>}
+
+        <div className="mt-5 rounded-xl bg-sand-50 p-4 text-sm text-ink-800" aria-live="polite">
+          {quoteLoading ? "Calculando total..." : quoteError ? <p className="text-red-700">{quoteError}</p> : quote ? <><p>Valor: {money.format(quote.base_cents / 100)}</p><p>Taxas: {money.format(quote.fee_cents / 100)}</p><strong className="mt-1 block text-lg text-brand-900">Total: {money.format(quote.total_cents / 100)}</strong></> : <p className="text-red-700">Cotação indisponível.</p>}
+        </div>
+
         {/* Conditional Address Fields exclusively for Boleto Bancário */}
         {paymentMethod === "BOLETO" && (
           <div className="mt-5 rounded-xl border border-brand-200 bg-brand-50/50 p-5">
@@ -859,20 +907,21 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
           </div>
         )}
 
-        {paymentMethod === "CREDIT_CARD" && <CardFields
-          key={`${paymentPlan}-${participantCount}`}
-          amount={paymentPlan === "DEPOSIT" ? depositTotal : fullTotal}
+        {paymentMethod === "CREDIT_CARD" && quote && <CardFields
+          key={`${paymentPlan}-${participantCount}-${cardInstallments}-${quote.total_cents}`}
+          amount={quote.total_cents / 100}
           email={identity.email}
           cpf={identity.cpf.replace(/\D/g, "")}
           onToken={(data) => void submitPayment(data)}
           onReadyChange={setCardReady}
+          onBinChange={(bin) => setCardBin((previous) => previous === bin ? previous : bin)}
         />}
       </fieldset>
 
         <button type="button" onClick={cancelHoldAndGoBack} disabled={loading} className="w-full text-sm font-bold text-brand-700 hover:underline">Voltar e corrigir dados</button>
       </>)}
 
-      {step === "FORM" && (
+      {step === "PAYMENT_FORM" && (
       <label className="flex items-start gap-2.5 rounded-2xl border border-ink-900/10 bg-white p-5 text-xs text-ink-700 shadow-sm">
         <input
           className="mt-0.5 accent-brand-600"
@@ -881,8 +930,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
           onChange={(event) => setTerms(event.target.checked)}
         />
         <span>
-          Li e concordo com os <strong>Termos da Expedição</strong>, normas de segurança do barco e a{" "}
-          <strong>Política de Cancelamento</strong>.
+          Li e concordo com o <Link href="/contrato" target="_blank" className="font-bold text-brand-700 underline">contrato de serviço</Link>, incluindo a política de cancelamento e reembolso, e confirmo o total exibido acima.
         </span>
       </label>
 
@@ -891,18 +939,18 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       {error && <p className="rounded-lg bg-red-50 p-3.5 text-sm font-semibold text-red-700">{error}</p>}
 
       <button
-        disabled={loading || (step === "PAYMENT_FORM" && paymentMethod === "CREDIT_CARD" && !cardReady)}
+        disabled={loading || (step === "PAYMENT_FORM" && (!quote || quoteLoading || !!quoteError || (paymentMethod === "CREDIT_CARD" && !cardReady)))}
         className="min-h-12 w-full rounded-xl bg-brand-600 px-6 font-black text-white shadow-md transition hover:bg-brand-700 disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {loading && <Loader2 className="size-4 animate-spin" />}
         {loading
           ? "Processando..."
-           : step === "FORM" ? "Enviar código de confirmação" : `Pagar ${paymentPlan === "DEPOSIT" ? money.format(depositTotal) : money.format(fullTotal)}`}
+           : step === "FORM" ? "Enviar código de confirmação" : `Pagar ${quote ? money.format(quote.total_cents / 100) : ""}`}
       </button>
 
       <p className="flex items-center justify-center gap-2 text-xs text-ink-500">
         <LockKeyhole className="size-4 text-brand-600" /> Seus dados estão seguros e o processo é 100% protegido.
       </p>
-    </form>
+    </form>{otpModal}</>
   );
 }

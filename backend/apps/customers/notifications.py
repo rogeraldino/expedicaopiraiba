@@ -118,6 +118,8 @@ def send_order_confirmation_email(*, reservation, payment) -> bool:
 
     expedition = reservation.expedition
     amount_reais = f"R$ {payment.amount_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    base_reais = f"R$ {(payment.base_amount_cents or payment.amount_cents) / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    fee_reais = f"R$ {payment.fee_amount_cents / 100:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     starts = expedition.starts_at.strftime("%d/%m/%Y") if hasattr(expedition.starts_at, "strftime") else str(expedition.starts_at)
 
     from apps.customers.services import create_customer_session_token
@@ -133,6 +135,8 @@ def send_order_confirmation_email(*, reservation, payment) -> bool:
         f"• Destino: {expedition.destination}\n"
         f"• Embarque: {starts}\n"
         f"• Vagas reservadas: {reservation.participant_count}\n"
+        f"• Valor do serviço: {base_reais}\n"
+        f"• Taxas: {fee_reais}\n"
         f"• Valor pago: {amount_reais} ({payment.get_method_display() if hasattr(payment, 'get_method_display') else payment.method})\n\n"
         f"Próximos Passos (Importante):\n"
         f"Para escolher o kit de bebidas dos participantes, preencher os dados dos pescadores e conferir o checklist de tralhas, acesse o link seguro da sua reserva:\n"

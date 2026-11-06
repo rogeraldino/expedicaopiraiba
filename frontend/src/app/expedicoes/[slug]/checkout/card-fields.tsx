@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type CardData = { token: string; paymentMethodId: string; installments: string };
+type CardData = { token: string; paymentMethodId: string; issuerId?: string; installments: string; amount: string };
 type CardForm = { getCardFormData: () => CardData };
 type MercadoPagoClient = { cardForm: (options: unknown) => CardForm };
 type MercadoPagoWindow = Window & { MercadoPago?: new (key: string) => MercadoPagoClient };
@@ -28,21 +28,24 @@ function loadSdk(): Promise<void> {
   return sdkPromise;
 }
 
-export function CardFields({ amount, email, cpf, onToken, onReadyChange }: {
+export function CardFields({ amount, email, cpf, onToken, onReadyChange, onBinChange }: {
   amount: number;
   email: string;
   cpf: string;
   onToken: (data: CardData) => void;
   onReadyChange: (ready: boolean) => void;
+  onBinChange?: (bin: string) => void;
 }) {
   const callback = useRef(onToken);
   const readyCallback = useRef(onReadyChange);
+  const binCallback = useRef(onBinChange);
   const [error, setError] = useState("");
 
   useEffect(() => {
     callback.current = onToken;
     readyCallback.current = onReadyChange;
-  }, [onToken, onReadyChange]);
+    binCallback.current = onBinChange;
+  }, [onToken, onReadyChange, onBinChange]);
 
   useEffect(() => {
     let active = true;
@@ -81,6 +84,9 @@ export function CardFields({ amount, email, cpf, onToken, onReadyChange }: {
           onSubmit: (event: Event) => {
             event.preventDefault();
             if (active) callback.current(cardForm.getCardFormData());
+          },
+          onBinChange: (bin: string) => {
+            if (active && /^\d{6,8}$/.test(bin)) binCallback.current?.(bin);
           },
         },
       });
