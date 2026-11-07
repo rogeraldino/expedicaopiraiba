@@ -4,7 +4,7 @@ import { ArrowRight, CalendarDays, MessageCircle } from "lucide-react";
 import type { Expedition } from "@/lib/api/expeditions";
 import { selectNextExpedition } from "@/lib/api/next-expedition";
 
-const price = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+const price = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const date = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long", year: "numeric", timeZone: "UTC" });
 
 export function HomeHero({ expeditions }: { expeditions: Expedition[] }) {
@@ -37,7 +37,7 @@ export function HomeHero({ expeditions }: { expeditions: Expedition[] }) {
             {next.cover_image_url && <img src={next.cover_image_url} alt="Capa da próxima expedição" className="mt-5 aspect-video w-full rounded-lg object-cover" />}
             <h2 className="mt-5 text-2xl font-black leading-tight">{next.name}</h2>
             <p className="mt-3 text-sm text-white/80">{date.format(new Date(`${next.starts_at}T00:00:00Z`))} a {date.format(new Date(`${next.ends_at}T00:00:00Z`))} · {next.destination}</p>
-            <p className="mt-4 text-lg font-bold text-gold-200">{price.format(next.price_per_person_cents / 100)} <span className="text-xs font-normal text-white/70">por pessoa</span></p>
+            <p className="mt-4 text-lg font-bold text-gold-200">{next.pix_full_price_cents != null ? price.format(next.pix_full_price_cents / 100) : "Consulte o valor final"} <span className="text-xs font-normal text-white/70">por pessoa · pagamento integral no Pix</span></p>
             <p className="mt-1 text-xs text-white/70">{next.available_slots} vaga{next.available_slots === 1 ? "" : "s"} disponível{next.available_slots === 1 ? "" : "is"}</p>
             <Link href={`/expedicoes/${next.slug}/checkout`} className="home-button home-button-gold mt-5 w-full justify-center">Reservar minha vaga <ArrowRight size={16} /></Link>
           </> : <p className="mt-5 text-sm text-white/80">Novas datas serão anunciadas em breve.</p>}

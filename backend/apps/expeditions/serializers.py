@@ -1,8 +1,11 @@
 from django.db.models import Q, Sum
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
 from apps.reservations.models import Reservation
+from apps.payments.models import FeeRate, Payment
+from apps.payments.pricing import gross_for_fee
 
 from .models import Expedition, Lodge, TargetSpecies
 
@@ -65,6 +68,8 @@ class ExpeditionSerializer(serializers.ModelSerializer):
     all_inclusive_package_name = serializers.CharField(source="all_inclusive_package.name", read_only=True, default=None)
     beverage_package_name = serializers.CharField(source="beverage_package.name", read_only=True, default=None)
     target_species = serializers.SerializerMethodField()
+    pix_full_price_cents = serializers.SerializerMethodField()
+    pix_full_price_two_people_cents = serializers.SerializerMethodField()
 
     class Meta:
         model = Expedition
@@ -81,6 +86,8 @@ class ExpeditionSerializer(serializers.ModelSerializer):
             "capacity",
             "available_slots",
             "price_per_person_cents",
+            "pix_full_price_cents",
+            "pix_full_price_two_people_cents",
             "deposit_cents",
             "summary",
             "cover_image_url",
@@ -97,6 +104,25 @@ class ExpeditionSerializer(serializers.ModelSerializer):
         held = Q(status__in=(Reservation.Status.HELD, Reservation.Status.AWAITING_PAYMENT), held_until__gt=timezone.now())
         occupied = expedition.reservations.filter(active | held).aggregate(total=Sum("participant_count"))["total"] or 0
         return max(expedition.capacity - occupied, 0)
+
+    def _pix_price(self, expedition, people):
+        if not hasattr(self, "_public_pix_rate"):
+            self._public_pix_rate = FeeRate.objects.filter(
+                method=Payment.Method.PIX, installments=1, active=True,
+            ).first()
+        rate = self._public_pix_rate
+        if not rate or (rate.valid_until and rate.valid_until <= timezone.now()):
+            return None
+        try:
+            return gross_for_fee(expedition.price_per_person_cents * people, rate.percent, rate.fixed_cents)
+        except ValidationError:
+            return None
+
+    def get_pix_full_price_cents(self, expedition):
+        return self._pix_price(expedition, 1)
+
+    def get_pix_full_price_two_people_cents(self, expedition):
+        return self._pix_price(expedition, 2)
 
     def get_target_species(self, expedition):
         links = expedition.expedition_species.select_related("species").order_by("-is_primary", "display_order")

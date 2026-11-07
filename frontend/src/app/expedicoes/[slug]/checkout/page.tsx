@@ -33,13 +33,11 @@ async function getExpedition(slug: string): Promise<ExpeditionData> {
   }
 }
 
-const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 });
 const shortDate = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "long" });
 
 export default async function CheckoutPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const expedition = await getExpedition(slug);
-  const isCasais = expedition.slug.includes("casais");
 
   return (
     <main className="min-h-screen bg-background text-ink-900">
@@ -95,17 +93,9 @@ export default async function CheckoutPage({ params }: { params: Promise<{ slug:
               </span>
               <strong className="text-xs">{expedition.duration_days} dias de pesca</strong>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-ink-500">{isCasais ? "Valor total casal" : "Valor por pessoa"}</span>
-              <strong className="text-base text-brand-900">
-                {money.format((expedition.price_per_person_cents * (isCasais ? 2 : 1)) / 100)}
-              </strong>
-            </div>
-            <div className="flex items-center justify-between text-brand-700">
-              <span>Sinal por pessoa</span>
-              <strong className="text-base">{money.format(expedition.deposit_cents / 100)}</strong>
-            </div>
           </div>
+
+          <p className="mt-4 text-xs text-ink-600">O valor final aparece ao escolher como pagar.</p>
 
           <div className="mt-5 flex items-center justify-between rounded-xl bg-brand-50 p-4 border border-brand-100">
             <span className="flex items-center gap-1.5 text-xs font-bold text-brand-900">

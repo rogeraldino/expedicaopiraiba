@@ -50,6 +50,15 @@ Permitir definir o preço-base da expedição e apresentar ao cliente o total ca
 
 **SPEC GAP externo de reembolso:** o financiamento do comprador é cobrado fora de `transaction_amount` e o estorno disponível no sistema usa o pagamento original. Falta comprovar com o Mercado Pago se os juros do comprador são devolvidos automaticamente em estorno integral e, se não, definir compensação ao consumidor e registro do valor adicional. Não declarar que o estorno da transação, sozinho, devolve esses juros. Esse ponto impede aceitar/publicar a política de reembolso como integral para crédito parcelado até resolução.
 
+## Exposição simplificada do preço — decisão do responsável em 07/11/2026
+
+Esta decisão posterior substitui apenas a **apresentação pública** de base, taxa, juros e total prevista nos itens 4, 6 e 9; cálculos, cotações, snapshots financeiros e auditoria permanecem como definidos acima.
+
+1. O card de uma expedição mostra o preço **integral para uma pessoa**, com tarifa Pix incluída e o meio identificado: `R$ X por pessoa · pagamento integral no Pix`. O destaque da próxima expedição e a página de detalhe usam a mesma referência. Para a página de casal, a referência agrega duas pessoas antes de aplicar a tarifa fixa uma única vez. O valor vem da tarifa Pix ativa do banco e da mesma fórmula da cotação, sem percentual duplicado no frontend. Se não houver tarifa Pix válida ou o preço for incalculável, a interface mostra `Consulte o valor final` sem preço-base disfarçado de preço final. A referência não promete ser o menor preço entre os meios.
+2. Após escolher plano e meio, a etapa de pagamento mostra **somente o total final da cobrança escolhida**. Em Pix/boleto, mostra um único total. Em cartão, antes de conhecer o BIN, pede o cartão; depois mostra total final do comprador e, se houver parcelamento, quantidade e valor das parcelas. Não mostra discriminação de preço-base, tarifa do vendedor ou juros ao comprador nessa etapa. O botão final confirma o mesmo total; a seleção de plano diferencia sinal e pagamento integral sem exibir base e taxas concorrentes. Informações de saldo de serviço podem aparecer separadamente da cobrança atual.
+3. A simplificação é de interface. Backend continua guardando base, tarifa, valor enviado ao MP, juros do comprador e total final no snapshot do aceite e no recibo, com a mesma validação antes da cobrança. Trocar meio, plano, quantidade de pessoas, BIN ou parcelas invalida cotação e exige novo aceite. Não há alteração de cálculo, meio de pagamento, transição de reserva nem reembolso.
+4. Esta mudança é **MEDIUM**: altera comunicação de preço, sem alterar o valor cobrado. Critérios: card/hero/detalhe exibem preço Pix calculado da tabela vigente; checkout exibe só total final e parcelas; API pública retorna preço de referência ou `null`; testes de serialização e build de interface passam. O responsável pediu publicação no sandbox e dispensou novos testes de transação para esta mudança visual.
+
 ## Dados e decisões registrados
 
 1. Razão social, CNPJ e endereço foram fornecidos pelo solicitante em 06/11/2026. O canal contratual usa o número informado pelo solicitante; a divergência do registro Meta foi comunicada como questão operacional separada.
@@ -71,7 +80,8 @@ A [página pública do checkout Mercado Pago](https://www.mercadopago.com.br/fer
 | Requisito | Código | Evidência |
 | --- | --- | --- |
 | Consulta MP e fallback controlado | `payments/gateways.py`, `payments/pricing.py`, CardForm | Validação de BIN/parcelas, bloqueio de total divergente; build frontend passou |
-| Crédito D0 com 4,98% do vendedor e juros separados do comprador | `payments/migrations/0010_credit_card_processing_rate.py`, `payments/gateways.py`, `payments/pricing.py`, `payments/services.py`, checkout e área do cliente | 111 testes Django no PostgreSQL, build Next.js, consulta real de 2x no MP teste; cobrança parcelada e reembolso reais ainda pendentes |
+| Crédito D0 com 4,98% do vendedor e juros separados do comprador | `payments/migrations/0010_credit_card_processing_rate.py`, `payments/gateways.py`, `payments/pricing.py`, `payments/services.py`, checkout e área do cliente | 113 testes Django no PostgreSQL, build Next.js, consulta real de 2x no MP teste; cobrança parcelada e reembolso reais ainda pendentes |
+| Exposição simplificada do preço | `expeditions/serializers.py`, card/hero/detalhe e checkout | Teste da API pública de preço Pix e tarifa fixa, build Next.js, smoke no sandbox; nenhuma nova cobrança de teste |
 | Preço/encargo/total validados no servidor | `payments/pricing.py`, `payments/services.py` | `tests_fees_refunds.py`: gross-up, cotação e recusa de quote diferente |
 | Snapshot financeiro imutável da reserva/pagamento | `reservations/services.py`, `payments/models.py` | `tests_fees_refunds.py`: snapshot, reembolso parcial e total; cliente consulta oferta e contrato |
 | Cadastro produto com foto/categoria/descrição | `operations/views.py`, `expeditions/models.py`, painel admin | `operations/tests.py`: criação/edição e validação da biblioteca de mídia |

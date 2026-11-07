@@ -272,7 +272,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       return setError("Confira os dados do cartão e tente novamente.");
     }
     if (paymentMethod === "CREDIT_CARD" && (Number(card?.installments) !== cardInstallments || (card?.amount && Math.round(Number(card.amount) * 100) !== quote.total_cents))) {
-      return setError(`Selecione ${cardInstallments}x no formulário seguro. O total confirmado é ${money.format(quote.total_cents / 100)}.`);
+      return setError("Os dados do cartão ou as parcelas mudaram. Confirme o valor final novamente.");
     }
     setLoading(true);
     try {
@@ -389,8 +389,6 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     }
   }
 
-  const depositTotal = (expedition.deposit_cents * participantCount) / 100;
-  const fullTotal = (expedition.price_per_person_cents * participantCount) / 100;
 
   if (step === "SUCCESS")
     return (
@@ -704,18 +702,18 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       {step === "PAYMENT_FORM" && (<>
         <p className="rounded-xl bg-brand-50 p-4 text-sm text-brand-900">{customerStatus === "EXISTING" ? "Encontramos seu cadastro e confirmamos seu contato." : "Seu primeiro contato foi confirmado."} Escolha como pagar para concluir a reserva.</p>
       <fieldset className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
-        <legend className="px-2 font-black text-brand-900">3. Opção de pagamento</legend>
+        <legend className="px-2 font-black text-brand-900">Como deseja pagar</legend>
         <div className="mt-2 grid gap-3 sm:grid-cols-2">
           {[
             [
               "DEPOSIT",
               "Sinal da Reserva",
-              `Sinal a partir de ${money.format(depositTotal)} (${money.format(expedition.deposit_cents / 100)}/pessoa) — à vista no PIX, cartão ou boleto. Saldo restante quitado até a data da viagem.`,
+              "Pague uma parte agora e quite o saldo antes da viagem.",
             ],
             [
               "FULL",
               "Pagamento Integral",
-              `Pague o valor total de ${money.format(fullTotal)} (${money.format(expedition.price_per_person_cents / 100)}/pessoa) à vista ou parcelado.`,
+              "Quite a viagem agora, à vista ou parcelado.",
             ],
           ].map(([value, title, copy]) => (
             <label
@@ -742,7 +740,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       </fieldset>
 
       <fieldset className="rounded-2xl border border-ink-900/10 bg-white p-6 shadow-sm">
-        <legend className="px-2 font-black text-brand-900">4. Método de pagamento</legend>
+        <legend className="px-2 font-black text-brand-900">Forma de pagamento</legend>
         <div className="mt-2 grid gap-3 sm:grid-cols-3">
           {/* PIX */}
           <label
@@ -823,7 +821,10 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         </label>}
 
         <div className="mt-5 rounded-xl bg-sand-50 p-4 text-sm text-ink-800" aria-live="polite">
-          {quoteLoading ? "Calculando total..." : quoteError ? <p className="text-red-700">{quoteError}</p> : quote ? <><p>Valor: {money.format(quote.base_cents / 100)}</p><p>Taxas: {money.format(quote.fee_cents / 100)}</p>{paymentMethod === "CREDIT_CARD" && <p>Valor com taxas, antes dos juros: {money.format(quote.total_cents / 100)}</p>}{paymentMethod === "CREDIT_CARD" && quote.buyer_total_cents != null && quote.buyer_financing_cents != null && quote.buyer_financing_cents > 0 && <><p>Juros do parcelamento: {money.format(quote.buyer_financing_cents / 100)}</p><p>{quote.installments} parcelas de {money.format((quote.buyer_installment_cents ?? 0) / 100)}</p></>}<strong className="mt-1 block text-lg text-brand-900">{paymentMethod === "CREDIT_CARD" && quote.buyer_total_cents == null ? "Informe o cartão para ver o total final" : `Total para você: ${money.format((quote.buyer_total_cents ?? quote.total_cents) / 100)}`}</strong></> : <p className="text-red-700">Cotação indisponível.</p>}
+          {quoteLoading ? "Calculando valor final..." : quoteError ? <p className="text-red-700">{quoteError}</p> : quote ? paymentMethod === "CREDIT_CARD" && quote.buyer_total_cents == null
+            ? <p className="font-bold text-brand-900">Informe o cartão para ver o valor final.</p>
+            : <><p className="text-xs font-bold uppercase tracking-wide text-ink-500">{paymentPlan === "DEPOSIT" ? "Sinal" : "Pagamento integral"} · {paymentMethod === "PIX" ? "Pix" : paymentMethod === "BOLETO" ? "Boleto" : "Cartão de crédito"}</p><strong className="mt-1 block text-2xl text-brand-900">{money.format((quote.buyer_total_cents ?? quote.total_cents) / 100)}</strong>{paymentMethod === "CREDIT_CARD" && quote.installments > 1 && quote.buyer_installment_cents != null && <p className="mt-1 text-sm font-semibold text-ink-600">{quote.installments} parcelas de {money.format(quote.buyer_installment_cents / 100)}</p>}</>
+            : <p className="text-red-700">Valor indisponível.</p>}
         </div>
 
         {/* Conditional Address Fields exclusively for Boleto Bancário */}

@@ -24,8 +24,8 @@ export function ExpeditionCard({ expedition }: { expedition: Expedition }) {
         <p className="mt-2 flex items-start gap-1.5 text-sm text-ink-muted"><MapPin size={16} className="mt-0.5 shrink-0 text-gold-600" />{expedition.lodge?.name || expedition.destination}</p>
         <p className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-semibold text-ink-muted"><span className="flex items-center gap-1.5"><CalendarDays size={16} className="text-gold-600" />{expedition.duration_days} dias</span><span className="flex items-center gap-1.5"><Users size={16} className="text-gold-600" />{soldOut ? "Esgotada" : `${expedition.available_slots} vagas`}</span></p>
         <div className="mt-auto border-t border-river-900/10 pt-4">
-          <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">Valor por pessoa</p>
-          <p className="mt-1 text-[clamp(1.45rem,2vw,1.8rem)] font-black leading-none text-river-900">{money.format(expedition.price_per_person_cents / 100)}</p>
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-muted">Pagamento integral no Pix · por pessoa</p>
+          <p className="mt-1 text-[clamp(1.45rem,2vw,1.8rem)] font-black leading-none text-river-900">{expedition.pix_full_price_cents != null ? money.format(expedition.pix_full_price_cents / 100) : "Consulte o valor final"}</p>
           <Link href={`/expedicoes/${expedition.slug}` as never} className="mt-4 flex min-h-11 items-center justify-between rounded-lg bg-river-900 px-4 text-sm font-black text-white transition-colors hover:bg-river-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-600">{isTest ? "Ver compra de teste" : soldOut ? "Ver detalhes" : "Ver oferta e reservar"} <ArrowUpRight size={18} /></Link>
         </div>
       </div>

@@ -10,6 +10,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.customers.models import Customer
+from apps.payments.models import FeeRate
 from apps.reservations.models import Reservation
 
 from .models import Amenity, BeveragePackageItem, Expedition, ExpeditionProduct, Lodge, Product, River, TargetSpecies
@@ -61,6 +62,25 @@ class PublishedExpeditionApiTests(TestCase):
         response = self.client.get("/api/expeditions/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.json()), 1)
+
+    def test_public_pix_price_tracks_active_rate_and_aggregates_fixed_fee(self):
+        self.expedition.price_per_person_cents = 200000
+        self.expedition.save(update_fields=["price_per_person_cents"])
+        price = self.client.get("/api/expeditions/").json()[0]
+        self.assertEqual(price["pix_full_price_cents"], 202000)
+        self.assertEqual(price["pix_full_price_two_people_cents"], 404000)
+
+        rate = FeeRate.objects.get(method="PIX", installments=1)
+        rate.fixed_cents = 349
+        rate.save(update_fields=["fixed_cents"])
+        updated = self.client.get("/api/expeditions/").json()[0]
+        self.assertGreater(updated["pix_full_price_cents"], price["pix_full_price_cents"])
+        self.assertLess(updated["pix_full_price_two_people_cents"], updated["pix_full_price_cents"] * 2)
+
+        rate.active = False
+        rate.save(update_fields=["active"])
+        unavailable = self.client.get("/api/expeditions/").json()[0]
+        self.assertIsNone(unavailable["pix_full_price_cents"])
 
     def test_trip_disappears_after_last_day_and_is_closed_by_job(self):
         today = timezone.localdate()

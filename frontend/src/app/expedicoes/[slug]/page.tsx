@@ -53,6 +53,8 @@ type ExpeditionData = {
   capacity: number;
   available_slots: number;
   price_per_person_cents: number;
+  pix_full_price_cents: number | null;
+  pix_full_price_two_people_cents: number | null;
   deposit_cents: number;
   summary: string;
   cover_image_url?: string;
@@ -137,12 +139,14 @@ export default async function ExpeditionDetails({ params }: { params: Promise<{ 
             <div className="flex items-end justify-between">
               <div>
                 <span className="text-xs font-bold uppercase text-ink-500">
-                  {isCasais ? "Valor total por casal:" : "Valor por pessoa:"}
+                  {isCasais ? "Pagamento integral no Pix por casal:" : "Pagamento integral no Pix por pessoa:"}
                 </span>
                 <p className="text-3xl font-black text-brand-800">
-                  {money.format((expedition.price_per_person_cents * (isCasais ? 2 : 1)) / 100)}
+                  {(isCasais ? expedition.pix_full_price_two_people_cents : expedition.pix_full_price_cents) != null
+                    ? money.format(((isCasais ? expedition.pix_full_price_two_people_cents : expedition.pix_full_price_cents) ?? 0) / 100)
+                    : "Consulte o valor final"}
                 </p>
-                <span className="text-xs font-bold text-brand-600">Sinal de reserva: {money.format(expedition.deposit_cents / 100)}</span>
+                <span className="text-xs font-bold text-brand-600">Sinal ou pagamento integral disponíveis no checkout</span>
               </div>
               <div className="text-right">
                 <span className="text-xs text-ink-500">Vagas disponíveis</span>

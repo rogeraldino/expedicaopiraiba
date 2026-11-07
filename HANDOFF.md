@@ -1,5 +1,12 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Exposição simplificada de preço — 07/11/2026
+
+- Decisão de Rodrigo: card/hero/detalhe mostram preço integral com taxa Pix identificada; na etapa de pagamento aparece apenas o total final do meio escolhido e, no crédito parcelado, o valor das parcelas. O cálculo de cobrança e os snapshots financeiros não mudam.
+- API pública adiciona referência Pix para uma e duas pessoas calculada pela tarifa ativa do banco e pela mesma fórmula da cotação. Sem tarifa válida, não apresenta o preço-base como total. Página de casal agrega duas pessoas antes de aplicar eventual tarifa fixa.
+- A validação desta mudança é visual e de leitura: teste direcionado da API, build/TypeScript, checagem de migrações e documentação. Não executar novos testes de transação por solicitação do responsável.
+- Plano de promoção da versão completa: `docs/PLANO_PUBLICACAO_PRECOS_2026-11-07.md`. Produção requer resolver o tratamento de juros externos no estorno e os gates da Constituição; não inferir aceite final do READY anterior.
+
 ## Crédito com juros do comprador — 07/11/2026 (sandbox validado)
 
 - Rodrigo informou as condições da conta Mercado Pago: recebimento D0, processamento do vendedor de 4,98% em 1–10x e financiamento parcelado cobrado separadamente do comprador. Pix 0,99% foi confirmado; boleto e possível tarifa fixa não foram confirmados.

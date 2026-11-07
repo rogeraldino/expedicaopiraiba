@@ -32,6 +32,8 @@ export type Expedition = {
   duration_days: number;
   available_slots: number;
   price_per_person_cents: number;
+  pix_full_price_cents: number | null;
+  pix_full_price_two_people_cents: number | null;
   summary: string;
   cover_image_url?: string;
   lodge?: Lodge | null;
