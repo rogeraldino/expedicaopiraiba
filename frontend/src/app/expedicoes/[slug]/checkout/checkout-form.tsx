@@ -11,7 +11,7 @@ const inputClass =
   "mt-2 h-11 w-full rounded-md border border-ink-900/15 bg-white px-3 text-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100";
 type Step = "FORM" | "OTP" | "PAYMENT_FORM" | "PAYMENT" | "SUCCESS";
 type Method = "PIX" | "CREDIT_CARD" | "BOLETO";
-type Quote = { quote_id: string; base_cents: number; fee_cents: number; total_cents: number; method: Method; installments: number; card_bin?: string; expires_at: string };
+type Quote = { quote_id: string; base_cents: number; fee_cents: number; total_cents: number; buyer_total_cents: number | null; buyer_financing_cents: number | null; buyer_installment_cents: number | null; method: Method; installments: number; card_bin?: string; expires_at: string };
 
 type ExpeditionProp = {
   id: string;
@@ -264,6 +264,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     if (quoteError) return setError(quoteError);
     if (!quote || new Date(quote.expires_at).getTime() <= Date.now()) return setError("A cotação expirou. Escolha o pagamento novamente.");
     if (paymentMethod === "CREDIT_CARD" && (!cardBin || quote.card_bin !== cardBin)) return setError("Aguarde a validação das parcelas para este cartão.");
+    if (paymentMethod === "CREDIT_CARD" && quote.buyer_total_cents == null) return setError("Aguarde o total final das parcelas deste cartão.");
     if (paymentMethod === "BOLETO" && (!isBoletoAvailable || !address.zip_code.trim() || !address.street_name.trim() || !address.street_number.trim() || !address.neighborhood.trim() || !address.city.trim() || !address.federal_unit.trim())) {
       return setError("Preencha o endereço completo para emitir o boleto.");
     }
@@ -822,7 +823,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         </label>}
 
         <div className="mt-5 rounded-xl bg-sand-50 p-4 text-sm text-ink-800" aria-live="polite">
-          {quoteLoading ? "Calculando total..." : quoteError ? <p className="text-red-700">{quoteError}</p> : quote ? <><p>Valor: {money.format(quote.base_cents / 100)}</p><p>Taxas: {money.format(quote.fee_cents / 100)}</p><strong className="mt-1 block text-lg text-brand-900">Total: {money.format(quote.total_cents / 100)}</strong></> : <p className="text-red-700">Cotação indisponível.</p>}
+          {quoteLoading ? "Calculando total..." : quoteError ? <p className="text-red-700">{quoteError}</p> : quote ? <><p>Valor: {money.format(quote.base_cents / 100)}</p><p>Taxas: {money.format(quote.fee_cents / 100)}</p>{paymentMethod === "CREDIT_CARD" && <p>Valor enviado ao Mercado Pago: {money.format(quote.total_cents / 100)}</p>}{paymentMethod === "CREDIT_CARD" && quote.buyer_total_cents != null && quote.buyer_financing_cents != null && quote.buyer_financing_cents > 0 && <><p>Juros do parcelamento: {money.format(quote.buyer_financing_cents / 100)}</p><p>{quote.installments} parcelas de {money.format((quote.buyer_installment_cents ?? 0) / 100)}</p></>}<strong className="mt-1 block text-lg text-brand-900">{paymentMethod === "CREDIT_CARD" && quote.buyer_total_cents == null ? "Informe o cartão para ver o total final" : `Total para você: ${money.format((quote.buyer_total_cents ?? quote.total_cents) / 100)}`}</strong></> : <p className="text-red-700">Cotação indisponível.</p>}
         </div>
 
         {/* Conditional Address Fields exclusively for Boleto Bancário */}
@@ -930,7 +931,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
           onChange={(event) => setTerms(event.target.checked)}
         />
         <span>
-          Li e concordo com o <Link href="/contrato" target="_blank" className="font-bold text-brand-700 underline">contrato de serviço</Link>, incluindo a política de cancelamento e reembolso, e confirmo o total exibido acima.
+          Li e concordo com o <Link href="/contrato" target="_blank" className="font-bold text-brand-700 underline">contrato de serviço</Link>, incluindo a política de cancelamento e reembolso, e confirmo o total final exibido acima.
         </span>
       </label>
 
@@ -939,13 +940,13 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       {error && <p className="rounded-lg bg-red-50 p-3.5 text-sm font-semibold text-red-700">{error}</p>}
 
       <button
-        disabled={loading || (step === "PAYMENT_FORM" && (!quote || quoteLoading || !!quoteError || (paymentMethod === "CREDIT_CARD" && !cardReady)))}
+        disabled={loading || (step === "PAYMENT_FORM" && (!quote || quoteLoading || !!quoteError || (paymentMethod === "CREDIT_CARD" && (!cardReady || quote.buyer_total_cents == null || !cardBin || quote.card_bin !== cardBin))))}
         className="min-h-12 w-full rounded-xl bg-brand-600 px-6 font-black text-white shadow-md transition hover:bg-brand-700 disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {loading && <Loader2 className="size-4 animate-spin" />}
         {loading
           ? "Processando..."
-           : step === "FORM" ? "Enviar código de confirmação" : `Pagar ${quote ? money.format(quote.total_cents / 100) : ""}`}
+           : step === "FORM" ? "Enviar código de confirmação" : `Pagar ${quote && quote.buyer_total_cents != null ? money.format(quote.buyer_total_cents / 100) : ""}`}
       </button>
 
       <p className="flex items-center justify-center gap-2 text-xs text-ink-500">

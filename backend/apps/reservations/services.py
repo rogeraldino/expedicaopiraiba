@@ -180,6 +180,10 @@ def create_hold(*, customer, expedition_slug, participant_names, payment_plan, r
         rate = FeeRate.objects.get(method=quote.method, installments=quote.installments)
         if quote.rate_snapshot["version"] in rate.revoked_versions:
             raise ValidationError("Cotação revogada. Confirme o valor novamente.")
+        if (getattr(settings, "PAYMENT_GATEWAY", "FAKE") == "MERCADOPAGO"
+                and quote.method == "CREDIT_CARD"
+                and (not quote.card_bin or quote.rate_snapshot.get("buyer_total_cents") is None)):
+            raise ValidationError("Informe o cartão e confirme o total final antes de reservar.")
     elif getattr(settings, "PAYMENT_GATEWAY", "FAKE") == "MERCADOPAGO":
         raise ValidationError("Confirme o valor e as taxas antes de reservar.")
     if getattr(settings, "PAYMENT_GATEWAY", "FAKE") == "MERCADOPAGO" and not contract_accepted:
@@ -218,7 +222,10 @@ def create_hold(*, customer, expedition_slug, participant_names, payment_plan, r
         accepted_quote_snapshot={
             "quote_id": str(quote.id), "base_cents": quote.base_cents, "fee_cents": quote.fee_cents,
             "total_cents": quote.total_cents, "method": quote.method,
-            "installments": quote.installments, "rate": quote.rate_snapshot,
+            "buyer_total_cents": quote.rate_snapshot.get("buyer_total_cents", quote.total_cents),
+            "buyer_financing_cents": quote.rate_snapshot.get("buyer_financing_cents", 0),
+            "buyer_installment_cents": quote.rate_snapshot.get("buyer_installment_cents"),
+            "installments": quote.installments, "card_bin": quote.card_bin, "rate": quote.rate_snapshot,
         } if quote and contract_accepted else {},
     )
     if quote:

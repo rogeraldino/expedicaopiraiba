@@ -123,7 +123,11 @@ def _create_reservation_payment_with_intent(
                 reservation.accepted_quote_snapshot = {
                     "quote_id": str(quote.id), "base_cents": quote.base_cents,
                     "fee_cents": quote.fee_cents, "total_cents": quote.total_cents,
-                    "method": quote.method, "installments": quote.installments, "rate": quote.rate_snapshot,
+                    "buyer_total_cents": quote.rate_snapshot.get("buyer_total_cents", quote.total_cents),
+                    "buyer_financing_cents": quote.rate_snapshot.get("buyer_financing_cents", 0),
+                    "buyer_installment_cents": quote.rate_snapshot.get("buyer_installment_cents"),
+                    "method": quote.method, "installments": quote.installments, "card_bin": quote.card_bin,
+                    "rate": quote.rate_snapshot,
                 }
                 reservation.contract_accepted_at = timezone.now()
                 reservation.save(update_fields=["accepted_quote_snapshot", "contract_accepted_at", "updated_at"])
@@ -131,12 +135,17 @@ def _create_reservation_payment_with_intent(
             raise ValidationError("Informe os dados do cartão.")
         gateway = get_payment_gateway()
         if method == Payment.Method.CREDIT_CARD and isinstance(gateway, MercadoPagoPaymentGateway):
-            card_bin = gateway.verify_card_installments(
+            terms = gateway.verify_card_installments(
                 card_token=card_token, payment_method_id=payment_method_id,
                 issuer_id=issuer_id, installments=installments, amount_cents=amount,
             )
+            card_bin = terms["bin_digits"]
             if quote.card_bin and not (quote.card_bin.startswith(card_bin) or card_bin.startswith(quote.card_bin)):
                 raise ValidationError("O cartão mudou. Confirme novamente o valor e as parcelas.")
+            if not quote.card_bin or terms["buyer_total_cents"] != quote.rate_snapshot.get("buyer_total_cents"):
+                raise ValidationError("O total das parcelas mudou. Confirme novamente o valor antes de pagar.")
+            if any(terms[key] != quote.rate_snapshot.get(key) for key in ("buyer_installment_cents", "payment_method_id", "issuer_id")):
+                raise ValidationError("A opção do cartão mudou. Confirme novamente as parcelas antes de pagar.")
             quote.card_bin = card_bin
             quote.save(update_fields=["card_bin"])
         if method == Payment.Method.BOLETO:

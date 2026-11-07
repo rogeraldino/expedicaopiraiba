@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import json
 import logging
@@ -118,16 +119,28 @@ class MercadoPagoPaymentGateway:
                 **({"issuer.id": issuer_id} if issuer_id else {}),
             })
             options = read(f"/v1/payment_methods/installments?{params}")
-            totals = []
+            terms = set()
             for group in options if isinstance(options, list) else []:
                 if payment_method_id and group.get("payment_method_id") != payment_method_id:
                     continue
+                if issuer_id and str((group.get("issuer") or {}).get("id", "")) != str(issuer_id):
+                    continue
                 for cost in group.get("payer_costs") or []:
                     if cost.get("installments") == installments:
-                        totals.append(round(float(cost["total_amount"]) * 100))
-            if not totals or any(total != amount_cents for total in totals):
-                raise ValidationError("O Mercado Pago informou parcelas ou total diferentes. Escolha outra opção e confirme o valor novamente.")
-            return str(bin_digits)
+                        try:
+                            total = int((Decimal(str(cost["total_amount"])) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+                        except (KeyError, InvalidOperation, TypeError, ValueError):
+                            raise ValidationError("O Mercado Pago não informou o total desta parcela.")
+                        try:
+                            per_installment = int((Decimal(str(cost["installment_amount"])) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+                        except (KeyError, InvalidOperation, TypeError, ValueError):
+                            raise ValidationError("O Mercado Pago não informou o valor da parcela.")
+                        terms.add((str(group.get("payment_method_id") or ""), str((group.get("issuer") or {}).get("id") or ""), total, per_installment))
+            if len(terms) != 1 or next(iter(terms), ("", "", 0, 0))[2] < amount_cents:
+                raise ValidationError("O Mercado Pago informou parcelas ou totais diferentes. Escolha outra opção e confirme o valor novamente.")
+            method, issuer, buyer_total, per_installment = terms.pop()
+            return {"bin_digits": str(bin_digits), "payment_method_id": method, "issuer_id": issuer,
+                    "buyer_total_cents": buyer_total, "buyer_installment_cents": per_installment}
         except ValidationError:
             raise
         except Exception as error:

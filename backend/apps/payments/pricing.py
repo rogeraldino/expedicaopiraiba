@@ -37,11 +37,15 @@ def rate_payload(rate):
 
 
 def quote_payload(quote):
+    buyer_total = quote.rate_snapshot.get("buyer_total_cents", quote.total_cents if quote.method != Payment.Method.CREDIT_CARD else None)
     return {
         "quote_id": str(quote.id),
         "base_cents": quote.base_cents,
         "fee_cents": quote.fee_cents,
         "total_cents": quote.total_cents,
+        "buyer_total_cents": buyer_total,
+        "buyer_financing_cents": buyer_total - quote.total_cents if buyer_total is not None else None,
+        "buyer_installment_cents": quote.rate_snapshot.get("buyer_installment_cents"),
         "method": quote.method,
         "installments": quote.installments,
         "card_bin": quote.card_bin,
@@ -78,11 +82,19 @@ def create_fee_quote(*, customer, expedition_slug, participant_names, payment_pl
         if reservation.payment_intents.filter(status__in=("SUBMITTING", "UNKNOWN")).exists():
             raise ValidationError("Uma cobrança anterior ainda está em verificação.")
     gross = gross_for_fee(base, rate.percent, rate.fixed_cents)
+    rate_snapshot = rate_payload(rate)
+    if method == Payment.Method.CREDIT_CARD and getattr(settings, "PAYMENT_GATEWAY", "FAKE") != "MERCADOPAGO":
+        rate_snapshot.update({"buyer_total_cents": gross, "buyer_financing_cents": 0, "buyer_installment_cents": gross // installments})
     if method == Payment.Method.CREDIT_CARD and card_bin and getattr(settings, "PAYMENT_GATEWAY", "FAKE") == "MERCADOPAGO":
         from .gateways import MercadoPagoPaymentGateway
-        MercadoPagoPaymentGateway().verify_quote_installments(
+        terms = MercadoPagoPaymentGateway().verify_quote_installments(
             bin_digits=card_bin, installments=installments, amount_cents=gross,
         )
+        rate_snapshot["buyer_total_cents"] = terms["buyer_total_cents"]
+        rate_snapshot["buyer_financing_cents"] = terms["buyer_total_cents"] - gross
+        rate_snapshot["buyer_installment_cents"] = terms["buyer_installment_cents"]
+        rate_snapshot["payment_method_id"] = terms["payment_method_id"]
+        rate_snapshot["issuer_id"] = terms["issuer_id"]
     quote = FeeQuote.objects.create(
         customer=customer,
         reservation=reservation,
@@ -95,7 +107,7 @@ def create_fee_quote(*, customer, expedition_slug, participant_names, payment_pl
         base_cents=base,
         fee_cents=gross-base,
         total_cents=gross,
-        rate_snapshot=rate_payload(rate),
+        rate_snapshot=rate_snapshot,
         expires_at=timezone.now() + timedelta(minutes=10),
     )
     return quote

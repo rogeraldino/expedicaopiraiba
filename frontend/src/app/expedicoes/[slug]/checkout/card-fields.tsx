@@ -86,7 +86,7 @@ export function CardFields({ amount, email, cpf, onToken, onReadyChange, onBinCh
             if (active) callback.current(cardForm.getCardFormData());
           },
           onBinChange: (bin: string) => {
-            if (active && /^\d{6,8}$/.test(bin)) binCallback.current?.(bin);
+            if (active) binCallback.current?.(/^\d{6,8}$/.test(bin) ? bin : "");
           },
         },
       });

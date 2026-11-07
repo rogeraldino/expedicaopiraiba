@@ -1,5 +1,6 @@
 from datetime import timedelta
 from decimal import Decimal
+import json
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -11,8 +12,8 @@ from apps.expeditions.models import Expedition
 from apps.reservations.models import Reservation
 from apps.reservations.services import create_hold, transition_reservation
 
-from .gateways import GatewayUncertainError
-from .models import FeeRate, Payment, PaymentIntent, RefundRequest
+from .gateways import GatewayPayment, GatewayUncertainError, MercadoPagoPaymentGateway
+from .models import FeeRate, FeeRateAudit, Payment, PaymentIntent, RefundRequest
 from .pricing import create_fee_quote, gross_for_fee
 from .refunds import request_refund, submit_refund
 from .services import create_reservation_payment, process_paid_event, simulate_paid_event
@@ -41,7 +42,91 @@ class FeeAndRefundTests(TestCase):
         rate.percent = Decimal("8.0000")
         rate.version += 1
         rate.save()
-        self.assertEqual(quote.rate_snapshot["percent"], "7.5100")
+        self.assertEqual(quote.rate_snapshot["percent"], "4.9800")
+
+    def test_credit_rate_migration_revokes_old_quotes_and_audits_change(self):
+        rate = FeeRate.objects.get(method="CREDIT_CARD", installments=2)
+        self.assertEqual(rate.percent, Decimal("4.9800"))
+        self.assertIn(1, rate.revoked_versions)
+        self.assertEqual(rate.version, 2)
+        audit = FeeRateAudit.objects.get(rate=rate)
+        self.assertEqual(audit.before["percent"], "7.5100")
+        self.assertEqual(audit.after["percent"], "4.9800")
+
+    def test_buyer_financing_is_separate_from_merchant_charge(self):
+        with override_settings(PAYMENT_GATEWAY="MERCADOPAGO"):
+            with patch.object(MercadoPagoPaymentGateway, "verify_quote_installments", return_value={
+                "bin_digits": "503143", "payment_method_id": "master", "issuer_id": "24",
+                "buyer_total_cents": 230774, "buyer_installment_cents": 115387,
+            }):
+                quote = create_fee_quote(
+                    customer=self.customer, expedition_slug=self.expedition.slug,
+                    participant_names=["Pescador Teste"], payment_plan="FULL",
+                    method="CREDIT_CARD", installments=2, card_bin="503143",
+                )
+        self.assertEqual(quote.total_cents, 210483)
+        self.assertEqual(quote.fee_cents, 10483)
+        self.assertEqual(quote.rate_snapshot["buyer_total_cents"], 230774)
+        self.assertEqual(quote.rate_snapshot["buyer_financing_cents"], 20291)
+        self.assertEqual(quote.rate_snapshot["payment_method_id"], "master")
+
+    def test_provider_terms_reject_ambiguous_totals(self):
+        response = [{"payment_method_id": "master", "issuer": {"id": "24"}, "payer_costs": [
+            {"installments": 2, "total_amount": 2307.74, "installment_amount": 1153.87},
+            {"installments": 2, "total_amount": 2308.00, "installment_amount": 1154.00},
+        ]}]
+        with patch("urllib.request.urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(response).encode()
+            with self.assertRaises(ValidationError):
+                MercadoPagoPaymentGateway("TEST-redacted").verify_quote_installments(
+                    bin_digits="503143", installments=2, amount_cents=210483,
+                )
+
+    def test_card_terms_must_match_before_any_provider_charge(self):
+        terms = {"bin_digits": "503143", "payment_method_id": "master", "issuer_id": "24",
+                 "buyer_total_cents": 230774, "buyer_installment_cents": 115387}
+        with override_settings(PAYMENT_GATEWAY="MERCADOPAGO", MERCADOPAGO_ACCESS_TOKEN="TEST-redacted"):
+            with patch.object(MercadoPagoPaymentGateway, "verify_quote_installments", return_value=terms):
+                quote = create_fee_quote(
+                    customer=self.customer, expedition_slug=self.expedition.slug,
+                    participant_names=["Pescador Teste"], payment_plan="FULL",
+                    method="CREDIT_CARD", installments=2, card_bin="503143",
+                )
+            reservation = create_hold(
+                customer=self.customer, expedition_slug=self.expedition.slug,
+                participant_names=["Pescador Teste"], payment_plan="FULL",
+                quote_id=quote.id, contract_accepted=True,
+            )
+            with patch.object(MercadoPagoPaymentGateway, "verify_card_installments") as verify:
+                with patch.object(MercadoPagoPaymentGateway, "create_card_payment") as charge:
+                    for changed in (
+                        {"buyer_total_cents": 230775}, {"buyer_installment_cents": 115388},
+                        {"payment_method_id": "visa"}, {"issuer_id": "25"},
+                        {"bin_digits": "411111"},
+                    ):
+                        with self.subTest(changed=changed):
+                            verify.return_value = {**terms, **changed}
+                            with self.assertRaises(ValidationError):
+                                create_reservation_payment(
+                                    customer=self.customer, reservation_id=reservation.id,
+                                    method="CREDIT_CARD", card_token="valid-mp-token",
+                                    installments=2, payment_method_id="master", issuer_id="24",
+                                    quote_id=quote.id, contract_accepted=True,
+                                )
+                            self.assertFalse(PaymentIntent.objects.filter(reservation=reservation).exists())
+                            charge.assert_not_called()
+                    verify.return_value = terms
+                    charge.return_value = GatewayPayment(external_id="mp-test-card-terms", status="PENDING",
+                                                         method="CREDIT_CARD", provider="MERCADOPAGO", installments=2)
+                    payment = create_reservation_payment(
+                        customer=self.customer, reservation_id=reservation.id,
+                        method="CREDIT_CARD", card_token="valid-mp-token", installments=2,
+                        payment_method_id="master", issuer_id="24", quote_id=quote.id,
+                        contract_accepted=True,
+                    )
+                    self.assertEqual(payment.amount_cents, 210483)
+                    self.assertEqual(payment.fee_snapshot["buyer_total_cents"], 230774)
+                    charge.assert_called_once()
 
     def test_timeout_keeps_durable_intent_and_recovers_pending_pix(self):
         quote = create_fee_quote(customer=self.customer, expedition_slug=self.expedition.slug,
