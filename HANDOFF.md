@@ -1,12 +1,13 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
-## Crédito com juros do comprador — 07/11/2026 (sandbox em preparação)
+## Crédito com juros do comprador — 07/11/2026 (sandbox validado)
 
 - Rodrigo informou as condições da conta Mercado Pago: recebimento D0, processamento do vendedor de 4,98% em 1–10x e financiamento parcelado cobrado separadamente do comprador. Pix 0,99% foi confirmado; boleto e possível tarifa fixa não foram confirmados.
 - A correção usa 4,98% para a cobrança enviada ao MP em qualquer parcela e obtém o total final e valor de cada parcela diretamente de `payer_costs` para BIN/meio/emissor. O checkout exibe o total do comprador antes do aceite, guarda os dois valores no snapshot e revalida a opção antes da cobrança. Mudança de total, cartão ou emissor bloqueia a cobrança.
 - Migração `payments.0010` substitui a tabela antiga de crédito e revoga as versões anteriores para invalidar cotações ainda abertas. Mantém a indicação de estimativa para o custo total enquanto eventual valor fixo não estiver confirmado.
 - Evidência local: 113 testes Django no PostgreSQL sandbox, build Next.js, `makemigrations --check`, `make check-docs` e `git diff --check` passaram. Consulta somente de leitura ao MP com BIN de teste `503143`, 2x e cobrança de R$ 2.104,83 retornou total do comprador R$ 2.307,74 (2 × R$ 1.153,87). Ponytail independente PASS para publicação controlada no sandbox.
-- Pendente: publicação e smoke no sandbox, compra parcelada de teste com token e confirmação do tratamento dos juros do comprador em estorno. A spec registra esse último item como `SPEC GAP`; não afirmar restituição integral dos juros antes de comprovar o comportamento do MP.
+- Release inicial no sandbox `20261107T164835Z-7518c75c7f66`: backend/frontend saudáveis, endpoints de saúde e contrato HTTP 200, migração aplicada (1–10x em 4,98%, versões anteriores revogadas e 10 registros de auditoria), consulta real de 2x via credencial TEST. Produção permaneceu na imagem anterior. Refinamento textual posterior conserva os valores e deve ser promovido em novo snapshot.
+- Pendente: compra parcelada de teste com token e confirmação do tratamento dos juros do comprador em estorno. A spec registra esse último item como `SPEC GAP`; não afirmar restituição integral dos juros antes de comprovar o comportamento do MP.
 
 ## Expiração de expedições e cards — 06/11/2026
 
