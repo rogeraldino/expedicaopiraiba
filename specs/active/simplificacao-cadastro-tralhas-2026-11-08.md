@@ -1,6 +1,6 @@
 # Simplificação do cadastro de tralhas — 08/11/2026
 
-**Estado:** IN_PROGRESS · **Risco:** MEDIUM · **Solicitante:** Rodrigo
+**Estado:** VALIDATED no sandbox · **Risco:** MEDIUM · **Solicitante:** Rodrigo · **Release:** `20261108T015957Z-8af82a25f422`
 
 ## Problema e resultado
 
@@ -25,6 +25,8 @@ O cadastro de tralhas exibe categorias com exemplos de peixes e pede especifica�
 | Cinco nomes curtos em todos os pontos | `GearCategory`, migração de choices, filtro e modal do admin | Teste de API para `category_display`, build e inspeção visual |
 | Cadastro sem JSON e preservação de legado | Modal sem campo/validação/payload `technical_specs`; serializer mantém campo legado | Teste de PATCH que preserva especificações existentes; busca no frontend |
 | Fluxo comercial preservado | Códigos de categoria e campos comerciais sem alteração | Suíte relevante de operações e `make check-docs` |
+
+**Evidência final:** 115 testes Django no PostgreSQL; build Next.js/TypeScript; `makemigrations --check --dry-run` sem alterações; `make check-docs`; modal no HTTPS do sandbox com cinco rótulos novos e sem JSON ou presets. O lint do arquivo do admin manteve os 6 erros e 12 avisos anteriores, sem ocorrência nova nesta mudança.
 
 ## Falhas e atualização
 

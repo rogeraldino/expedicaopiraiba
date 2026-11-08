@@ -4,7 +4,8 @@
 
 - Cinco códigos de categoria preservados, com rótulos curtos e claros no modelo, API, filtro e formulário: varas/carretilhas pesadas, varas/carretilhas leves e médias, acessórios de pesca, roupas/proteção e iscas/atrativos. A migração `expeditions.0018` altera somente choices; não reclassifica produtos.
 - Modal de cadastro sem presets, exemplos de produto ou editor JSON. O payload não envia `technical_specs`; valores legados permanecem no banco/API e são preservados ao editar. Foto, descrição, preços, estoque e modalidade continuam disponíveis.
-- Validação: 115 testes Django no PostgreSQL do sandbox, build/TypeScript, `makemigrations --check --dry-run`, comparação de lint antes/depois (6 erros e 12 avisos preexistentes, nenhum novo) e inspeção visual do modal no navegador. Especificação: `specs/active/simplificacao-cadastro-tralhas-2026-11-08.md`. Publicação sandbox pendente neste registro.
+- Validação: 115 testes Django no PostgreSQL do sandbox, build/TypeScript, `makemigrations --check --dry-run`, comparação de lint antes/depois (6 erros e 12 avisos preexistentes, nenhum novo) e inspeção visual do modal no navegador. Especificação: `specs/active/simplificacao-cadastro-tralhas-2026-11-08.md`.
+- Publicado somente no sandbox na release `20261108T015957Z-8af82a25f422`, com migração `expeditions.0018` aplicada. Backend/frontend saudáveis, API/admin HTTP 200; no HTTPS do sandbox o modal exibiu as cinco categorias novas e não exibiu JSON nem modelos prontos. Produção permaneceu na imagem anterior.
 
 ## Campos seguros do cartão após trocar plano ou meio — 08/11/2026
 
