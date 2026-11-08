@@ -166,6 +166,7 @@ class FeeQuoteView(APIView):
                 installments=serializer.validated_data["installments"],
                 reservation_id=serializer.validated_data.get("reservation_id"),
                 card_bin=serializer.validated_data.get("card_bin", ""),
+                issuer_id=serializer.validated_data.get("issuer_id", ""),
             )
         except DjangoValidationError as error:
             return Response({"detail": error.messages}, status=400)

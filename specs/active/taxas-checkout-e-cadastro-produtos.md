@@ -59,6 +59,13 @@ Esta decisão posterior substitui apenas a **apresentação pública** de base, 
 3. A simplificação é de interface. Backend continua guardando base, tarifa, valor enviado ao MP, juros do comprador e total final no snapshot do aceite e no recibo, com a mesma validação antes da cobrança. Trocar meio, plano, quantidade de pessoas, BIN ou parcelas invalida cotação e exige novo aceite. Não há alteração de cálculo, meio de pagamento, transição de reserva nem reembolso.
 4. Esta mudança é **MEDIUM**: altera comunicação de preço, sem alterar o valor cobrado. Critérios: card/hero/detalhe exibem preço Pix calculado da tabela vigente; checkout exibe só total final e parcelas; API pública retorna preço de referência ou `null`; testes de serialização e build de interface passam. O responsável pediu publicação no sandbox e dispensou novos testes de transação para esta mudança visual.
 
+## Correção da etapa de cartão — 08/11/2026
+
+1. A etapa de cartão apresenta uma única escolha de parcelas, preenchida pelo SDK após reconhecer o cartão. Número, validade e CVV ficam nos campos seguros do Mercado Pago; trocar plano ou meio invalida BIN, emissor, parcelas e aceite anteriores. O formulário seguro permanece montado enquanto só a quantidade de parcelas muda, pois a cobrança enviada ao provedor mantém o mesmo valor para 1–10x nesta configuração.
+2. CPF e e-mail verificados na primeira etapa são reutilizados no CardForm e não são pedidos novamente. O tipo de documento é CPF. O emissor fica oculto quando há uma única opção e só aparece se o provedor oferecer mais de uma. Nesse caso, o emissor escolhido integra a cotação e a conferência anterior à cobrança.
+3. O total final do comprador e o valor das parcelas aparecem imediatamente antes do aceite e do botão de pagamento. Sem BIN, parcelas reconhecidas ou total único confiável, o pagamento permanece bloqueado. Nenhuma cobrança é disparada pela escolha ou pelo preenchimento dos campos.
+4. Critérios de validação: build e lint do frontend, teste de cotação com dois emissores no PostgreSQL, navegador com SDK e requisições de identificação/cotação simuladas sem POST de pagamento, Ponytail independente. A prova de tokenização/cobrança real permanece pendente porque o par de credenciais de teste do sandbox não está validado, conforme `HANDOFF.md`.
+
 ## Dados e decisões registrados
 
 1. Razão social, CNPJ e endereço foram fornecidos pelo solicitante em 06/11/2026. O canal contratual usa o número informado pelo solicitante; a divergência do registro Meta foi comunicada como questão operacional separada.
@@ -82,6 +89,7 @@ A [página pública do checkout Mercado Pago](https://www.mercadopago.com.br/fer
 | Consulta MP e fallback controlado | `payments/gateways.py`, `payments/pricing.py`, CardForm | Validação de BIN/parcelas, bloqueio de total divergente; build frontend passou |
 | Crédito D0 com 4,98% do vendedor e juros separados do comprador | `payments/migrations/0010_credit_card_processing_rate.py`, `payments/gateways.py`, `payments/pricing.py`, `payments/services.py`, checkout e área do cliente | 113 testes Django no PostgreSQL, build Next.js, consulta real de 2x no MP teste; cobrança parcelada e reembolso reais ainda pendentes |
 | Exposição simplificada do preço | `expeditions/serializers.py`, card/hero/detalhe e checkout | Teste da API pública de preço Pix e tarifa fixa, build Next.js, smoke no sandbox; nenhuma nova cobrança de teste |
+| Cartão com uma seleção de parcelas e emissor condicional | `checkout/card-fields.tsx`, `checkout/checkout-form.tsx`, `payments/pricing.py` | 14 testes `FeeAndRefundTests` no PostgreSQL; browser com SDK e cotações interceptadas; Ponytail PASS sem cobrança real |
 | Preço/encargo/total validados no servidor | `payments/pricing.py`, `payments/services.py` | `tests_fees_refunds.py`: gross-up, cotação e recusa de quote diferente |
 | Snapshot financeiro imutável da reserva/pagamento | `reservations/services.py`, `payments/models.py` | `tests_fees_refunds.py`: snapshot, reembolso parcial e total; cliente consulta oferta e contrato |
 | Cadastro produto com foto/categoria/descrição | `operations/views.py`, `expeditions/models.py`, painel admin | `operations/tests.py`: criação/edição e validação da biblioteca de mídia |

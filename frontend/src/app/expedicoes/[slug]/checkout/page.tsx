@@ -65,7 +65,7 @@ export default async function CheckoutPage({ params }: { params: Promise<{ slug:
           </div>
           <h1 className="mt-2 text-4xl font-black sm:text-5xl text-brand-900">Finalizar Reserva</h1>
           <p className="mb-7 mt-2 text-ink-600">
-            Informe seus dados para proteger suas vagas por 15 minutos com lock transacional.
+            Preencha seus dados para reservar suas vagas. Você poderá conferir o valor final antes de pagar.
           </p>
           <CheckoutForm expedition={expedition} />
         </div>

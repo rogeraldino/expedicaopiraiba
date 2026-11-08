@@ -11,7 +11,7 @@ const inputClass =
   "mt-2 h-11 w-full rounded-md border border-ink-900/15 bg-white px-3 text-sm outline-none transition focus:border-brand-600 focus:ring-2 focus:ring-brand-100";
 type Step = "FORM" | "OTP" | "PAYMENT_FORM" | "PAYMENT" | "SUCCESS";
 type Method = "PIX" | "CREDIT_CARD" | "BOLETO";
-type Quote = { quote_id: string; base_cents: number; fee_cents: number; total_cents: number; buyer_total_cents: number | null; buyer_financing_cents: number | null; buyer_installment_cents: number | null; method: Method; installments: number; card_bin?: string; expires_at: string };
+type Quote = { quote_id: string; base_cents: number; fee_cents: number; total_cents: number; buyer_total_cents: number | null; buyer_financing_cents: number | null; buyer_installment_cents: number | null; method: Method; installments: number; card_bin?: string; issuer_id?: string; expires_at: string };
 
 type ExpeditionProp = {
   id: string;
@@ -61,7 +61,9 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   const [paymentPlan, setPaymentPlan] = useState("DEPOSIT");
   const [paymentMethod, setPaymentMethod] = useState<Method>("PIX");
   const [cardInstallments, setCardInstallments] = useState(1);
+  const [cardInstallmentsSelected, setCardInstallmentsSelected] = useState(false);
   const [cardBin, setCardBin] = useState("");
+  const [cardIssuerId, setCardIssuerId] = useState("");
   const [quote, setQuote] = useState<Quote | null>(null);
   const [quoteError, setQuoteError] = useState("");
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -87,16 +89,37 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   const isBoletoAvailable = daysUntilDeparture > 7;
   const [isEditing, setIsEditing] = useState(false);
 
+  function resetCardSelection() {
+    setCardInstallmentsSelected(false);
+    setCardInstallments(1);
+    setCardBin("");
+    setCardIssuerId("");
+  }
+
+  function changePaymentPlan(plan: string) {
+    if (plan === paymentPlan) return;
+    resetCardSelection();
+    setPaymentPlan(plan);
+  }
+
+  function changePaymentMethod(method: Method) {
+    if (method === paymentMethod) return;
+    resetCardSelection();
+    setPaymentMethod(method);
+  }
+
   useEffect(() => {
     if (step !== "PAYMENT_FORM" || !verificationToken) return;
     const controller = new AbortController();
+    // A new quote invalidates the previous acceptance immediately.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTerms(false);
     setQuoteLoading(true);
     const task = window.setTimeout(async () => {
       setQuoteError(""); setQuoteLoading(true);
       try {
         const response = await fetch(`${api}/payments/quote/`, { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal,
-          body: JSON.stringify({ verification_token: verificationToken, reservation_id: reservationId || undefined, expedition_slug: expedition.slug, participant_names: participants, payment_plan: paymentPlan, method: paymentMethod, installments: paymentMethod === "CREDIT_CARD" ? cardInstallments : 1, card_bin: paymentMethod === "CREDIT_CARD" ? cardBin : "" }),
+          body: JSON.stringify({ verification_token: verificationToken, reservation_id: reservationId || undefined, expedition_slug: expedition.slug, participant_names: participants, payment_plan: paymentPlan, method: paymentMethod, installments: paymentMethod === "CREDIT_CARD" ? cardInstallments : 1, card_bin: paymentMethod === "CREDIT_CARD" ? cardBin : "", issuer_id: paymentMethod === "CREDIT_CARD" ? cardIssuerId : "" }),
         });
         const data = await response.json();
         if (!response.ok) throw data;
@@ -105,7 +128,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       finally { if (!controller.signal.aborted) setQuoteLoading(false); }
     }, 150);
     return () => { window.clearTimeout(task); controller.abort(); };
-  }, [step, verificationToken, reservationId, expedition.slug, participants, paymentPlan, paymentMethod, cardInstallments, cardBin]);
+  }, [step, verificationToken, reservationId, expedition.slug, participants, paymentPlan, paymentMethod, cardInstallments, cardBin, cardIssuerId]);
 
   function updateCount(count: number) {
     setParticipantCount(count);
@@ -264,6 +287,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
     if (quoteError) return setError(quoteError);
     if (!quote || new Date(quote.expires_at).getTime() <= Date.now()) return setError("A cotação expirou. Escolha o pagamento novamente.");
     if (paymentMethod === "CREDIT_CARD" && (!cardBin || quote.card_bin !== cardBin)) return setError("Aguarde a validação das parcelas para este cartão.");
+    if (paymentMethod === "CREDIT_CARD" && (quote.issuer_id || "") !== cardIssuerId) return setError("Aguarde a validação do emissor deste cartão.");
     if (paymentMethod === "CREDIT_CARD" && quote.buyer_total_cents == null) return setError("Aguarde o total final das parcelas deste cartão.");
     if (paymentMethod === "BOLETO" && (!isBoletoAvailable || !address.zip_code.trim() || !address.street_name.trim() || !address.street_number.trim() || !address.neighborhood.trim() || !address.city.trim() || !address.federal_unit.trim())) {
       return setError("Preencha o endereço completo para emitir o boleto.");
@@ -728,7 +752,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
                   name="payment-plan"
                   value={value}
                   checked={paymentPlan === value}
-                  onChange={() => setPaymentPlan(value)}
+                  onChange={() => changePaymentPlan(value)}
                   className="accent-brand-600"
                 />
                 <strong className="text-brand-900">{title}</strong>
@@ -744,7 +768,6 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         <div className="mt-2 grid gap-3 sm:grid-cols-3">
           {/* PIX */}
           <label
-            onClick={() => setPaymentMethod("PIX")}
             className={`cursor-pointer flex items-center gap-3 rounded-xl border-2 p-4 transition ${
               paymentMethod === "PIX" ? "border-brand-600 bg-brand-50" : "border-ink-900/15 bg-white hover:border-brand-300"
             }`}
@@ -753,7 +776,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
               type="radio"
               name="payment-method"
               checked={paymentMethod === "PIX"}
-              onChange={() => setPaymentMethod("PIX")}
+              onChange={() => changePaymentMethod("PIX")}
               className="accent-brand-600"
             />
             <QrCode className="size-6 text-brand-700 shrink-0" />
@@ -765,7 +788,6 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
 
           {/* Cartão de Crédito */}
           <label
-            onClick={() => setPaymentMethod("CREDIT_CARD")}
             className={`cursor-pointer flex items-center gap-3 rounded-xl border-2 p-4 transition ${
               paymentMethod === "CREDIT_CARD" ? "border-brand-600 bg-brand-50" : "border-ink-900/15 bg-white hover:border-brand-300"
             }`}
@@ -774,7 +796,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
               type="radio"
               name="payment-method"
               checked={paymentMethod === "CREDIT_CARD"}
-              onChange={() => setPaymentMethod("CREDIT_CARD")}
+              onChange={() => changePaymentMethod("CREDIT_CARD")}
               className="accent-brand-600"
             />
             <CreditCard className="size-6 text-brand-700 shrink-0" />
@@ -786,7 +808,6 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
 
           {/* Boleto Bancário */}
           <label
-            onClick={() => isBoletoAvailable && setPaymentMethod("BOLETO")}
             className={`flex items-center gap-3 rounded-xl border-2 p-4 transition ${
               !isBoletoAvailable
                 ? "border-ink-900/10 bg-ink-50/50 opacity-60 cursor-not-allowed"
@@ -800,7 +821,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
               name="payment-method"
               disabled={!isBoletoAvailable}
               checked={paymentMethod === "BOLETO"}
-              onChange={() => isBoletoAvailable && setPaymentMethod("BOLETO")}
+              onChange={() => isBoletoAvailable && changePaymentMethod("BOLETO")}
               className="accent-brand-600"
             />
             <Receipt className="size-6 text-brand-700 shrink-0" />
@@ -811,20 +832,6 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
               </small>
             </div>
           </label>
-        </div>
-
-        {paymentMethod === "CREDIT_CARD" && <label className="mt-5 block max-w-xs text-sm font-bold text-ink-800">Parcelas
-          <select value={cardInstallments} onChange={event => setCardInstallments(Number(event.target.value))} className={inputClass}>
-            {Array.from({ length: 10 }, (_, index) => index + 1).map(value => <option key={value} value={value}>{value}x</option>)}
-          </select>
-          <span className="mt-1 block text-xs font-normal text-ink-500">Escolha a mesma parcela nos dados do cartão.</span>
-        </label>}
-
-        <div className="mt-5 rounded-xl bg-sand-50 p-4 text-sm text-ink-800" aria-live="polite">
-          {quoteLoading ? "Calculando valor final..." : quoteError ? <p className="text-red-700">{quoteError}</p> : quote ? paymentMethod === "CREDIT_CARD" && quote.buyer_total_cents == null
-            ? <p className="font-bold text-brand-900">Informe o cartão para ver o valor final.</p>
-            : <><p className="text-xs font-bold uppercase tracking-wide text-ink-500">{paymentPlan === "DEPOSIT" ? "Sinal" : "Pagamento integral"} · {paymentMethod === "PIX" ? "Pix" : paymentMethod === "BOLETO" ? "Boleto" : "Cartão de crédito"}</p><strong className="mt-1 block text-2xl text-brand-900">{money.format((quote.buyer_total_cents ?? quote.total_cents) / 100)}</strong>{paymentMethod === "CREDIT_CARD" && quote.installments > 1 && quote.buyer_installment_cents != null && <p className="mt-1 text-sm font-semibold text-ink-600">{quote.installments} parcelas de {money.format(quote.buyer_installment_cents / 100)}</p>}</>
-            : <p className="text-red-700">Valor indisponível.</p>}
         </div>
 
         {/* Conditional Address Fields exclusively for Boleto Bancário */}
@@ -910,14 +917,27 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
         )}
 
         {paymentMethod === "CREDIT_CARD" && quote && <CardFields
-          key={`${paymentPlan}-${participantCount}-${cardInstallments}-${quote.total_cents}`}
+          key={`${paymentPlan}-${participantCount}-${quote.total_cents}`}
           amount={quote.total_cents / 100}
           email={identity.email}
           cpf={identity.cpf.replace(/\D/g, "")}
+          cardBin={cardBin}
           onToken={(data) => void submitPayment(data)}
           onReadyChange={setCardReady}
           onBinChange={(bin) => setCardBin((previous) => previous === bin ? previous : bin)}
+          onIssuerChange={(issuerId) => setCardIssuerId((previous) => previous === issuerId ? previous : issuerId)}
+          onInstallmentsChange={(installments) => {
+            setCardInstallmentsSelected(installments !== null);
+            if (installments !== null) setCardInstallments(installments);
+          }}
         />}
+
+        <div className="mt-5 rounded-xl bg-sand-50 p-5 text-sm text-ink-800" aria-live="polite">
+          {quoteLoading ? "Calculando valor final..." : quoteError ? <p className="text-red-700">{quoteError}</p> : quote ? paymentMethod === "CREDIT_CARD" && (!cardInstallmentsSelected || quote.buyer_total_cents == null)
+            ? <p className="font-bold text-brand-900">Informe o cartão e escolha as parcelas para ver o valor final.</p>
+            : <><p className="text-xs font-bold uppercase tracking-wide text-ink-500">Total a pagar · {paymentPlan === "DEPOSIT" ? "Sinal" : "Pagamento integral"} · {paymentMethod === "PIX" ? "Pix" : paymentMethod === "BOLETO" ? "Boleto" : "Cartão de crédito"}</p><strong className="mt-1 block text-3xl font-black text-brand-900">{money.format((quote.buyer_total_cents ?? quote.total_cents) / 100)}</strong>{paymentMethod === "CREDIT_CARD" && quote.installments > 1 && quote.buyer_installment_cents != null && <p className="mt-1 text-sm font-semibold text-ink-600">{quote.installments} parcelas de {money.format(quote.buyer_installment_cents / 100)}</p>}</>
+            : <p className="text-red-700">Valor indisponível.</p>}
+        </div>
       </fieldset>
 
         <button type="button" onClick={cancelHoldAndGoBack} disabled={loading} className="w-full text-sm font-bold text-brand-700 hover:underline">Voltar e corrigir dados</button>
@@ -941,13 +961,13 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
       {error && <p className="rounded-lg bg-red-50 p-3.5 text-sm font-semibold text-red-700">{error}</p>}
 
       <button
-        disabled={loading || (step === "PAYMENT_FORM" && (!quote || quoteLoading || !!quoteError || (paymentMethod === "CREDIT_CARD" && (!cardReady || quote.buyer_total_cents == null || !cardBin || quote.card_bin !== cardBin))))}
+        disabled={loading || (step === "PAYMENT_FORM" && (!quote || quoteLoading || !!quoteError || (paymentMethod === "CREDIT_CARD" && (!cardReady || !cardInstallmentsSelected || quote.buyer_total_cents == null || !cardBin || quote.card_bin !== cardBin || (quote.issuer_id || "") !== cardIssuerId))))}
         className="min-h-12 w-full rounded-xl bg-brand-600 px-6 font-black text-white shadow-md transition hover:bg-brand-700 disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {loading && <Loader2 className="size-4 animate-spin" />}
         {loading
           ? "Processando..."
-           : step === "FORM" ? "Enviar código de confirmação" : `Pagar ${quote && quote.buyer_total_cents != null ? money.format(quote.buyer_total_cents / 100) : ""}`}
+           : step === "FORM" ? "Enviar código de confirmação" : `Pagar ${quote && (paymentMethod !== "CREDIT_CARD" || cardInstallmentsSelected) && quote.buyer_total_cents != null ? money.format(quote.buyer_total_cents / 100) : ""}`}
       </button>
 
       <p className="flex items-center justify-center gap-2 text-xs text-ink-500">

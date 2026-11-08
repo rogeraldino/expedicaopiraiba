@@ -49,6 +49,7 @@ class FeeQuoteSerializer(serializers.Serializer):
     verification_token = serializers.CharField()
     reservation_id = serializers.UUIDField(required=False)
     card_bin = serializers.RegexField(r"^\d{6,8}$", required=False, allow_blank=True)
+    issuer_id = serializers.RegexField(r"^\d+$", required=False, allow_blank=True)
     expedition_slug = serializers.SlugField()
     participant_names = serializers.ListField(child=serializers.CharField(max_length=160), min_length=1, max_length=12)
     payment_plan = serializers.ChoiceField(choices=("DEPOSIT", "FULL"))

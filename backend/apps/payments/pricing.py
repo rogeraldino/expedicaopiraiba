@@ -49,12 +49,13 @@ def quote_payload(quote):
         "method": quote.method,
         "installments": quote.installments,
         "card_bin": quote.card_bin,
+        "issuer_id": quote.rate_snapshot.get("issuer_id", "") if quote.method == Payment.Method.CREDIT_CARD else "",
         "estimated": quote.rate_snapshot.get("estimated", True),
         "expires_at": quote.expires_at,
     }
 
 
-def create_fee_quote(*, customer, expedition_slug, participant_names, payment_plan, method, installments=1, reservation_id=None, card_bin=""):
+def create_fee_quote(*, customer, expedition_slug, participant_names, payment_plan, method, installments=1, reservation_id=None, card_bin="", issuer_id=""):
     expedition = Expedition.objects.filter(slug=expedition_slug, status__in=(Expedition.Status.PUBLISHED, Expedition.Status.SOLD_OUT)).first()
     if not expedition or expedition.ends_at < timezone.localdate():
         raise ValidationError("Expedição indisponível.")
@@ -67,6 +68,8 @@ def create_fee_quote(*, customer, expedition_slug, participant_names, payment_pl
         raise ValidationError("Parcelamento inválido.")
     if card_bin and (not card_bin.isdigit() or len(card_bin) not in (6, 7, 8)):
         raise ValidationError("Cartão inválido para consulta de parcelas.")
+    if issuer_id and (method != Payment.Method.CREDIT_CARD or not card_bin or not issuer_id.isdigit()):
+        raise ValidationError("Emissor do cartão inválido.")
     rate = FeeRate.objects.filter(method=method, installments=installments, active=True).first()
     if not rate or (rate.valid_until and rate.valid_until <= timezone.now()):
         raise ValidationError("Forma de pagamento temporariamente indisponível.")
@@ -88,7 +91,7 @@ def create_fee_quote(*, customer, expedition_slug, participant_names, payment_pl
     if method == Payment.Method.CREDIT_CARD and card_bin and getattr(settings, "PAYMENT_GATEWAY", "FAKE") == "MERCADOPAGO":
         from .gateways import MercadoPagoPaymentGateway
         terms = MercadoPagoPaymentGateway().verify_quote_installments(
-            bin_digits=card_bin, installments=installments, amount_cents=gross,
+            bin_digits=card_bin, installments=installments, amount_cents=gross, issuer_id=issuer_id,
         )
         rate_snapshot["buyer_total_cents"] = terms["buyer_total_cents"]
         rate_snapshot["buyer_financing_cents"] = terms["buyer_total_cents"] - gross

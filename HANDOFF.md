@@ -1,5 +1,11 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Checkout de cartão — 08/11/2026 (correção para sandbox)
+
+- Cartão mantém os iframes seguros do Mercado Pago montados ao trocar parcelas. A interface tem uma única seleção de parcelas; CPF/e-mail verificados não reaparecem; o emissor só aparece quando há múltiplas opções. O servidor inclui emissor na cotação e continua conferindo token, BIN, total, meio, emissor e parcelas antes da cobrança. O total final aparece perto do aceite e do botão.
+- Validação sem cobrança: 14 testes de taxas/reembolso no PostgreSQL passaram, build/TypeScript passaram, navegador preencheu número do cartão no iframe e confirmou uma cotação de 3x com POST de cotação interceptado; nenhuma solicitação de pagamento foi enviada. Ponytail independente PASS para o delta. Publicação sandbox pendente neste registro.
+- Limite conhecido: chave pública de sandbox APP_USR e access token privado TEST são credenciais de teste de origens diferentes. A tentativa anterior de trocar pelo token de teste disponibilizado via MCP recebeu 401. Portanto, o sandbox não prova tokenização e aprovação de cartão reais. Obter par compatível da Payments API/Checkout API no painel Mercado Pago antes de liberar crédito comercial. Produção continua protegida pelo gate de `ACCEPTED` humano e pelo `SPEC GAP` de juros no reembolso.
+
 ## Exposição simplificada de preço — 07/11/2026
 
 - Decisão de Rodrigo: card/hero/detalhe mostram preço integral com taxa Pix identificada; na etapa de pagamento aparece apenas o total final do meio escolhido e, no crédito parcelado, o valor das parcelas. O cálculo de cobrança e os snapshots financeiros não mudam.

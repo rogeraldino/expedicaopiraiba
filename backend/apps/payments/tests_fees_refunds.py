@@ -14,7 +14,7 @@ from apps.reservations.services import create_hold, transition_reservation
 
 from .gateways import GatewayPayment, GatewayUncertainError, MercadoPagoPaymentGateway
 from .models import FeeRate, FeeRateAudit, Payment, PaymentIntent, RefundRequest
-from .pricing import create_fee_quote, gross_for_fee
+from .pricing import create_fee_quote, gross_for_fee, quote_payload
 from .refunds import request_refund, submit_refund
 from .services import create_reservation_payment, process_paid_event, simulate_paid_event
 
@@ -81,6 +81,30 @@ class FeeAndRefundTests(TestCase):
                 MercadoPagoPaymentGateway("TEST-redacted").verify_quote_installments(
                     bin_digits="503143", installments=2, amount_cents=210483,
                 )
+
+    def test_selected_issuer_disambiguates_card_quote(self):
+        response = [
+            {"payment_method_id": "master", "issuer": {"id": issuer}, "payer_costs": [
+                {"installments": 3, "total_amount": total, "installment_amount": total / 3},
+            ]}
+            for issuer, total in (("24", 2350.02), ("25", 2390.01))
+        ]
+        with patch("urllib.request.urlopen") as urlopen:
+            urlopen.return_value.__enter__.return_value.read.return_value = json.dumps(response).encode()
+            gateway = MercadoPagoPaymentGateway("TEST-redacted")
+            with self.assertRaises(ValidationError):
+                gateway.verify_quote_installments(bin_digits="503143", installments=3, amount_cents=210483)
+            terms = gateway.verify_quote_installments(bin_digits="503143", issuer_id="24", installments=3, amount_cents=210483)
+        self.assertEqual(terms["issuer_id"], "24")
+        with override_settings(PAYMENT_GATEWAY="MERCADOPAGO"):
+            with patch.object(MercadoPagoPaymentGateway, "verify_quote_installments", return_value=terms) as verify:
+                quote = create_fee_quote(
+                    customer=self.customer, expedition_slug=self.expedition.slug,
+                    participant_names=["Pescador Teste"], payment_plan="FULL",
+                    method="CREDIT_CARD", installments=3, card_bin="503143", issuer_id="24",
+                )
+        self.assertEqual(verify.call_args.kwargs["issuer_id"], "24")
+        self.assertEqual(quote_payload(quote)["issuer_id"], "24")
 
     def test_card_terms_must_match_before_any_provider_charge(self):
         terms = {"bin_digits": "503143", "payment_method_id": "master", "issuer_id": "24",
