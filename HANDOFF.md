@@ -1,5 +1,11 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Campos seguros do cartão após trocar plano ou meio — 08/11/2026
+
+- Reproduzido no HTTPS do sandbox antes da correção: ao alternar Pix → cartão, o bloco de cartão reaparecia sem o iframe do número (`1 → 0`). O CardForm era desmontado visualmente sem chamar `unmount()` do SDK; o `<form>` externo também era recriado por `key`, e uma cotação antiga podia iniciar montagem temporária.
+- Correção local: `cardForm.unmount()` no cleanup, `<form>` estável, cotação/aceite limpos no evento de troca, prontidão apenas no `onReady` do SDK e mensagem se os campos seguros não carregarem em 10 s. No build local com SDK real e cotações interceptadas, Pix → cartão e sinal → integral mantiveram um iframe (`1 → 1`) e o número recebeu digitação; opção única 1x manteve o botão disponível. Nenhum POST de pagamento foi enviado.
+- Pendente neste registro: Ponytail final e publicação no sandbox. A limitação já conhecida das credenciais de teste permanece; não declarar cartão financeiramente homologado por esses testes de interface.
+
 ## Checkout de cartão — 08/11/2026 (correção para sandbox)
 
 - Cartão mantém os iframes seguros do Mercado Pago montados ao trocar parcelas. A interface tem uma única seleção de parcelas; CPF/e-mail verificados não reaparecem; o emissor só aparece quando há múltiplas opções. O servidor inclui emissor na cotação e continua conferindo token, BIN, total, meio, emissor e parcelas antes da cobrança. O total final aparece perto do aceite e do botão.

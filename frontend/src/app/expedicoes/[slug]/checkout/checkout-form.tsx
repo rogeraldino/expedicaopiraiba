@@ -99,12 +99,18 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   function changePaymentPlan(plan: string) {
     if (plan === paymentPlan) return;
     resetCardSelection();
+    setQuote(null);
+    setQuoteError("");
+    setTerms(false);
     setPaymentPlan(plan);
   }
 
   function changePaymentMethod(method: Method) {
     if (method === paymentMethod) return;
     resetCardSelection();
+    setQuote(null);
+    setQuoteError("");
+    setTerms(false);
     setPaymentMethod(method);
   }
 
@@ -646,7 +652,7 @@ export function CheckoutForm({ expedition }: { expedition: ExpeditionProp }) {
   ) : null;
 
   return (
-    <><form key={`${step}-${paymentMethod}-${paymentPlan}`} id="payment-checkout-form" onSubmit={step === "PAYMENT_FORM" ? submitPaymentForm : requestCode} className="space-y-5">
+    <><form id="payment-checkout-form" onSubmit={step === "PAYMENT_FORM" ? submitPaymentForm : requestCode} className="space-y-5">
       {isEditing && step === "FORM" && (
         <div className="flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 shadow-sm">
           <AlertCircle className="size-4 text-amber-600 shrink-0 mt-0.5" />

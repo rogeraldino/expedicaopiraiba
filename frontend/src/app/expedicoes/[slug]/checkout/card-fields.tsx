@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type CardData = { token: string; paymentMethodId: string; issuerId?: string; installments: string; amount: string };
-type CardForm = { getCardFormData: () => CardData };
+type CardForm = { getCardFormData: () => CardData; unmount: () => void };
 type MercadoPagoClient = { cardForm: (options: unknown) => CardForm };
 type MercadoPagoWindow = Window & { MercadoPago?: new (key: string) => MercadoPagoClient };
 
@@ -68,6 +68,10 @@ export function CardFields({ amount, email, cpf, cardBin, onToken, onReadyChange
   useEffect(() => {
     let active = true;
     let lastBin = "";
+    let cardForm: CardForm | undefined;
+    const readyTimer = window.setTimeout(() => {
+      if (active) setError("Os campos seguros do cartão não carregaram. Atualize a página ou escolha outra forma de pagamento.");
+    }, 10000);
     readyCallback.current(false);
     const issuer = document.getElementById("mp-issuer") as HTMLSelectElement | null;
     const handleIssuer = () => issuerCallback.current(issuer?.value && /^\d+$/.test(issuer.value) ? issuer.value : "");
@@ -114,7 +118,7 @@ export function CardFields({ amount, email, cpf, cardBin, onToken, onReadyChange
       const MercadoPago = (window as MercadoPagoWindow).MercadoPago;
       if (!MercadoPago) throw new Error("Não foi possível iniciar o formulário seguro de cartão.");
       const mp = new MercadoPago(config.mercadopago_public_key);
-      const cardForm = mp.cardForm({
+      cardForm = mp.cardForm({
         amount: amount.toFixed(2),
         iframe: true,
         form: {
@@ -132,12 +136,20 @@ export function CardFields({ amount, email, cpf, cardBin, onToken, onReadyChange
         callbacks: {
           onFormMounted: (mountError: unknown) => {
             if (!active) return;
-            if (mountError) setError("Não foi possível carregar os campos do cartão.");
-            else readyCallback.current(true);
+            if (mountError) {
+              window.clearTimeout(readyTimer);
+              setError("Não foi possível carregar os campos do cartão.");
+            }
+          },
+          onReady: () => {
+            if (!active) return;
+            window.clearTimeout(readyTimer);
+            setError("");
+            readyCallback.current(true);
           },
           onSubmit: (event: Event) => {
             event.preventDefault();
-            if (active) callback.current(cardForm.getCardFormData());
+            if (active && cardForm) callback.current(cardForm.getCardFormData());
           },
           onBinChange: (bin: string) => {
             if (active) {
@@ -161,6 +173,8 @@ export function CardFields({ amount, email, cpf, cardBin, onToken, onReadyChange
     });
     return () => {
       active = false;
+      window.clearTimeout(readyTimer);
+      try { cardForm?.unmount(); } catch { /* The SDK may already have removed its fields. */ }
       installments?.removeEventListener("change", handleInstallments);
       issuer?.removeEventListener("change", handleIssuer);
       installmentsObserver?.disconnect();

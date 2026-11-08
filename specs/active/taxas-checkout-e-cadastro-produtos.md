@@ -65,6 +65,7 @@ Esta decisão posterior substitui apenas a **apresentação pública** de base, 
 2. CPF e e-mail verificados na primeira etapa são reutilizados no CardForm e não são pedidos novamente. O tipo de documento é CPF. O emissor fica oculto quando há uma única opção e só aparece se o provedor oferecer mais de uma. Nesse caso, o emissor escolhido integra a cotação e a conferência anterior à cobrança.
 3. O total final do comprador e o valor das parcelas aparecem imediatamente antes do aceite e do botão de pagamento. Sem BIN, parcelas reconhecidas ou total único confiável, o pagamento permanece bloqueado. Nenhuma cobrança é disparada pela escolha ou pelo preenchimento dos campos.
 4. Critérios de validação: build e lint do frontend, teste de cotação com dois emissores no PostgreSQL, navegador com SDK e requisições de identificação/cotação simuladas sem POST de pagamento, Ponytail independente. A prova de tokenização/cobrança real permanece pendente porque o par de credenciais de teste do sandbox não está validado, conforme `HANDOFF.md`.
+5. Ao alternar Pix/cartão ou sinal/integral, o CardForm anterior é desmontado pelo helper oficial antes de montar outro; o `<form>` da página mantém a mesma identidade e não usa cotação ou aceite da seleção anterior. O botão só considera o cartão pronto após `onReady` do SDK (incluindo iframes prontos). Se os campos seguros não carregarem, a interface informa o erro. Evidência necessária: repetir no navegador a alternância e confirmar que número, validade e código aceitam digitação sem cobrar.
 
 ## Dados e decisões registrados
 
