@@ -337,11 +337,11 @@ class ExpeditionConfigurationEvent(models.Model):
 
 
 class GearCategory(models.TextChoices):
-    HEAVY_ROD_REEL = "HEAVY_ROD_REEL", "Conjunto Pesado (Piraíba / Grandes Bagres)"
-    MEDIUM_ROD_REEL = "MEDIUM_ROD_REEL", "Conjunto Médio (Pirarara / Tucunaré)"
-    TERMINAL_TACKLE = "TERMINAL_TACKLE", "Acessórios e Terminais (Anzóis, Encastoados, Chumbadas)"
-    APPAREL = "APPAREL", "Vestuário UV, Bonés e Proteção"
-    SPECIALTY_BAIT = "SPECIALTY_BAIT", "Iscas Especiais e Atrativos"
+    HEAVY_ROD_REEL = "HEAVY_ROD_REEL", "Varas e carretilhas pesadas"
+    MEDIUM_ROD_REEL = "MEDIUM_ROD_REEL", "Varas e carretilhas leves e médias"
+    TERMINAL_TACKLE = "TERMINAL_TACKLE", "Acessórios de pesca"
+    APPAREL = "APPAREL", "Roupas e proteção"
+    SPECIALTY_BAIT = "SPECIALTY_BAIT", "Iscas e atrativos"
 
 
 class FishingGearProduct(models.Model):

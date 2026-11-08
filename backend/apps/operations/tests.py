@@ -648,7 +648,7 @@ class OperationsApiTests(TestCase):
         }, format="json", **auth)
         self.assertEqual(res.status_code, 201)
         prod_id = res.data["id"]
-        self.assertEqual(res.data["category_display"], "Conjunto Pesado (Piraíba / Grandes Bagres)")
+        self.assertEqual(res.data["category_display"], "Varas e carretilhas pesadas")
         self.assertEqual(res.data["inventory_quantity"], 5)
 
         # Filter by category
@@ -669,6 +669,7 @@ class OperationsApiTests(TestCase):
         self.assertEqual(patch_res.status_code, 200)
         self.assertEqual(patch_res.data["inventory_quantity"], 8)
         self.assertEqual(patch_res.data["description"], "Excelente carretilha para piraíba.")
+        self.assertEqual(patch_res.data["technical_specs"], {"drag": "10kg", "ratio": "5.8:1"})
 
     def test_fishing_gear_product_delete_protection_with_active_reservations(self):
         auth = self.login()

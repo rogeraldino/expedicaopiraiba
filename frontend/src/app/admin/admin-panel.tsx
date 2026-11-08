@@ -18,7 +18,7 @@ type Species = { id?: string; common_name: string; slug: string; scientific_name
 type AllInclusivePackage = { id: string; name: string; slug: string; description: string; inclusions: string[]; active: boolean; expeditions_count?: number; created_at?: string; updated_at?: string };
 type BeveragePackageItem = { id?: string; product?: number | string; product_id?: number | string; product_name?: string; product_category?: string; product_unit?: string; standard_quantity_per_participant: number; display_order: number; note: string };
 type BeveragePackage = { id: string; name: string; slug: string; description: string; active: boolean; items: BeveragePackageItem[]; expeditions_count?: number; created_at?: string; updated_at?: string };
-type FishingGearProduct = { id: string; name: string; slug: string; category: string; category_display: string; modality: "RENTAL" | "SALE" | "BOTH"; modality_display: string; technical_specs: Record<string, string>; rental_price_cents: number; sale_price_cents: number; inventory_quantity: number; image_url: string; description: string; active: boolean; addons_count?: number; created_at?: string; updated_at?: string };
+type FishingGearProduct = { id: string; name: string; slug: string; category: string; category_display: string; modality: "RENTAL" | "SALE" | "BOTH"; modality_display: string; rental_price_cents: number; sale_price_cents: number; inventory_quantity: number; image_url: string; description: string; active: boolean; addons_count?: number; created_at?: string; updated_at?: string };
 type ReservationGearAddon = { id: string; reservation?: string; participant?: string | null; participant_name?: string | null; gear_product: string; gear_product_id?: string; gear_product_name: string; gear_product_category: string; gear_product_category_display: string; modality: "RENTAL" | "SALE"; quantity: number; unit_price_cents: number; total_price_cents: number; notes: string; delivered: boolean; created_at: string };
 type CustomerProfile = { id?: string; rg?: string; rg_issuer?: string; birth_date?: string | null; city?: string; state?: string; fishing_license_number?: string; fishing_license_expiry?: string | null; has_valid_license?: boolean; default_vest_size?: string; dietary_notes?: string; medical_notes?: string; emergency_contact_name?: string; emergency_contact_phone?: string; internal_admin_notes?: string; created_at?: string; updated_at?: string };
 type CustomerCRM = { id: string; cpf: string; full_name: string; email: string; phone: string; city: string; state: string; has_valid_license: boolean; total_reservations: number; lifetime_value_cents: number; last_expedition_name?: string; last_expedition_date?: string; created_at: string; profile?: CustomerProfile; reservations?: { id: string; expedition_name: string; starts_at: string; status: string; participant_count: number; total_price_cents: number; paid_amount_cents: number; remaining_balance_cents: number; gear_addons_count: number; created_at: string }[] };
@@ -4923,6 +4923,14 @@ function ManifestPanel({ token, unauthorized }: { token: string; unauthorized: (
 
 function ShoppingPanel({token,unauthorized}:{token:string;unauthorized:()=>void}){const expeditions=useData<Expedition[]>("expeditions/",token,unauthorized);const[selected,setSelected]=useState("");const selectedId=selected||expeditions.data?.[0]?.id||"";const[copied,setCopied]=useState(false);const result=useData<Consolidation>(selectedId?`expeditions/${selectedId}/consolidation/`:null,token,unauthorized);const text=useMemo(()=>result.data?.text??result.data?.items.map(row=>`${row.product}: ${row.total} ${row.unit}${row.package_size?` (${row.full_packages??0} embalagem(ns) + ${row.remainder??0} ${row.unit})`:""}`).join("\n")??"",[result.data]);async function download(format:"csv"|"txt"){try{const content=await request<string>(`expeditions/${selectedId}/consolidation.${format}`,token);const url=URL.createObjectURL(new Blob([content],{type:"text/plain;charset=utf-8"}));const anchor=document.createElement("a");anchor.href=url;anchor.download=`lista-compras-${selectedId}.${format}`;anchor.click();URL.revokeObjectURL(url)}catch(value){window.alert(errorMessage(value))}}async function copy(){await navigator.clipboard.writeText(text);setCopied(true);window.setTimeout(()=>setCopied(false),1500)}return <div><Header title="Lista de compras" subtitle="Consolidação por escolhas e padrão vigente das reservas garantidas." action={<div className="flex gap-2"><button onClick={()=>void copy()} className="rounded-lg border bg-white px-3 py-2 text-sm font-bold"><Copy className="mr-1 inline size-4"/>{copied?"Copiado":"Copiar"}</button><button onClick={()=>void download("csv")} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-bold text-white"><Download className="mr-1 inline size-4"/>CSV</button><button onClick={()=>void download("txt")} className="rounded-lg bg-brand-900 px-3 py-2 text-sm font-bold text-white"><Download className="mr-1 inline size-4"/>Texto</button></div>}/><div className="mt-5"><ExpeditionSelect value={selectedId} set={setSelected} items={expeditions.data??[]} all={false}/></div><div className="mt-6"><State loading={result.loading} error={result.error} retry={() => void result.load()}/>{result.data&&<div className="overflow-x-auto rounded-xl bg-white"><p className="p-4 text-xs">Snapshot: {new Date(result.data.generated_at).toLocaleString("pt-BR")}</p><table className="w-full min-w-[850px] text-left text-sm"><thead className="bg-brand-900 text-xs uppercase text-white"><tr><th className="px-5 py-4">Produto</th><th>Pessoas</th><th>Padrão</th><th>Total</th><th>Embalagens</th><th>Sobra</th><th>Atualização</th></tr></thead><tbody className="divide-y">{result.data.items.map(row=><tr key={row.offer_id}><td className="px-5 py-4"><strong>{row.product}</strong>{row.details?.length ? <details className="mt-2"><summary className="cursor-pointer text-xs font-bold text-brand-700">Ver {row.details.length} participante(s)</summary><ul className="mt-2 space-y-1 text-xs text-ink-500">{row.details.map((detail,index)=><li key={detail.participant_id??`${detail.reservation_id}-${index}`}>{detail.participant_name}{detail.customer_name ? ` · reserva de ${detail.customer_name}` : ""}</li>)}</ul></details> : null}</td><td>{row.people}</td><td>{row.standard_quantity_per_participant} {row.unit}</td><td className="font-black text-brand-800">{row.total} {row.unit}</td><td>{row.package_size?`${row.full_packages??0} × ${row.package_size}`:"—"}</td><td>{row.package_size?`${row.remainder??0} ${row.unit}`:"—"}</td><td>{shortDate(row.updated_at)}</td></tr>)}</tbody></table>{!result.data.items.length&&<Empty>Nenhuma escolha elegível.</Empty>}</div>}</div></div>}
 
+const GEAR_CATEGORY_OPTIONS = [
+  { value: "HEAVY_ROD_REEL", label: "Varas e carretilhas pesadas" },
+  { value: "MEDIUM_ROD_REEL", label: "Varas e carretilhas leves e médias" },
+  { value: "TERMINAL_TACKLE", label: "Acessórios de pesca" },
+  { value: "APPAREL", label: "Roupas e proteção" },
+  { value: "SPECIALTY_BAIT", label: "Iscas e atrativos" },
+] as const;
+
 function GearPanel({ token, unauthorized }: { token: string; unauthorized: () => void }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
@@ -4996,7 +5004,7 @@ function GearPanel({ token, unauthorized }: { token: string; unauthorized: () =>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar por nome, categoria ou especificações..."
+            placeholder="Buscar por nome ou descrição..."
             className="w-full bg-transparent text-sm font-bold outline-none"
           />
         </label>
@@ -5006,11 +5014,7 @@ function GearPanel({ token, unauthorized }: { token: string; unauthorized: () =>
           className="min-h-11 rounded-lg border bg-white px-3 text-sm font-bold shadow-xs"
         >
           <option value="">Todas as categorias</option>
-          <option value="HEAVY_ROD_REEL">Conjunto Pesado (Piraíba/Jaú)</option>
-          <option value="MEDIUM_ROD_REEL">Conjunto Médio (Pirarara/Tucunaré)</option>
-          <option value="TERMINAL_TACKLE">Tralhas Terminais & Acessórios</option>
-          <option value="APPAREL">Vestuário & Proteção UV</option>
-          <option value="SPECIALTY_BAIT">Iscas Especiais & Essências</option>
+          {GEAR_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         <select
           value={modality}
@@ -5132,76 +5136,6 @@ function GearPanel({ token, unauthorized }: { token: string; unauthorized: () =>
   );
 }
 
-const GEAR_PRESETS = [
-  {
-    label: "Kit Piraíba Pesada",
-    icon: "🎣",
-    name: "Kit Pesca Pesada Piraíba (Vara 80-100lb + Carretilha 50W)",
-    category: "HEAVY_ROD_REEL",
-    modality: "RENTAL" as const,
-    inventory_quantity: 6,
-    rental_price: "250.00",
-    sale_price: "0.00",
-    description: "Conjunto profissional de pesca pesada no Araguaia: Vara de carbono maciço 80-100lbs, carretilha de perfil alto com 300m de linha multifilamento 0.90mm e líder de aço 150lb.",
-    technical_specs: {
-      "vara": "80-100 lbs carbono maciço 6'0",
-      "carretilha": "Perfil Alto 50W / Alumínio usinado",
-      "linha": "Multifilamento 8 fios 0.90mm (130lb)",
-      "lider": "Aço encastoado flexível 150lb com girador e anzol circular 10/0"
-    }
-  },
-  {
-    label: "Kit Pirarara Médio",
-    icon: "🐟",
-    name: "Kit Pesca Média Pirarara (Vara 50-80lb + Carretilha Perfil Alto)",
-    category: "MEDIUM_ROD_REEL",
-    modality: "RENTAL" as const,
-    inventory_quantity: 8,
-    rental_price: "200.00",
-    sale_price: "0.00",
-    description: "Conjunto ágil e resistente para peixes de couro médios (Pirarara, Cachara, Jaú médio). Vara 50-80lb com carretilha abastecida com 250m de multifilamento 0.70mm.",
-    technical_specs: {
-      "vara": "50-80 lbs carbono tubular reforçado 6'0",
-      "carretilha": "Perfil Alto 400 com freio centrífugo",
-      "linha": "Multifilamento 0.70mm (80lb)",
-      "lider": "Fluorocarbono 0.90mm com anzol Wide Gap 8/0"
-    }
-  },
-  {
-    label: "Kit Tucunaré Azul",
-    icon: "🎯",
-    name: "Kit Iscas Artificiais & Carretilha Baitcasting (Tucunaré)",
-    category: "MEDIUM_ROD_REEL",
-    modality: "RENTAL" as const,
-    inventory_quantity: 10,
-    rental_price: "150.00",
-    sale_price: "0.00",
-    description: "Conjunto para pincho e arremesso em lagoas e praias do Araguaia para Tucunaré Azul e Aruanã.",
-    technical_specs: {
-      "vara": "17-25 lbs carbono IM8 5'8",
-      "carretilha": "Perfil Baixo recolhimento 7.1:1 com 10 rolamentos",
-      "linha": "Multifilamento 0.35mm (40lb)",
-      "lider": "Fluorocarbono 0.50mm"
-    }
-  },
-  {
-    label: "Camisa UV Oficial",
-    icon: "👕",
-    name: "Camisa Dry-Fit Manga Longa Proteção UV 50+ Expedição Piraíba",
-    category: "APPAREL",
-    modality: "SALE" as const,
-    inventory_quantity: 30,
-    rental_price: "0.00",
-    sale_price: "150.00",
-    description: "Camisa oficial de alta performance com proteção solar UV50+, tecido respirável que seca rápido e capuz integrado.",
-    technical_specs: {
-      "tecido": "100% Poliamida Dry-Fit antibacteriano",
-      "fator_uv": "FPU 50+ permanente",
-      "tamanhos": "P, M, G, GG, XG"
-    }
-  }
-];
-
 function GearModal({
   token,
   gear,
@@ -5223,37 +5157,14 @@ function GearModal({
     description: gear.description ?? "",
     image_url: gear.image_url ?? "",
     active: gear.active ?? true,
-    technical_specs: gear.technical_specs ? JSON.stringify(gear.technical_specs, null, 2) : "{}",
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
 
-  function applyPreset(preset: typeof GEAR_PRESETS[number]) {
-    setForm((prev) => ({
-      ...prev,
-      name: preset.name,
-      category: preset.category,
-      modality: preset.modality,
-      inventory_quantity: preset.inventory_quantity,
-      rental_price: preset.rental_price,
-      sale_price: preset.sale_price,
-      description: preset.description,
-      technical_specs: JSON.stringify(preset.technical_specs, null, 2),
-    }));
-  }
-
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return setError("O nome do equipamento é obrigatório.");
-    let parsedSpecs = {};
-    if (form.technical_specs.trim()) {
-      try {
-        parsedSpecs = JSON.parse(form.technical_specs);
-      } catch {
-        return setError("Especificações técnicas devem ser um JSON válido (ex: {\"vara\": \"80lbs\", \"carretilha\": \"Perfil Alto\"}).");
-      }
-    }
     const rentalCents = Math.round(Number(form.rental_price.replace(",", ".")) * 100);
     const saleCents = Math.round(Number(form.sale_price.replace(",", ".")) * 100);
     if (isNaN(rentalCents) || rentalCents < 0) return setError("Preço de locação inválido.");
@@ -5272,7 +5183,6 @@ function GearModal({
         description: form.description.trim(),
         image_url: form.image_url.trim(),
         active: form.active,
-        technical_specs: parsedSpecs,
       };
       if (gear.id) {
         await request(`gear-products/${gear.id}/`, token, {
@@ -5305,26 +5215,6 @@ function GearModal({
           </button>
         </div>
 
-        {/* Modelos Prontos Preset Bar */}
-        <div className="mt-3 rounded-xl border border-brand-100 bg-brand-50/60 p-3">
-          <span className="block text-[11px] font-black uppercase tracking-wider text-brand-900">
-            ⚡ Modelos Prontos (Preenchimento em 1 Clique):
-          </span>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {GEAR_PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                onClick={() => applyPreset(preset)}
-                className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-white px-2.5 py-1 text-xs font-bold text-brand-900 shadow-xs hover:border-brand-500 hover:bg-brand-50 transition"
-              >
-                <span>{preset.icon}</span>
-                <span>{preset.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label className="text-xs font-bold sm:col-span-2">
             Nome do Equipamento *
@@ -5333,7 +5223,7 @@ function GearModal({
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Ex: Conjunto Pesado 80-100lbs (Piraíba)"
+              placeholder="Nome do equipamento"
               className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
             />
           </label>
@@ -5345,11 +5235,7 @@ function GearModal({
               onChange={(e) => setForm({ ...form, category: e.target.value })}
               className="mt-1 h-10 w-full rounded-lg border px-3 text-sm font-bold"
             >
-              <option value="HEAVY_ROD_REEL">Conjunto Pesado (Piraíba/Jaú)</option>
-              <option value="MEDIUM_ROD_REEL">Conjunto Médio (Pirarara/Tucunaré)</option>
-              <option value="TERMINAL_TACKLE">Tralhas Terminais & Acessórios</option>
-              <option value="APPAREL">Vestuário & Proteção UV</option>
-              <option value="SPECIALTY_BAIT">Iscas Especiais & Essências</option>
+              {GEAR_CATEGORY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
           </label>
 
@@ -5418,18 +5304,8 @@ function GearModal({
             <textarea
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="Ex: Vara especial de 80 lbs, carretilha com 300m de linha multifilamento 0.70mm e líder fluorocarbono."
+              placeholder="Descreva o equipamento de forma simples"
               className="mt-1 min-h-16 w-full rounded-lg border p-3 text-xs"
-            />
-          </label>
-
-          <label className="text-xs font-bold sm:col-span-2">
-            Especificações Técnicas (JSON chave-valor)
-            <textarea
-              value={form.technical_specs}
-              onChange={(e) => setForm({ ...form, technical_specs: e.target.value })}
-              placeholder='{"vara": "80lbs carbono maciço", "carretilha": "Perfil alto 400", "linha": "0.70mm"}'
-              className="mt-1 min-h-16 w-full rounded-lg border p-3 font-mono text-xs"
             />
           </label>
 
