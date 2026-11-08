@@ -4,7 +4,7 @@
 
 - Reproduzido no HTTPS do sandbox antes da correção: ao alternar Pix → cartão, o bloco de cartão reaparecia sem o iframe do número (`1 → 0`). O CardForm era desmontado visualmente sem chamar `unmount()` do SDK; o `<form>` externo também era recriado por `key`, e uma cotação antiga podia iniciar montagem temporária.
 - Correção local: `cardForm.unmount()` no cleanup, `<form>` estável, cotação/aceite limpos no evento de troca, prontidão apenas no `onReady` do SDK e mensagem se os campos seguros não carregarem em 10 s. No build local com SDK real e cotações interceptadas, Pix → cartão e sinal → integral mantiveram um iframe (`1 → 1`) e o número recebeu digitação; opção única 1x manteve o botão disponível. Nenhum POST de pagamento foi enviado.
-- Pendente neste registro: Ponytail final e publicação no sandbox. A limitação já conhecida das credenciais de teste permanece; não declarar cartão financeiramente homologado por esses testes de interface.
+- Ponytail independente PASS; build/TypeScript, lint sem erros, `make check-docs` e `git diff --check` passaram. Publicado somente no sandbox na release `20261108T013810Z-ffc25c50d5bb` (frontend novo, backend da release anterior). Pela URL HTTPS do sandbox, Pix → cartão manteve o iframe (`1 → 1`) e o número aceitou digitação. API e checkout responderam HTTP 200; produção permaneceu na imagem anterior. Nenhum POST de pagamento foi enviado. A limitação já conhecida das credenciais de teste permanece; não declarar cartão financeiramente homologado por esses testes de interface.
 
 ## Checkout de cartão — 08/11/2026 (correção para sandbox)
 
