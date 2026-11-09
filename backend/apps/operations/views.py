@@ -35,7 +35,7 @@ from apps.expeditions.models import (
 )
 from apps.payments.models import Payment, PaymentIntent, FeeQuote, FeeRate, FeeRateAudit, RefundEvent, RefundRequest
 from apps.payments.pricing import rate_payload
-from apps.payments.refunds import confirm_manual_refund, reconcile_refund, refund_payload, request_refund, submit_refund
+from apps.payments.refunds import refund_payload
 from apps.payments.models import PaymentTransaction
 from apps.media_library.models import MediaAsset
 from apps.customers.models import Customer, CustomerProfile, VerificationChallenge
@@ -848,45 +848,12 @@ class ReservationRefundView(OperationsView):
         return Response([refund_payload(item) for item in RefundRequest.objects.filter(payment__reservation_id=reservation_id).order_by("created_at")])
 
     def post(self, request, reservation_id):
-        try:
-            payment = Payment.objects.get(id=request.data.get("payment_id"), reservation_id=reservation_id)
-        except (Payment.DoesNotExist, ValueError, TypeError):
-            return Response({"detail": "Pagamento não encontrado nesta reserva."}, status=404)
-        try:
-            amount_cents = int(request.data.get("amount_cents", 0))
-            refund = request_refund(
-                payment_id=payment.id, amount_cents=amount_cents,
-                basis=str(request.data.get("basis", "")),
-                reason=str(request.data.get("reason", "")),
-                calculation=str(request.data.get("calculation", "")),
-                actor=getattr(request.user, "email", "operations"),
-            )
-            if refund.status == RefundRequest.Status.REQUESTED:
-                refund = submit_refund(refund.id)
-        except (ValidationError, ValueError, TypeError) as error:
-            detail = error.messages if hasattr(error, "messages") else str(error)
-            return Response({"detail": detail}, status=400)
-        return Response(refund_payload(refund), status=201)
+        return Response({"detail": "O reembolso é feito fora do site pelo administrador."}, status=410)
 
 
 class RefundActionView(OperationsView):
     def post(self, request, refund_id):
-        action = str(request.data.get("action", ""))
-        try:
-            if action == "confirm_manual":
-                refund = confirm_manual_refund(refund_id=refund_id, proof_reference=str(request.data.get("proof_reference", "")), actor=getattr(request.user, "email", "operations"))
-            elif action == "reconcile":
-                refund = reconcile_refund(refund_id)
-            elif action == "retry_same_key":
-                refund = submit_refund(refund_id)
-            else:
-                return Response({"detail": "Ação inválida."}, status=400)
-        except RefundRequest.DoesNotExist:
-            return Response({"detail": "Reembolso não encontrado."}, status=404)
-        except (ValidationError, ValueError) as error:
-            detail = error.messages if hasattr(error, "messages") else str(error)
-            return Response({"detail": detail}, status=400)
-        return Response(refund_payload(refund))
+        return Response({"detail": "Esta ação de reembolso foi desativada."}, status=410)
 
 
 def configuration_payload(expedition):

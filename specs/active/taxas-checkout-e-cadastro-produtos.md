@@ -50,6 +50,8 @@ Permitir definir o preço-base da expedição e apresentar ao cliente o total ca
 
 **SPEC GAP externo de reembolso:** o financiamento do comprador é cobrado fora de `transaction_amount` e o estorno disponível no sistema usa o pagamento original. Falta comprovar com o Mercado Pago se os juros do comprador são devolvidos automaticamente em estorno integral e, se não, definir compensação ao consumidor e registro do valor adicional. Não declarar que o estorno da transação, sozinho, devolve esses juros. Esse ponto impede aceitar/publicar a política de reembolso como integral para crédito parcelado até resolução.
 
+**Decisão posterior de 09/11/2026:** a [spec de cancelamento com devolução externa](cancelamento-com-reembolso-externo-2026-11-09.md) v1.1 suspende a execução e o registro de reembolso no site nesta publicação. A operação confere o total do comprador, verifica o crédito efetivo e compensa manualmente eventual diferença de juros devida. A dúvida sobre a devolução automática pelo Mercado Pago permanece aberta; nenhuma tela deve afirmar que o estorno da transação a resolveu.
+
 ## Exposição simplificada do preço — decisão do responsável em 07/11/2026
 
 Esta decisão posterior substitui apenas a **apresentação pública** de base, taxa, juros e total prevista nos itens 4, 6 e 9; cálculos, cotações, snapshots financeiros e auditoria permanecem como definidos acima.

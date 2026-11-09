@@ -6,8 +6,8 @@ set -euo pipefail
 # ==============================================================================
 
 echo "==> [1/7] Pré-checagem de Recursos e Ambiente..."
-awk '/MemAvailable:/ {exit !($2 >= 1572864)}' /proc/meminfo || { echo "ERRO: Memória RAM disponível menor que 1.5GB." >&2; exit 1; }
-[[ $(df --output=avail -B1 / | tail -1) -ge 5368709120 ]] || { echo "ERRO: Espaço em disco menor que 5GB." >&2; exit 1; }
+awk '/MemAvailable:/ {exit !($2 >= 2097152)}' /proc/meminfo || { echo "ERRO: Memória RAM disponível menor que 2GB." >&2; exit 1; }
+[[ $(df --output=avail -B1 / | tail -1) -ge 8589934592 ]] || { echo "ERRO: Espaço em disco menor que 8GB." >&2; exit 1; }
 
 REPO="/root/expedicaopiraiba"
 PROD_ENV="/etc/piraiba/production.env"
@@ -58,7 +58,14 @@ docker build \
     -t "piraiba-frontend-production:$RELEASE" \
     "$TARGET_DIR/frontend"
 
-echo "==> [5/7] Atualizando Variáveis de Ambiente em $PROD_ENV..."
+echo "==> [5/7] Backup consistente com restauração verificada..."
+BACKUP_RESULT=$(python3 "$REPO/deploy/backups/create-backup.py")
+BACKUP_RESULT="$BACKUP_RESULT" python3 -c 'import json,os,sys; result=json.loads(os.environ["BACKUP_RESULT"]); sys.exit(0 if result.get("database_restore") == "PASS" else 1)' || {
+    echo "ERRO: Backup sem prova de restauração; produção não foi alterada." >&2
+    exit 1
+}
+
+echo "==> [6/7] Atualizando Variáveis de Ambiente em $PROD_ENV..."
 sed -i "s|^RELEASE=.*|RELEASE=$RELEASE|" "$PROD_ENV"
 sed -i "s|^SNAPSHOT_SHA256=.*|SNAPSHOT_SHA256=$CHECKSUM|" "$PROD_ENV"
 sed -i "s|^SOURCE_DIR=.*|SOURCE_DIR=$TARGET_DIR|" "$PROD_ENV"
@@ -70,18 +77,28 @@ if ! grep -q "^MEDIA_HOST_DIR=" "$PROD_ENV"; then
     echo "MEDIA_HOST_DIR=/srv/piraiba/production/media" >> "$PROD_ENV"
 fi
 
-echo "==> [6/7] Reiniciando Containers de Produção e Aplicando Migrações..."
+echo "==> [7/7] Reiniciando Containers de Produção e Aplicando Migrações..."
 docker compose -p piraiba-production --env-file "$PROD_ENV" -f "$COMPOSE_FILE" up -d --remove-orphans
 
-echo "==> [7/7] Aguardando Inicialização e Saúde dos Serviços..."
+echo "==> Aguardando Inicialização e Saúde dos Serviços..."
+HEALTHY=0
 for i in {1..30}; do
-    if docker compose -p piraiba-production --env-file "$PROD_ENV" -f "$COMPOSE_FILE" ps | grep -q "(healthy)"; then
-        echo "Containers de produção estão saudáveis!"
+    BACKEND_HEALTH=$(docker inspect --format '{{.State.Health.Status}}' piraiba-production-backend-1 2>/dev/null || true)
+    FRONTEND_HEALTH=$(docker inspect --format '{{.State.Health.Status}}' piraiba-production-frontend-1 2>/dev/null || true)
+    if [[ "$BACKEND_HEALTH" == "healthy" && "$FRONTEND_HEALTH" == "healthy" ]] && \
+       curl --fail --silent --max-time 4 http://127.0.0.1:8001/api/health/ >/dev/null && \
+       curl --fail --silent --max-time 4 http://127.0.0.1:3001/ >/dev/null; then
+        HEALTHY=1
+        echo "Backend, frontend e endpoints de produção estão saudáveis!"
         break
     fi
     echo -n "."
     sleep 2
 done
+if [[ "$HEALTHY" -ne 1 ]]; then
+    echo "ERRO: A release não passou nas verificações de saúde. Avalie rollback imediatamente." >&2
+    exit 1
+fi
 
 echo ""
 echo "=========================================================================="

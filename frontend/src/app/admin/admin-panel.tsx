@@ -9,7 +9,6 @@ import { AlertTriangle, BarChart3, Beer, CalendarDays, Check, ChevronLeft, Chevr
 const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 type Section = "overview" | "reservations" | "expeditions" | "lodges" | "rivers" | "species" | "packages" | "gear" | "customers" | "manifest" | "configuration" | "shopping" | "fees";
 type FeeRate = { id: number; method: string; installments: number; percent: string; fixed_cents: number; estimated: boolean; active: boolean; version: number; source: string; source_checked_at?: string | null; valid_until?: string | null };
-type RefundRecord = { id: string; payment_id: string; amount_cents: number; status: string; basis: string; reason: string; provider_refund_id: string; proof_reference: string; created_at: string };
 type Amenity = { id: string; name: string; category: string; category_display: string; icon_key?: string; description?: string; display_order: number; active: boolean };
 type RiverSpecies = { id: string; species: string; species_name: string; species_slug: string; scientific_name?: string; category?: string; is_native: boolean; is_trophy: boolean; best_season?: string };
 type River = { id: string; name: string; slug: string; basin: string; basin_display: string; states: string[]; description?: string; regulations?: string; active: boolean; species_count?: number; lodges_count?: number; created_at?: string; updated_at?: string };
@@ -26,7 +25,7 @@ type Expedition = { id: string; name: string; slug: string; destination: string;
 type Participant = { id: string; name: string; cpf?: string; phone: string; birth_date?: string | null; emergency_contact_name?: string; emergency_contact_phone?: string; operational_notes?: string; onboarding_status: string; preferences_confirmed?: boolean; dietary_confirmed?: boolean; checklist_completed?: boolean; selected_offers?: { id: string; name: string }[]; dietary_restrictions?: string[]; dietary_details?: string };
 type OperationalAlert = { id?: string; type?: string; level?: string; title?: string; message: string; reservation_id?: string; expedition_id?: string };
 type ExpeditionIndicator = { expedition_id?: string; id?: string; expedition_name?: string; name?: string; capacity: number; held_slots?: number; confirmed_slots?: number; occupied_slots?: number; available_slots: number; sold_cents?: number; received_cents?: number; outstanding_cents?: number; pending_preferences?: number; pending_checklists?: number; restrictions?: number };
-type Reservation = { id: string; status: string; participant_count: number; total_price_cents: number; payment_plan: string; paid_amount_cents: number; remaining_balance_cents: number; balance_due_at: string | null; held_until: string | null; created_at: string; alerts?: (string | OperationalAlert)[]; customer: { name: string; cpf: string; email: string; phone: string }; expedition: { id: string; name: string; slug?: string; starts_at: string }; participants: Participant[]; gear_addons?: ReservationGearAddon[]; payments: { id: string; method: string; provider: string; amount_cents: number; base_amount_cents: number; fee_amount_cents: number; provider_fee_cents?: number | null; provider_net_received_cents?: number | null; status: string; paid_at: string | null; requires_refund?: boolean }[]; events: { id: string; event_type: string; reason: string; created_at: string }[] };
+type Reservation = { id: string; status: string; participant_count: number; total_price_cents: number; payment_plan: string; paid_amount_cents: number; remaining_balance_cents: number; balance_due_at: string | null; held_until: string | null; created_at: string; alerts?: (string | OperationalAlert)[]; customer: { name: string; cpf: string; email: string; phone: string }; expedition: { id: string; name: string; slug?: string; starts_at: string }; participants: Participant[]; gear_addons?: ReservationGearAddon[]; payments: { id: string; external_id: string; method: string; provider: string; amount_cents: number; base_amount_cents: number; fee_amount_cents: number; provider_fee_cents?: number | null; provider_net_received_cents?: number | null; buyer_total_cents: number; status: string; paid_at: string | null; requires_refund?: boolean }[]; events: { id: string; event_type: string; reason: string; created_at: string }[] };
 type Overview = { revenue_cents: number; sold_cents: number; outstanding_cents: number; incomplete_participants: number; reservations: { total: number; confirmed: number; awaiting: number }; alerts?: OperationalAlert[]; expedition_indicators?: ExpeditionIndicator[]; expeditions?: ExpeditionIndicator[]; upcoming_expeditions: Expedition[]; recent_reservations: Reservation[] };
 type Product = { id: string; name: string; category?: string; description?: string; image_url?: string; unit: string; package_size?: number | null; aliases?: string[]; active?: boolean };
 type Offer = { id?: string; product_id: string; name?: string; standard_quantity_per_participant: number; display_order: number; note: string; active: boolean };
@@ -477,8 +476,8 @@ function ReservationDrawer({
             <p>Vencimento: {shortDate(item.balance_due_at)}</p>
           </Box>
         </div>
-        <Box title="Cobranças e taxas"><div className="space-y-2 text-sm">{item.payments.length ? item.payments.map(payment => <div key={payment.id} className="rounded-lg border p-3"><strong>{payment.method} · {payment.status}</strong><p>Valor {money(payment.base_amount_cents)} + taxas {money(payment.fee_amount_cents)} = {money(payment.amount_cents)}</p>{payment.provider_fee_cents != null && <p className="text-xs text-ink-600">Tarifa efetiva do provedor: {money(payment.provider_fee_cents)} · diferença da estimativa: {money(payment.provider_fee_cents - payment.fee_amount_cents)}</p>}{payment.requires_refund && <p className="text-xs font-bold text-amber-700">Cobrança excedente: devolver pelo pagamento original.</p>}</div>) : <p className="text-ink-500">Nenhuma cobrança.</p>}</div></Box>
-        {(item.status === "CANCELLED" || item.status === "REFUNDED" || item.payments.some(payment => payment.requires_refund)) && <ReservationRefunds item={item} token={token} changed={changed} />}
+        <Box title="Cobranças e taxas"><div className="space-y-2 text-sm">{item.payments.length ? item.payments.map(payment => <div key={payment.id} className="rounded-lg border p-3"><strong>{payment.method} · {payment.status}</strong><p>Valor {money(payment.base_amount_cents)} + taxas {money(payment.fee_amount_cents)} = {money(payment.amount_cents)}</p><p className="text-xs">ID no provedor: {payment.external_id}</p>{payment.buyer_total_cents > payment.amount_cents && <p className="text-xs">Total cobrado do comprador: {money(payment.buyer_total_cents)} · financiamento: {money(payment.buyer_total_cents - payment.amount_cents)}</p>}{payment.provider_fee_cents != null && <p className="text-xs text-ink-600">Tarifa efetiva do provedor: {money(payment.provider_fee_cents)} · diferença da estimativa: {money(payment.provider_fee_cents - payment.fee_amount_cents)}</p>}{payment.requires_refund && <p className="text-xs font-bold text-amber-700">Cobrança excedente: confira a devolução no Mercado Pago.</p>}</div>) : <p className="text-ink-500">Nenhuma cobrança.</p>}</div></Box>
+        {(item.status === "CANCELLED" || item.payments.some(payment => payment.requires_refund)) && <Box title="Devolução fora do site"><p className="text-sm text-amber-900">O cancelamento da reserva não estorna pagamentos. Faça e acompanhe a devolução diretamente no Mercado Pago. Para cartão parcelado, confira também os juros cobrados do comprador e compense eventual diferença devida. Os valores e status acima mostram somente o que o site registrou; não confirmam uma restituição externa.</p></Box>}
         <Box title="Participantes e preparação">
           {item.participants.map((person) => (
             <div key={person.id} className="mt-3 rounded-lg border bg-[#fafbfc] p-3 shadow-xs">
@@ -618,6 +617,7 @@ function ReservationDrawer({
             <h3 className="font-black">
               {action === "payment" ? "Pagamento manual simulado" : "Cancelamento"}
             </h3>
+            {action === "cancel" && <p className="mt-2 text-sm text-amber-900">Cancelar libera a vaga e devolve tralhas ao estoque. Não estorna pagamentos nem cancela Pix ou boleto emitido. Confira as cobranças no Mercado Pago.</p>}
             {action === "payment" && (
               <Field label="Valor (R$)" type="number" value={amount} set={setAmount} />
             )}
@@ -667,42 +667,6 @@ function ReservationDrawer({
       )}
     </div>
   );
-}
-
-function ReservationRefunds({ item, token, changed }: { item: Reservation; token: string; changed: () => Promise<void> }) {
-  const records = useData<RefundRecord[]>(`reservations/${item.id}/refunds/`, token, () => {});
-  const refundable = item.payments.filter(payment => payment.status === "PAID" && (item.status === "CANCELLED" || payment.requires_refund));
-  const [paymentId, setPaymentId] = useState(refundable[0]?.id ?? "");
-  const selected = refundable.find(payment => payment.id === paymentId);
-  const [amount, setAmount] = useState(selected ? (selected.amount_cents / 100).toFixed(2) : "");
-  const [basis, setBasis] = useState(refundable[0]?.requires_refund ? "OVERPAYMENT" : "DESISTENCIA");
-  const [reason, setReason] = useState("");
-  const [calculation, setCalculation] = useState("");
-  const [proof, setProof] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function createRefund(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError("");
-    try {
-      await request(`reservations/${item.id}/refunds/`, token, { method: "POST", body: JSON.stringify({
-        payment_id: paymentId, amount_cents: Math.round(Number(amount.replace(",", ".")) * 100), basis, reason, calculation,
-      }) });
-      await records.load(); await changed();
-    } catch (failure) { setError(errorMessage(failure)); } finally { setBusy(false); }
-  }
-  async function act(id: string, action: string) {
-    setBusy(true); setError("");
-    try {
-      await request(`refunds/${id}/action/`, token, { method: "POST", body: JSON.stringify({ action, proof_reference: proof }) });
-      await records.load(); await changed();
-    } catch (failure) { setError(errorMessage(failure)); } finally { setBusy(false); }
-  }
-  return <Box title="Reembolsos">
-    <p className="text-xs text-ink-600">Solicite a devolução pelo pagamento original; cobrança excedente pode ser devolvida sem cancelar a reserva.</p>
-    <State loading={records.loading} error={records.error} retry={() => void records.load()} />
-    {records.data?.map(record => <div key={record.id} className="mt-3 rounded-lg border bg-white p-3 text-xs"><div className="flex justify-between gap-2"><strong>{money(record.amount_cents)} · {record.basis}</strong><span>{record.status}</span></div><p className="mt-1">{record.reason}</p>{record.provider_refund_id && <p className="mt-1 text-ink-500">ID Mercado Pago: {record.provider_refund_id}</p>}{["UNKNOWN", "SUBMITTED"].includes(record.status) && <button disabled={busy} onClick={() => void act(record.id, "reconcile")} className="mt-2 rounded border px-3 py-1 font-bold">Consultar provedor</button>}{record.status === "UNKNOWN" && <button disabled={busy} onClick={() => void act(record.id, "retry_same_key")} className="ml-2 mt-2 rounded border px-3 py-1 font-bold">Reenviar mesma solicitação</button>}{record.status === "MANUAL_PENDING" && <div className="mt-2"><input value={proof} onChange={event => setProof(event.target.value)} placeholder="Referência do comprovante de transferência" className="w-full rounded border px-2 py-1" /><button disabled={busy || !proof.trim()} onClick={() => void act(record.id, "confirm_manual")} className="mt-2 rounded border px-3 py-1 font-bold">Confirmar transferência</button></div>}</div>)}
-    {refundable.length > 0 && <form onSubmit={event => void createRefund(event)} className="mt-4 space-y-3 rounded-lg border bg-white p-4"><h4 className="font-bold">Solicitar reembolso</h4><label className="block text-xs font-bold">Pagamento<select value={paymentId} onChange={event => { setPaymentId(event.target.value); const next = refundable.find(payment => payment.id === event.target.value); setAmount(next ? (next.amount_cents / 100).toFixed(2) : ""); setBasis(next?.requires_refund ? "OVERPAYMENT" : "DESISTENCIA"); }} className="mt-1 w-full rounded border p-2">{refundable.map(payment => <option key={payment.id} value={payment.id}>{payment.method} · {money(payment.amount_cents)} (taxas {money(payment.fee_amount_cents)}){payment.requires_refund ? " · excedente" : ""}</option>)}</select></label><label className="block text-xs font-bold">Valor bruto a devolver (R$)<input required type="number" min="0.01" step="0.01" value={amount} onChange={event => setAmount(event.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-xs font-bold">Fundamento<select value={basis} onChange={event => setBasis(event.target.value)} className="mt-1 w-full rounded border p-2">{selected?.requires_refund ? <option value="OVERPAYMENT">Cobrança excedente</option> : <><option value="DESISTENCIA">Desistência após prazo legal</option><option value="ARREPENDIMENTO">Arrependimento legal</option><option value="ORGANIZADOR">Cancelamento pela organização</option></>}</select></label><label className="block text-xs font-bold">Motivo<textarea required value={reason} onChange={event => setReason(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>{basis === "DESISTENCIA" && <label className="block text-xs font-bold">Memória de cálculo da retenção<textarea value={calculation} onChange={event => setCalculation(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>}{error && <p className="text-xs text-red-700">{error}</p>}<button disabled={busy} className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? "Enviando..." : "Solicitar devolução"}</button></form>}
-  </Box>;
 }
 
 function ManualReservationModal({

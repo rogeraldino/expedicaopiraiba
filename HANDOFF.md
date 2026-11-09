@@ -1,5 +1,11 @@
 # HANDOFF — Expedição Piraíba (MVP Operacional & Comercial)
 
+## Cancelamento simples e devolução externa — 09/11/2026
+
+- Rodrigo reduziu o escopo antes da publicação: no site, o admin apenas cancela a reserva; devolução e eventual compensação dos juros de cartão parcelado são feitas fora do site no Mercado Pago ou por outro meio adequado. O registro seguro do reembolso no admin ficou para desenvolvimento futuro. Spec v1.1 em `specs/active/cancelamento-com-reembolso-externo-2026-11-09.md`, READY humano em 09/11/2026.
+- A API antiga de mutação de reembolso retorna 410; o painel não oferece esses controles, avisa antes de cancelar e mostra ID do pagamento, bruto, total do comprador e financiamento para conferência. Dados históricos permanecem. Cancelamento não cria `RefundRequest`, não altera `Payment.PAID` e não chama POST do Mercado Pago.
+- 116 testes Django no PostgreSQL, build/TypeScript, `makemigrations --check --dry-run`, `make check-docs` e `git diff --check` passaram. Ensaio de migrações da branch completa em cópia restaurada da produção passou. Ponytail independente: PASS de implementação. Sandbox, backup final com restore, aceite humano do SHA e produção ainda pendentes.
+
 ## Cadastro de tralhas simplificado — 08/11/2026
 
 - Cinco códigos de categoria preservados, com rótulos curtos e claros no modelo, API, filtro e formulário: varas/carretilhas pesadas, varas/carretilhas leves e médias, acessórios de pesca, roupas/proteção e iscas/atrativos. A migração `expeditions.0018` altera somente choices; não reclassifica produtos.

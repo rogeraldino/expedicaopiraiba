@@ -463,13 +463,17 @@ class OperationsExpeditionSerializer(serializers.ModelSerializer):
 
 class OperationsPaymentSerializer(serializers.ModelSerializer):
     requires_refund = serializers.SerializerMethodField()
+    buyer_total_cents = serializers.SerializerMethodField()
 
     def get_requires_refund(self, obj):
         return obj.transactions.filter(new_status="REJECTED_OVERPAYMENT").exists()
 
+    def get_buyer_total_cents(self, obj):
+        return obj.fee_snapshot.get("buyer_total_cents") or obj.amount_cents
+
     class Meta:
         model = Payment
-        fields = ("id", "method", "provider", "amount_cents", "base_amount_cents", "fee_amount_cents", "provider_fee_cents", "provider_net_received_cents", "status", "paid_at", "created_at", "requires_refund")
+        fields = ("id", "external_id", "method", "provider", "amount_cents", "base_amount_cents", "fee_amount_cents", "provider_fee_cents", "provider_net_received_cents", "buyer_total_cents", "status", "paid_at", "created_at", "requires_refund")
 
 
 class OperationsReservationEventSerializer(serializers.ModelSerializer):
@@ -551,6 +555,11 @@ class OperationsReservationSerializer(serializers.ModelSerializer):
         if obj.remaining_balance_cents and obj.balance_due_at and obj.balance_due_at < timezone.localdate(): alerts.append("Saldo vencido.")
         required = set(obj.expedition.checklist_items.filter(active=True, required=True).values_list("id", flat=True))
         if required and any(not required.issubset(set(p.checklist_completions.filter(completed=True).values_list("item_id", flat=True))) for p in participants): alerts.append("Há checklist obrigatório pendente.")
+        if obj.status == Reservation.Status.CANCELLED:
+            if obj.payments.filter(status__in=(Payment.Status.PENDING, Payment.Status.PROCESSING)).exists() or obj.payment_intents.filter(status__in=("SUBMITTING", "UNKNOWN")).exists():
+                alerts.append("Reserva cancelada com cobrança pendente: confira o estado no Mercado Pago.")
+            if obj.events.filter(event_type="PAYMENT_AFTER_CANCELLATION").exists():
+                alerts.append("Pagamento recebido após cancelamento: confira a devolução no Mercado Pago.")
         return alerts
 
 

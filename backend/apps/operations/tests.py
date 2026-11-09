@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -22,7 +23,7 @@ from apps.expeditions.models import (
     TargetSpecies,
     WaterBasin,
 )
-from apps.payments.models import Payment
+from apps.payments.models import Payment, RefundRequest
 from apps.media_library.models import MediaAsset
 from apps.reservations.models import ParticipantProductChoice, Reservation, ReservationGearAddon, ReservationParticipant
 
@@ -41,6 +42,32 @@ class OperationsApiTests(TestCase):
     def test_private_endpoints_require_login(self):
         self.assertEqual(self.client.get("/api/operations/overview/").status_code, 403)
         self.assertEqual(self.client.get("/api/operations/reservations/").status_code, 403)
+
+    def test_cancel_paid_reservation_never_requests_provider_refund(self):
+        auth = self.login()
+        customer = Customer.objects.create(cpf="52998224725", full_name="Cliente", email="cancel@example.com", phone="62999999999")
+        reservation = Reservation.objects.create(customer=customer, expedition=self.expedition,
+            participant_count=1, status=Reservation.Status.PAID, unit_price_cents=10000,
+            total_price_cents=10000, deposit_cents=1000)
+        payment = Payment.objects.create(reservation=reservation, provider="MERCADOPAGO",
+            method=Payment.Method.CREDIT_CARD, external_id="mp-cancel-only-1", amount_cents=10000,
+            base_amount_cents=10000, fee_snapshot={"buyer_total_cents": 11000}, status=Payment.Status.PAID)
+        with patch("apps.payments.gateways.MercadoPagoPaymentGateway.refund_payment") as refund:
+            cancelled = self.client.post(f"/api/operations/reservations/{reservation.id}/cancel/",
+                {"reason": "Solicitação do cliente"}, format="json", **auth)
+            self.assertEqual(cancelled.status_code, 200)
+            self.assertEqual(self.client.post(f"/api/operations/reservations/{reservation.id}/refunds/",
+                {"payment_id": str(payment.id), "amount_cents": 10000}, format="json", **auth).status_code, 410)
+            self.assertEqual(self.client.post(f"/api/operations/refunds/{payment.id}/action/",
+                {"action": "retry_same_key"}, format="json", **auth).status_code, 410)
+            refund.assert_not_called()
+        reservation.refresh_from_db(); payment.refresh_from_db()
+        self.assertEqual(reservation.status, Reservation.Status.CANCELLED)
+        self.assertEqual(payment.status, Payment.Status.PAID)
+        self.assertFalse(RefundRequest.objects.filter(payment=payment).exists())
+        detail = self.client.get(f"/api/operations/reservations/{reservation.id}/", **auth)
+        self.assertEqual(detail.data["payments"][0]["external_id"], payment.external_id)
+        self.assertEqual(detail.data["payments"][0]["buyer_total_cents"], 11000)
 
     def test_product_photo_and_description_preserve_legacy_packaging(self):
         auth = self.login()
