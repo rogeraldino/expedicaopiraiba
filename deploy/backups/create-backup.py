@@ -58,6 +58,12 @@ def create():
     environments = json.loads(REGISTRY.read_text()) if REGISTRY.exists() else [legacy]
     if not isinstance(environments, list) or not environments:
         raise SystemExit('Registry deve ser lista não vazia.')
+    selected = os.environ.get('PIRAIBA_BACKUP_ENVIRONMENTS', '').strip()
+    if selected:
+        names = set(selected.split(','))
+        environments = [env for env in environments if env['name'] in names]
+        if not environments or {env['name'] for env in environments} != names:
+            raise SystemExit('Ambientes solicitados para backup não encontrados no registry.')
     if any(not re.fullmatch(r'[a-z][a-z0-9_-]{0,63}', e['name']) for e in environments):
         raise SystemExit('Nome inválido no registry.')
     if len({e['name'] for e in environments}) != len(environments):

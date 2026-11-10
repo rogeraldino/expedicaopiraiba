@@ -1,6 +1,6 @@
 # Cancelamento de reserva com reembolso fora do site
 
-**Estado:** IN_PROGRESS · READY humano em 09/11/2026 · **Versão:** 1.1 · **Risco:** HIGH · **Solicitante:** Rodrigo · **Data:** 09/11/2026 · **Declaração:** “Sim, READY em 09/11/2026” na conversa.
+**Estado:** VALIDATED no sandbox · READY humano em 09/11/2026 · **Versão:** 1.1 · **Risco:** HIGH · **Solicitante:** Rodrigo · **Data:** 09/11/2026 · **Declaração:** “Sim, READY em 09/11/2026” na conversa.
 
 ## Decisão
 
@@ -38,8 +38,15 @@ A versão 1.0 recebeu Grill independente sem bloqueios semânticos e READY human
 | Cancelamento sem estorno | `operations/views.py`, `reservations/services.py` | teste de API sem `RefundRequest` nem chamada ao provedor; 116 testes PostgreSQL verdes |
 | Ações antigas indisponíveis | `operations/views.py`, painel admin | POST antigo retorna 410; build frontend e TypeScript verdes |
 | Conferência externa | serializer de pagamento e painel admin | teste de ID, total do comprador e aviso; revisão Ponytail PASS |
-| Publicação segura | script de promoção, backup e ensaio | ensaio de migração em cópia PostgreSQL da produção PASS; backup/restore final e saúde HTTPS pendentes |
+| Publicação segura | script de promoção, backup e ensaio | backup criptografado `20261109T162555160040Z` com restore testado e SHA válido; ensaio final em cópia da produção: 4 reservas, 3 pagamentos, 500 centavos recebidos antes/depois; sandbox saudável |
 
 ## Ponytail independente
 
 Em 09/11/2026, `/root/grill` revisou a implementação reduzida: **PASS de código**, sem bloqueio HIGH. Confirmou ausência de POST de estorno na ação, 410 nas mutações antigas, exibição de ID e total do comprador e aviso antes de cancelar. Registrou risco operacional de Pix/boleto localmente pendente quando webhook não chega; o admin confere diariamente no Mercado Pago como previsto acima. PASS de código não equivale a ACCEPTED ou publicação.
+
+## Validação operacional
+
+- Sandbox: release `20261109T162226Z-1497a187a8f1`, backend/frontend saudáveis; `/api/health/`, `/admin` e `/contrato` retornaram 200 nas portas internas. A borda HTTPS manteve a autenticação própria do sandbox (`302`/`401`). Migrações aplicadas e nenhum `RefundRequest` pendente.
+- Backup selecionado de produção e sandbox em 09/11/2026: `create-backup.py` gerou arquivo criptografado com `.ready` depois de testar `pg_restore` em banco temporário; SHA conferido em 10/11/2026. O desenvolvimento legado estava desligado e foi excluído apenas do backup desta release.
+- Ensaio em 10/11/2026: `pg_dump` da produção, `pg_restore` em banco descartável e migrações até `payments.0010`/`expeditions.0018` passaram. Antes/depois: 4 reservas, 3 pagamentos, soma de `paid_amount_cents` igual a 500 centavos, zero pedidos de reembolso. Banco descartável removido.
+- Ainda faltam aceite humano do SHA final, backup novo imediatamente antes da troca e verificação HTTP em produção.

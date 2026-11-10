@@ -4,7 +4,7 @@
 
 - Rodrigo reduziu o escopo antes da publicação: no site, o admin apenas cancela a reserva; devolução e eventual compensação dos juros de cartão parcelado são feitas fora do site no Mercado Pago ou por outro meio adequado. O registro seguro do reembolso no admin ficou para desenvolvimento futuro. Spec v1.1 em `specs/active/cancelamento-com-reembolso-externo-2026-11-09.md`, READY humano em 09/11/2026.
 - A API antiga de mutação de reembolso retorna 410; o painel não oferece esses controles, avisa antes de cancelar e mostra ID do pagamento, bruto, total do comprador e financiamento para conferência. Dados históricos permanecem. Cancelamento não cria `RefundRequest`, não altera `Payment.PAID` e não chama POST do Mercado Pago.
-- 116 testes Django no PostgreSQL, build/TypeScript, `makemigrations --check --dry-run`, `make check-docs` e `git diff --check` passaram. Ensaio de migrações da branch completa em cópia restaurada da produção passou. Ponytail independente: PASS de implementação. Sandbox, backup final com restore, aceite humano do SHA e produção ainda pendentes.
+- 116 testes Django no PostgreSQL, build/TypeScript, `makemigrations --check --dry-run`, `make check-docs` e `git diff --check` passaram. Ensaio de migrações da branch completa em cópia restaurada da produção passou e preservou 4 reservas, 3 pagamentos e soma recebida de 500 centavos. Ponytail independente: PASS de implementação. Sandbox `20261109T162226Z-1497a187a8f1` saudável (API/admin/contrato HTTP 200); zero pedidos antigos de reembolso pendentes. Backup criptografado de produção+sandbox gerado em 09/11 com restore testado e SHA conferido. Aceite humano do SHA final, backup imediatamente antes da troca e produção ainda pendentes.
 
 ## Cadastro de tralhas simplificado — 08/11/2026
 

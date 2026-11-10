@@ -59,7 +59,7 @@ docker build \
     "$TARGET_DIR/frontend"
 
 echo "==> [5/7] Backup consistente com restauração verificada..."
-BACKUP_RESULT=$(python3 "$REPO/deploy/backups/create-backup.py")
+BACKUP_RESULT=$(PIRAIBA_BACKUP_ENVIRONMENTS=production,sandbox python3 "$REPO/deploy/backups/create-backup.py")
 BACKUP_RESULT="$BACKUP_RESULT" python3 -c 'import json,os,sys; result=json.loads(os.environ["BACKUP_RESULT"]); sys.exit(0 if result.get("database_restore") == "PASS" else 1)' || {
     echo "ERRO: Backup sem prova de restauração; produção não foi alterada." >&2
     exit 1
